@@ -418,11 +418,11 @@ public struct LatticeNode: Identifiable, Codable, Equatable, Hashable, Sendable 
     }
 }
 
-private struct LatticeErrorEnvelope: Decodable {
+struct LatticeErrorEnvelope: Decodable {
     var error: LatticeAPIErrorBody
 }
 
-private struct LatticeAPIErrorBody: Decodable {
+struct LatticeAPIErrorBody: Decodable {
     var code: String
     var message: String
     var requestID: String?
@@ -555,7 +555,7 @@ public struct LatticeClient: Sendable {
     public var baseURL: URL
     public var credential: LatticeCredential
     public var timeout: TimeInterval
-    private let transport: any HTTPTransport
+    let transport: any HTTPTransport
 
     public init(
         baseURL: URL,
@@ -630,7 +630,7 @@ public struct LatticeClient: Sendable {
         return request
     }
 
-    private func applyAuthentication(to request: inout URLRequest) {
+    func applyAuthentication(to request: inout URLRequest) {
         let bearer = credential.bearerToken.trimmingCharacters(in: .whitespacesAndNewlines)
         if !bearer.isEmpty {
             request.setValue("Bearer \(bearer)", forHTTPHeaderField: "Authorization")
@@ -647,7 +647,7 @@ public struct LatticeClient: Sendable {
         }
     }
 
-    private func validate(response: URLResponse, data: Data) throws {
+    func validate(response: URLResponse, data: Data) throws {
         guard let http = response as? HTTPURLResponse else {
             return
         }
@@ -1214,7 +1214,7 @@ public enum DurationFormatter {
     }
 }
 
-private enum DateValue {
+enum DateValue {
     static func decodeIfPresent<K: CodingKey>(
         from container: KeyedDecodingContainer<K>,
         forKey key: K
@@ -1240,7 +1240,7 @@ private enum DateValue {
     }
 }
 
-private enum AstraDateParser {
+enum AstraDateParser {
     static func date(from value: String) -> Date? {
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, !trimmed.hasPrefix("0001-01-01") else {

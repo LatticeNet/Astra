@@ -354,12 +354,149 @@ func checkBarkNetworkFlow() async throws {
     }
 }
 
+func bodyObject(_ data: Data?) throws -> [String: Any] {
+    let body = try expectUnwrapped(data, "request body present")
+    return try expectUnwrapped(JSONSerialization.jsonObject(with: body) as? [String: Any], "request body JSON object")
+}
+
+func checkLatticeAPIClient() async throws {
+    let base = URL(string: "https://lattice.example.com")!
+    let transport = RecordingTransport(responses: [
+        "https://lattice.example.com/api/me": (
+            200,
+            #"{"actor_id":"admin","username":"admin","token_id":"tok1","scopes":["node:read","node:admin","*"],"csrf_token":"c","totp_enabled":true}"#.data(using: .utf8)!
+        ),
+        "https://lattice.example.com/api/machines": (
+            200,
+            """
+            [
+              {"id":"m1","node_id":"node-a","node_name":"Edge","label":"Tokyo box","online":true,
+               "host_facts":{"hostname":"edge"},"vendor":"Vultr","region":"nrt","has_console_url":true,
+               "has_detail_url":false,"price_cents":600,"currency":"usd","renewal_cycle":"monthly",
+               "cycle_days":0,"next_renewal":"2026-06-20T00:00:00Z","days_until_renewal":3,"auto_roll":true,
+               "remind_days_before":[7,1],"reminders_enabled":true,"created_at":"2026-01-01T00:00:00Z"}
+            ]
+            """.data(using: .utf8)!
+        ),
+        "https://lattice.example.com/api/monitors": (200, #"{"id":"mon1","name":"api","type":"http","target":"https://x","enabled":true}"#.data(using: .utf8)!),
+        "https://lattice.example.com/api/nodes/disable?node_id=node-a": (200, #"{"ok":true,"disabled":true}"#.data(using: .utf8)!),
+        "https://lattice.example.com/api/nodes/rotate-token?node_id=node-a": (200, #"{"node_id":"node-a","token":"tok.secret"}"#.data(using: .utf8)!),
+        "https://lattice.example.com/api/audit?limit=200&offset=0&decision=deny": (
+            200,
+            #"{"events":[{"id":"a1","at":"2026-06-17T02:00:00Z","actor_id":"admin","action":"node.disable","decision":"deny","reason":"missing scope"}],"total":1,"limit":200,"offset":0}"#.data(using: .utf8)!
+        ),
+        "https://lattice.example.com/api/notify/rules": (200, #"{"rules":[{"id":"r1","name":"down","event_types":["monitor.down"],"channel_ids":["c1"],"enabled":true}]}"#.data(using: .utf8)!),
+        "https://lattice.example.com/api/logs/query?source_id=s1&limit=200": (
+            200,
+            #"{"lines":[{"source_id":"s1","node_id":"node-a","seq":42,"at":"2026-06-17T02:00:00Z","line":"hello"}],"truncated":true,"next_before_seq":41}"#.data(using: .utf8)!
+        )
+    ])
+
+    let session = LatticeClient(baseURL: base, credential: LatticeCredential(sessionCookie: "sid", csrfToken: "csrf-token"), transport: transport)
+
+    let me = try await session.fetchIdentity()
+    try expectEqual(me.actorID, "admin", "me actor id")
+    try expect(me.totpEnabled, "me totp enabled")
+    try expect(me.hasScope("node:read"), "me has explicit scope")
+    try expect(me.hasScope("inventory:read"), "me has wildcard scope via *")
+
+    let machines = try await session.listMachines()
+    let machine = try expectUnwrapped(machines.first, "machine decoded")
+    try expectEqual(machine.nodeName, "Edge", "machine node name from view")
+    try expect(machine.hasConsoleURL, "machine has console url flag")
+    try expect(!machine.hasDetailURL, "machine has no detail url flag")
+    try expectEqual(machine.serverDaysUntilRenewal, 3, "machine server days until renewal")
+    let monthly = try expectUnwrapped(machine.monthlyCost, "machine monthly cost")
+    try expect(abs(monthly - 6.0) < 0.001, "monthly cost of a $6/mo box")
+    try expectEqual(machine.hostFacts.hostname, "edge", "machine host facts")
+
+    try await session.createMonitor(name: "api", type: .http, target: "https://x", intervalSec: 60, timeoutSec: 10, assignAll: true, nodeIDs: [])
+    let monitorBody = try await bodyObject(transport.bodies.last ?? nil)
+    try expectEqual(Set(monitorBody.keys), ["name", "type", "target", "interval_sec", "timeout_sec", "assign_all", "node_ids"], "monitor create sends exactly the server fields")
+    try expectEqual(monitorBody["type"] as? String, "http", "monitor type field")
+    try expectEqual(await transport.methods.last ?? nil, "POST", "monitor create is POST")
+    try expectEqual(await transport.csrfHeaders.last ?? nil, "csrf-token", "monitor create carries CSRF header")
+
+    try await session.setNodeDisabled(nodeID: "node-a", disabled: true)
+    let disableBody = try await bodyObject(transport.bodies.last ?? nil)
+    try expectEqual(disableBody["node_id"] as? String, "node-a", "disable node id body")
+    try expectEqual(disableBody["disabled"] as? Bool, true, "disable flag body")
+
+    let rotate = try await session.rotateNodeToken(nodeID: "node-a")
+    try expectEqual(rotate.token, "tok.secret", "rotate returns one-time token")
+
+    let audit = try await session.fetchAudit(limit: 200, decision: "deny")
+    try expectEqual(audit.total, 1, "audit total")
+    try expect(audit.events.first?.isDeny ?? false, "audit deny decision parsed")
+
+    let rules = try await session.listNotifyRules()
+    try expectEqual(rules.map(\.id), ["r1"], "notify rules unwrapped from envelope")
+
+    let logs = try await session.queryLogs(sourceID: "s1", limit: 200)
+    try expectEqual(logs.lines.first?.line, "hello", "log line text")
+    try expectEqual(logs.nextBeforeSeq, 41, "log pagination cursor")
+    try expect(logs.truncated, "log truncated flag")
+}
+
+func checkLatticeAnalytics() throws {
+    let now = ISO8601DateFormatter().date(from: "2026-06-17T02:00:00Z")!
+    let healthy = LatticeNode(id: "n1", name: "h", online: true, lastSeen: now, metrics: LatticeMetrics(cpuPercent: 20, memoryUsed: 20, memoryTotal: 100), hostFacts: LatticeHostFacts())
+    let hot = LatticeNode(id: "n2", name: "hot", online: true, lastSeen: now, metrics: LatticeMetrics(cpuPercent: 95, memoryUsed: 50, memoryTotal: 100), hostFacts: LatticeHostFacts())
+    let down = LatticeNode(id: "n3", name: "down", online: false, lastSeen: now.addingTimeInterval(-9999), metrics: LatticeMetrics(), hostFacts: LatticeHostFacts())
+    let config = MonitorConfiguration(offlineTimeout: 180, alertCooldown: 600, cpuCritical: 90, memoryCritical: 90, diskCritical: 90)
+
+    let summary = FleetSummary(nodes: [healthy, hot, down], configuration: config, now: now)
+    try expectEqual(summary.total, 3, "fleet total")
+    try expectEqual(summary.online, 2, "fleet online")
+    try expectEqual(summary.offline, 1, "fleet offline")
+    try expectEqual(summary.critical, 2, "fleet critical counts hot cpu + offline")
+    try expect(abs(summary.averageCPU - 57.5) < 0.001, "fleet average cpu over online nodes")
+
+    var history = MetricsHistory(capacity: 2)
+    history.record(nodes: [healthy, hot], at: now)
+    history.record(nodes: [healthy, hot], at: now.addingTimeInterval(30))
+    history.record(nodes: [healthy], at: now.addingTimeInterval(60))
+    try expectEqual(history.samples(for: "n1").count, 2, "history respects capacity")
+    try expectEqual(history.samples(for: "n2").count, 0, "history prunes missing nodes")
+    try expectEqual(history.samples(for: "n1").last?.cpu, 20, "history records latest cpu")
+
+    let machines = [
+        MachineProfile(id: "m1", priceCents: 1200, currency: "USD", renewalCycleRaw: "annual", cycleDays: 0, nextRenewal: now.addingTimeInterval(5 * 86_400)),
+        MachineProfile(id: "m2", priceCents: 500, currency: "USD", renewalCycleRaw: "monthly", cycleDays: 0, nextRenewal: now.addingTimeInterval(-2 * 86_400)),
+        MachineProfile(id: "m3", priceCents: 0, currency: "USD", renewalCycleRaw: "monthly")
+    ]
+    let inventory = InventorySummary(machines: machines, window: 14, now: now)
+    try expectEqual(inventory.machineCount, 3, "inventory machine count")
+    let usd = try expectUnwrapped(inventory.monthlyCostByCurrency["USD"], "USD monthly cost")
+    try expect(abs(usd - (12.0 * 30 / 365 + 5.0)) < 0.01, "monthly cost normalizes annual + monthly")
+    try expectEqual(inventory.dueSoon.map(\.id), ["m1"], "renewal due soon within window")
+    try expectEqual(inventory.overdue.map(\.id), ["m2"], "overdue renewal")
+
+    let results = [
+        MonitorResult(monitorID: "x", nodeID: "n1", at: now, success: true, latencyMs: 100),
+        MonitorResult(monitorID: "x", nodeID: "n1", at: now.addingTimeInterval(60), success: false, latencyMs: 0, error: "timeout"),
+        MonitorResult(monitorID: "x", nodeID: "n1", at: now.addingTimeInterval(120), success: true, latencyMs: 200)
+    ]
+    let stats = MonitorStats(results: results)
+    try expectEqual(stats.successCount, 2, "monitor success count")
+    try expect(abs((stats.uptimeFraction ?? 0) - 2.0 / 3.0) < 0.001, "monitor uptime fraction")
+    try expect(abs((stats.averageLatencyMs ?? 0) - 150) < 0.001, "monitor average latency over successes")
+    try expectEqual(stats.lastResult?.latencyMs, 200, "monitor last result by time")
+
+    try expectEqual(UptimeFormatter.string(seconds: 90_061), "1d 1h", "uptime formats days+hours")
+    try expectEqual(RelativeDateFormatter.shortDuration(3_600), "1h", "relative duration hours")
+    try expectEqual(RelativeDateFormatter.string(from: now.addingTimeInterval(-120), now: now), "2m ago", "relative date ago")
+}
+
 actor RecordingTransport: HTTPTransport {
     private var responses: [String: [(Int, Data)]]
     private var headers: [String: [String: String]]
     private(set) var requestURLs: [String] = []
     private(set) var authorizationHeaders: [String?] = []
     private(set) var cookieHeaders: [String?] = []
+    private(set) var csrfHeaders: [String?] = []
+    private(set) var methods: [String?] = []
+    private(set) var bodies: [Data?] = []
     private(set) var lastBody: Data?
 
     init(responses: [String: (Int, Data)], headers: [String: [String: String]] = [:]) {
@@ -372,6 +509,9 @@ actor RecordingTransport: HTTPTransport {
         requestURLs.append(url.absoluteString)
         authorizationHeaders.append(request.value(forHTTPHeaderField: "Authorization"))
         cookieHeaders.append(request.value(forHTTPHeaderField: "Cookie"))
+        csrfHeaders.append(request.value(forHTTPHeaderField: "X-Lattice-CSRF"))
+        methods.append(request.httpMethod)
+        bodies.append(request.httpBody)
         lastBody = request.httpBody
 
         guard var availableResponses = responses[url.absoluteString], !availableResponses.isEmpty else {
@@ -396,6 +536,8 @@ do {
     try checkLatticeMonitorEngine()
     try checkBarkRequest()
     try await checkBarkNetworkFlow()
+    try await checkLatticeAPIClient()
+    try checkLatticeAnalytics()
     print("AstraCoreCheck passed")
 } catch {
     fputs("AstraCoreCheck failed: \(error)\n", stderr)

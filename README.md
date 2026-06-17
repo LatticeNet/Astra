@@ -2,35 +2,41 @@
 
 `Astra` 现在是 Lattice 的个人 iOS 客户端。Xcode 工程和 target 仍然叫 `Astra`，这是为了保留原工程结构；安装到手机后的 App 显示名是 `Lattice`。
 
-当前定位很明确：它不是 Lattice 控制面的完整替代品，而是手机上的节点状态面板、基础健康告警器和 Bark 通知入口。
+v2 把它从只读监控原型升级成一个手机优先的 Lattice 控制面伴侣 App：覆盖控制面里大部分适合在手机上操作的功能，配合一套统一的 SwiftUI 设计语言（卡片、环形仪表、Swift Charts 趋势图、Fleet Map）。它仍然不是完整控制面替代品——网络策略、proxy、DNS、存储、插件这类重操作仍留在 Web dashboard。
 
-## 当前功能
+## 界面结构（v2）
 
-- 连接自托管 Lattice control plane。
-- 通过 `GET /api/nodes` 拉取节点列表。
-- 支持两种 Lattice 鉴权方式：
-  - Personal Access Token，要求至少有 `node:read` 权限。
-  - `/api/login` 用户名密码登录，保存 `lattice_session` cookie 和 CSRF token。
-- 支持 Lattice TOTP 登录挑战。第一次登录返回 TOTP challenge 后，在设置页输入 TOTP code 再点一次登录即可保存 session。
-- 解码并展示 Lattice 节点字段：
-  - 在线、离线、禁用状态
-  - CPU、load、内存、磁盘、网络流量、uptime
-  - public IP、IPv6、WireGuard IP、endpoint、agent version
-  - host facts，包括 hostname、OS、kernel、arch、CPU、内存、虚拟化信息
-  - geo 信息
-- 保存最近一次节点快照，重新打开 App 时先显示本地缓存，再刷新远端数据。
-- 内置基础健康事件：
-  - disabled/offline/stale
-  - CPU 阈值
-  - 内存阈值
-  - 磁盘阈值
-  - 从异常恢复时生成 recovery 事件
-- 通过 Bark 自托管 `/push` JSON API 发送通知。
-- Bark 通知包含规范化后的 Lattice dashboard URL，点击通知可以打开控制面，而不是打开 `/api/nodes`。
-- 支持 Bark interruption level，默认 `timeSensitive`。
-- Lattice token、session cookie、CSRF token、Bark device key 都存入 iOS Keychain。
-- 注册 iOS `BGAppRefreshTask`，让系统在允许时做 best-effort 后台刷新。
-- 设置页会记录最近一次后台刷新结果，后台失败不会静默吞掉。
+底部五个 Tab：
+
+- **Overview**：Fleet 健康环、在线/critical/月度成本/续费 统计卡、Fleet Map（MapKit 地图标注各节点）、需要关注的节点、最近告警。
+- **Nodes**：可搜索/过滤的节点列表 → 节点详情（CPU/内存/磁盘实时趋势图、host facts、网络、geo、启用/禁用、轮换 agent token、节点注册二维码）。
+- **Monitors**：上线/延迟探针列表 → 探针详情（uptime 环、延迟折线图、最近探测记录）、新建/删除。
+- **Inventory**：机器成本与续费清单（月度开销汇总、到期/逾期提醒）、新增/编辑/续费/删除、跑提醒。
+- **More**：Activity（审计 + 本地告警）、Notifications（通道/规则 + 测试）、Logs（日志源 + 行查询）、Tasks（远程任务 + 结果）、Account（身份/scopes/服务器版本/PAT 管理）、Settings、About。
+
+## 覆盖的 Lattice API
+
+`Sources/AstraCore/LatticeAPI.swift` 里的 `LatticeClient` 现在覆盖：
+
+- 身份：`/api/me`、`/api/version`
+- 节点：`/api/nodes`、disable/enable、rotate-token、enroll-token、geo get/set/resolve
+- Token（PAT）：list / create / revoke
+- 机器清单：list / update / delete / renew / reminders-run
+- Monitors：list / create / delete / results
+- Notify：channels、rules、test
+- Audit：查询（分页）+ 链校验
+- Tasks：tasks + task-results
+- Logs：sources / query（分页）/ stats
+
+鉴权同时支持 PAT 和 `/api/login` session cookie + `X-Lattice-CSRF`，含 TOTP 登录挑战。请求体严格按服务端结构体字段构造（服务端开启了 `DisallowUnknownFields`）。
+
+## 保留的 v1 能力
+
+- 本地节点快照缓存（重开 App 先显示缓存再刷新）。
+- 本地健康事件引擎：disabled/offline/stale、CPU/内存/磁盘阈值、恢复事件。
+- Bark 自托管 `/push` 通知，带规范化 dashboard 点击 URL 和可配置 interruption level。
+- Token、session cookie、CSRF token、Bark device key 全部进 iOS Keychain。
+- `BGAppRefreshTask` best-effort 后台刷新，并在设置页显示最近一次结果。
 
 ## 目录结构
 
@@ -39,8 +45,8 @@
 核心文件：
 
 - `Astra.xcodeproj/`：iOS App 工程。target 和 scheme 仍叫 `Astra`。
-- `AstraApp/App/`：SwiftUI App 层。
-- `Sources/AstraCore/`：可测试的 Lattice 协议、模型、监控和 Bark 核心逻辑。
+- `AstraApp/App/`：SwiftUI App 层（设计系统、各 Tab 与详情页）。
+- `Sources/AstraCore/`：可测试的核心逻辑——`AstraCore.swift`（节点/登录/监控/Bark）、`LatticeModels.swift`（领域模型）、`LatticeAPI.swift`（完整控制面 API 客户端）、`LatticeAnalytics.swift`（Fleet/库存/Monitor 汇总与趋势缓冲）。
 - `Checks/AstraCoreCheck/`：轻量级 Swift 回归检查，不依赖真机。
 - `scripts/`：本地检查、iOS doctor、真机构建、development archive/export 脚本。
 - `docs/`：项目结构、iOS 编译部署、实现计划。
@@ -52,12 +58,23 @@
 3. 如果 `org.roobli.astra` 被占用，把 Bundle Identifier 改成自己的，例如 `com.yourname.lattice`.
 4. 连接 iPhone，选择真机作为 run destination。
 5. 按 Run。
-6. 手机上打开 `Lattice`，进入 Settings。
+6. 手机上打开 `Lattice`，进入 `More → Settings`。
 7. 填入 Lattice server URL。
-8. 填入 `node:read` PAT，或用用户名密码登录保存 session。
+8. 填入 `node:read`（或更高权限）PAT，或用用户名密码登录保存 session。
 9. 点 `Test Lattice connection`。
 10. 填入 Bark device key，点 `Send test notification`。
-11. 回到 Nodes 页开始刷新和轮询。
+11. 回到 Overview / Nodes 开始刷新和轮询，其余功能按权限自动加载。
+
+## 本地验证 App 编译
+
+除了 `AstraCoreCheck` 核心回归检查，本机可直接用模拟器编译整个 App（无需签名）：
+
+```sh
+xcodebuild -project Astra.xcodeproj -scheme Astra \
+  -sdk iphonesimulator -configuration Debug \
+  -destination 'generic/platform=iOS Simulator' \
+  CODE_SIGNING_ALLOWED=NO build
+```
 
 完整教程见 [docs/ios-build-deploy.md](docs/ios-build-deploy.md)。
 

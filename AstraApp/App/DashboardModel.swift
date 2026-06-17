@@ -9,6 +9,7 @@ enum ConnectionCheckState: Equatable {
 
 @MainActor
 final class DashboardModel: ObservableObject {
+    // Core (v1) state
     @Published var settings: AppSettings
     @Published var latticeToken: String
     @Published var latticeSessionCookie: String
@@ -26,6 +27,27 @@ final class DashboardModel: ObservableObject {
     @Published private(set) var barkCheckState: ConnectionCheckState = .idle
     @Published private(set) var backgroundRefreshStatus: BackgroundRefreshStatus
     @Published var lastError: String?
+
+    // v2 control-plane state
+    @Published var identity: LatticeIdentity?
+    @Published var serverVersion: LatticeServerVersion?
+    @Published private(set) var machines: [MachineProfile] = []
+    @Published private(set) var monitors: [Monitor] = []
+    @Published private(set) var monitorResults: [String: [MonitorResult]] = [:]
+    @Published private(set) var notifyChannels: [NotifyChannel] = []
+    @Published private(set) var notifyRules: [NotifyRule] = []
+    @Published private(set) var auditEvents: [AuditEvent] = []
+    @Published private(set) var tokens: [LatticeToken] = []
+    @Published private(set) var logSources: [LogSource] = []
+    @Published private(set) var logLines: [String: [LogLine]] = [:]
+    @Published private(set) var tasks: [LatticeTask] = []
+    @Published private(set) var taskResults: [LatticeTaskResult] = []
+    @Published private(set) var geoNodes: [NodeGeoView] = []
+    @Published private(set) var metricsHistory = MetricsHistory()
+
+    // Per-section async state
+    @Published private(set) var loadingKeys: Set<String> = []
+    @Published private(set) var sectionErrors: [String: String] = [:]
 
     private var monitorEngine: MonitorEngine
     private var pollingTask: Task<Void, Never>?
@@ -50,6 +72,8 @@ final class DashboardModel: ObservableObject {
         pollingTask?.cancel()
     }
 
+    // MARK: - Derived
+
     var configured: Bool {
         normalizedLatticeURL(settings.latticeBaseURL) != nil && currentCredential.hasAuthentication
     }
@@ -65,29 +89,61 @@ final class DashboardModel: ObservableObject {
 
     var criticalCount: Int {
         nodes.filter { node in
-            if node.isOffline(timeout: settings.offlineTimeout) {
-                return true
-            }
-            if node.metrics.cpuPercent >= settings.cpuCritical {
-                return true
-            }
-            if let memory = node.memoryUsedFraction, memory * 100 >= settings.memoryCritical {
-                return true
-            }
-            if let disk = node.diskUsedFraction, disk * 100 >= settings.diskCritical {
-                return true
-            }
+            if node.isOffline(timeout: settings.offlineTimeout) { return true }
+            if node.metrics.cpuPercent >= settings.cpuCritical { return true }
+            if let memory = node.memoryUsedFraction, memory * 100 >= settings.memoryCritical { return true }
+            if let disk = node.diskUsedFraction, disk * 100 >= settings.diskCritical { return true }
             return false
         }.count
     }
 
-    private var currentCredential: LatticeCredential {
-        LatticeCredential(
-            bearerToken: latticeToken,
-            sessionCookie: latticeSessionCookie,
-            csrfToken: latticeCSRFToken
-        )
+    var fleetSummary: FleetSummary {
+        FleetSummary(nodes: nodes, configuration: settings.monitorConfiguration)
     }
+
+    var inventorySummary: InventorySummary {
+        InventorySummary(machines: machines)
+    }
+
+    /// Nodes that are currently offline or breaching a threshold.
+    var criticalNodes: [LatticeNode] {
+        nodes.filter { node in
+            if node.isOffline(timeout: settings.offlineTimeout) { return true }
+            if node.metrics.cpuPercent >= settings.cpuCritical { return true }
+            if let memory = node.memoryUsedFraction, memory * 100 >= settings.memoryCritical { return true }
+            if let disk = node.diskUsedFraction, disk * 100 >= settings.diskCritical { return true }
+            return false
+        }
+    }
+
+    var dashboardURL: URL? {
+        normalizedLatticeDashboardURL(settings.latticeBaseURL)
+    }
+
+    func node(withID id: String) -> LatticeNode? {
+        nodes.first { $0.id == id }
+    }
+
+    func samples(forNode id: String) -> [MetricSample] {
+        metricsHistory.samples(for: id)
+    }
+
+    func isLoading(_ key: String) -> Bool { loadingKeys.contains(key) }
+    func error(for key: String) -> String? { sectionErrors[key] }
+
+    private var currentCredential: LatticeCredential {
+        LatticeCredential(bearerToken: latticeToken, sessionCookie: latticeSessionCookie, csrfToken: latticeCSRFToken)
+    }
+
+    /// A configured client, or nil when the URL/credentials are missing.
+    var latticeClient: LatticeClient? {
+        guard let url = normalizedLatticeURL(settings.latticeBaseURL), currentCredential.hasAuthentication else {
+            return nil
+        }
+        return LatticeClient(baseURL: url, credential: currentCredential)
+    }
+
+    // MARK: - Settings persistence
 
     func saveSettings() {
         settings.latticeBaseURL = settings.latticeBaseURL.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -107,10 +163,10 @@ final class DashboardModel: ObservableObject {
         AstraBackgroundRefreshCoordinator.shared.schedule(settings: settings)
     }
 
+    // MARK: - Refresh & polling (nodes)
+
     func refresh(sendNotifications: Bool = true) async {
-        guard !isBusy else {
-            return
-        }
+        guard !isBusy else { return }
         isBusy = true
         defer { isBusy = false }
         await performRefresh(sendNotifications: sendNotifications)
@@ -131,6 +187,7 @@ final class DashboardModel: ObservableObject {
             let fetched = try await LatticeClient(baseURL: url, credential: currentCredential).fetchNodes()
             let refreshedAt = Date()
             nodes = fetched
+            metricsHistory.record(nodes: fetched, at: refreshedAt)
             NodeStore.save(fetched, refreshedAt: refreshedAt)
             lastRefresh = refreshedAt
             lastError = nil
@@ -157,9 +214,7 @@ final class DashboardModel: ObservableObject {
     }
 
     func testLatticeConnection() async {
-        guard !isBusy else {
-            return
-        }
+        guard !isBusy else { return }
         saveSettings()
         guard let url = normalizedLatticeURL(settings.latticeBaseURL) else {
             let message = "Enter a Lattice server URL first."
@@ -179,13 +234,17 @@ final class DashboardModel: ObservableObject {
         defer { isBusy = false }
 
         do {
-            let fetched = try await LatticeClient(baseURL: url, credential: currentCredential).fetchNodes()
+            let client = LatticeClient(baseURL: url, credential: currentCredential)
+            let fetched = try await client.fetchNodes()
             let refreshedAt = Date()
             nodes = fetched
+            metricsHistory.record(nodes: fetched, at: refreshedAt)
             NodeStore.save(fetched, refreshedAt: refreshedAt)
             lastRefresh = refreshedAt
             lastError = nil
             latticeCheckState = .success("Loaded \(fetched.count) node\(fetched.count == 1 ? "" : "s").")
+            identity = try? await client.fetchIdentity()
+            serverVersion = try? await client.fetchServerVersion()
         } catch {
             lastError = error.localizedDescription
             latticeCheckState = .failure(error.localizedDescription)
@@ -193,9 +252,7 @@ final class DashboardModel: ObservableObject {
     }
 
     func startPolling() {
-        guard pollingTask == nil else {
-            return
-        }
+        guard pollingTask == nil else { return }
         saveSettings()
         isPolling = true
         pollingTask = Task { [weak self] in
@@ -219,10 +276,209 @@ final class DashboardModel: ObservableObject {
         isPolling ? stopPolling() : startPolling()
     }
 
-    func sendTestBark() async {
-        guard !isBusy else {
+    // MARK: - Generic section loader
+
+    private func run(_ key: String, _ operation: @escaping (LatticeClient) async throws -> Void) async {
+        guard let client = latticeClient else {
+            sectionErrors[key] = "Configure Lattice in Settings first."
             return
         }
+        loadingKeys.insert(key)
+        sectionErrors[key] = nil
+        defer { loadingKeys.remove(key) }
+        do {
+            try await operation(client)
+        } catch {
+            sectionErrors[key] = error.localizedDescription
+        }
+    }
+
+    // MARK: - Section loads
+
+    func loadAccount() async {
+        await run("account") { client in
+            async let identity = client.fetchIdentity()
+            async let tokens = client.listTokens()
+            self.identity = try await identity
+            self.serverVersion = try? await client.fetchServerVersion()
+            self.tokens = try await tokens
+        }
+    }
+
+    func loadMachines() async {
+        await run("machines") { client in
+            self.machines = try await client.listMachines()
+        }
+    }
+
+    func loadMonitors() async {
+        await run("monitors") { client in
+            self.monitors = try await client.listMonitors()
+        }
+    }
+
+    func loadMonitorResults(monitorID: String) async {
+        await run("monitor.\(monitorID)") { client in
+            self.monitorResults[monitorID] = try await client.monitorResults(monitorID: monitorID)
+        }
+    }
+
+    func loadNotify() async {
+        await run("notify") { client in
+            async let channels = client.listNotifyChannels()
+            async let rules = client.listNotifyRules()
+            self.notifyChannels = try await channels
+            self.notifyRules = try await rules
+        }
+    }
+
+    func loadAudit() async {
+        await run("audit") { client in
+            self.auditEvents = try await client.fetchAudit(limit: 200).events
+        }
+    }
+
+    func loadLogs() async {
+        await run("logs") { client in
+            self.logSources = try await client.listLogSources()
+        }
+    }
+
+    func loadLogLines(sourceID: String, search: String? = nil) async {
+        await run("logline.\(sourceID)") { client in
+            self.logLines[sourceID] = try await client.queryLogs(sourceID: sourceID, search: search, limit: 200).lines
+        }
+    }
+
+    func loadTasks() async {
+        await run("tasks") { client in
+            async let tasks = client.listTasks()
+            async let results = client.listTaskResults()
+            self.tasks = try await tasks
+            self.taskResults = try await results
+        }
+    }
+
+    func loadGeo() async {
+        await run("geo") { client in
+            self.geoNodes = try await client.fetchNodeGeo()
+        }
+    }
+
+    // MARK: - Actions
+
+    @discardableResult
+    func setNodeDisabled(nodeID: String, disabled: Bool) async -> Bool {
+        guard let client = latticeClient else { lastError = "Configure Lattice first."; return false }
+        do {
+            try await client.setNodeDisabled(nodeID: nodeID, disabled: disabled)
+            await refresh(sendNotifications: false)
+            return true
+        } catch {
+            lastError = error.localizedDescription
+            return false
+        }
+    }
+
+    func rotateNodeToken(nodeID: String) async -> NodeTokenResponse? {
+        guard let client = latticeClient else { lastError = "Configure Lattice first."; return nil }
+        do { return try await client.rotateNodeToken(nodeID: nodeID) }
+        catch { lastError = error.localizedDescription; return nil }
+    }
+
+    func enrollNode(nodeID: String, name: String, tags: [String], role: String, wireGuardIP: String) async -> NodeTokenResponse? {
+        guard let client = latticeClient else { lastError = "Configure Lattice first."; return nil }
+        do {
+            let result = try await client.enrollNode(nodeID: nodeID, name: name, tags: tags, role: role, wireGuardIP: wireGuardIP)
+            await refresh(sendNotifications: false)
+            return result
+        } catch { lastError = error.localizedDescription; return nil }
+    }
+
+    func createToken(name: String, scopes: [String], serverAllowlist: [String]) async -> CreatedTokenResponse? {
+        guard let client = latticeClient else { lastError = "Configure Lattice first."; return nil }
+        do {
+            let result = try await client.createToken(name: name, scopes: scopes, serverAllowlist: serverAllowlist)
+            await loadAccount()
+            return result
+        } catch { lastError = error.localizedDescription; return nil }
+    }
+
+    @discardableResult
+    func revokeToken(tokenID: String) async -> Bool {
+        guard let client = latticeClient else { lastError = "Configure Lattice first."; return false }
+        do { try await client.revokeToken(tokenID: tokenID); await loadAccount(); return true }
+        catch { lastError = error.localizedDescription; return false }
+    }
+
+    @discardableResult
+    func saveMachine(_ request: MachineProfileRequest, isNew: Bool) async -> Bool {
+        guard let client = latticeClient else { lastError = "Configure Lattice first."; return false }
+        do {
+            _ = isNew ? try await client.createMachine(request) : try await client.updateMachine(request)
+            await loadMachines()
+            return true
+        } catch { lastError = error.localizedDescription; return false }
+    }
+
+    @discardableResult
+    func deleteMachine(id: String) async -> Bool {
+        guard let client = latticeClient else { lastError = "Configure Lattice first."; return false }
+        do { try await client.deleteMachine(id: id); await loadMachines(); return true }
+        catch { lastError = error.localizedDescription; return false }
+    }
+
+    @discardableResult
+    func renewMachine(id: String, nextRenewal: Date) async -> Bool {
+        guard let client = latticeClient else { lastError = "Configure Lattice first."; return false }
+        do { _ = try await client.renewMachine(id: id, nextRenewal: nextRenewal); await loadMachines(); return true }
+        catch { lastError = error.localizedDescription; return false }
+    }
+
+    @discardableResult
+    func createMonitor(name: String, type: MonitorType, target: String, intervalSec: Int, timeoutSec: Int, assignAll: Bool, nodeIDs: [String]) async -> Bool {
+        guard let client = latticeClient else { lastError = "Configure Lattice first."; return false }
+        do {
+            try await client.createMonitor(name: name, type: type, target: target, intervalSec: intervalSec, timeoutSec: timeoutSec, assignAll: assignAll, nodeIDs: nodeIDs)
+            await loadMonitors()
+            return true
+        } catch { lastError = error.localizedDescription; return false }
+    }
+
+    @discardableResult
+    func deleteMonitor(id: String) async -> Bool {
+        guard let client = latticeClient else { lastError = "Configure Lattice first."; return false }
+        do { try await client.deleteMonitor(id: id); await loadMonitors(); return true }
+        catch { lastError = error.localizedDescription; return false }
+    }
+
+    @discardableResult
+    func testNotifyChannel(id: String) async -> Bool {
+        guard let client = latticeClient else { lastError = "Configure Lattice first."; return false }
+        do {
+            try await client.testNotifyChannel(channelID: id, title: "Lattice test", body: "Test notification from the Lattice iOS app.")
+            return true
+        } catch { lastError = error.localizedDescription; return false }
+    }
+
+    @discardableResult
+    func resolveGeo(all: Bool = true, missingOnly: Bool = true) async -> Bool {
+        guard let client = latticeClient else { lastError = "Configure Lattice first."; return false }
+        do { _ = try await client.resolveNodeGeo(all: all, missingOnly: missingOnly); await loadGeo(); return true }
+        catch { lastError = error.localizedDescription; return false }
+    }
+
+    @discardableResult
+    func runRenewalReminders() async -> Int {
+        guard let client = latticeClient else { lastError = "Configure Lattice first."; return 0 }
+        do { return try await client.runRenewalReminders().count }
+        catch { lastError = error.localizedDescription; return 0 }
+    }
+
+    // MARK: - Bark test
+
+    func sendTestBark() async {
+        guard !isBusy else { return }
         saveSettings()
         guard let serverURL = normalizedBarkURL(settings.barkServerURL) else {
             let message = "Bark server URL is invalid."
@@ -263,10 +519,10 @@ final class DashboardModel: ObservableObject {
         }
     }
 
+    // MARK: - Login
+
     func loginToLattice() async {
-        guard !isBusy else {
-            return
-        }
+        guard !isBusy else { return }
         saveSettings()
         guard let url = normalizedLatticeURL(settings.latticeBaseURL) else {
             lastError = "Enter a Lattice server URL before login."
@@ -304,6 +560,7 @@ final class DashboardModel: ObservableObject {
             lastError = nil
             latticeCheckState = .success("Logged in as \(session.actorID ?? username).")
             await performRefresh(sendNotifications: false)
+            await loadAccount()
         } catch LatticeAPIError.totpRequired(let challengeID) {
             pendingTOTPChallengeID = challengeID
             lastError = "Enter your Lattice TOTP code and tap Login again."
@@ -314,6 +571,18 @@ final class DashboardModel: ObservableObject {
         }
     }
 
+    func signOut() {
+        latticeToken = ""
+        latticeSessionCookie = ""
+        latticeCSRFToken = ""
+        identity = nil
+        tokens = []
+        saveSettings()
+        latticeCheckState = .idle
+    }
+
+    // MARK: - Background refresh
+
     func configureBackgroundRefresh() {
         AstraBackgroundRefreshCoordinator.shared.schedule(settings: settings)
         reloadBackgroundRefreshStatus()
@@ -323,6 +592,8 @@ final class DashboardModel: ObservableObject {
         backgroundRefreshStatus = BackgroundRefreshStatusStore.load()
     }
 
+    // MARK: - Private helpers
+
     private func apply(session: LatticeLoginSession) {
         latticeToken = ""
         latticeSessionCookie = session.sessionCookie
@@ -330,9 +601,7 @@ final class DashboardModel: ObservableObject {
     }
 
     private func sendBarkNotifications(for events: [MonitorEvent]) async throws {
-        guard !events.isEmpty else {
-            return
-        }
+        guard !events.isEmpty else { return }
         guard let serverURL = normalizedBarkURL(settings.barkServerURL) else {
             throw BarkError.invalidURL
         }
@@ -345,15 +614,12 @@ final class DashboardModel: ObservableObject {
             url: normalizedLatticeDashboardURL(settings.latticeBaseURL),
             level: settings.barkLevel
         )
-
         let client = BarkClient()
         try await client.sendAll(configuration: configuration, events: events)
     }
 
     private func record(events newEvents: [MonitorEvent]) {
-        guard !newEvents.isEmpty else {
-            return
-        }
+        guard !newEvents.isEmpty else { return }
         events.insert(contentsOf: newEvents.reversed(), at: 0)
         if events.count > 100 {
             events.removeLast(events.count - 100)
