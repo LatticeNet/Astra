@@ -8,12 +8,11 @@ import CoreImage.CIFilterBuiltins
 
 enum QRCode {
     #if canImport(UIKit)
-    private static let context = CIContext()
-
     static func image(from string: String, scale: CGFloat = 8) -> UIImage? {
         let filter = CIFilter.qrCodeGenerator()
         filter.message = Data(string.utf8)
         filter.correctionLevel = "M"
+        let context = CIContext()
         guard let output = filter.outputImage?.transformed(by: CGAffineTransform(scaleX: scale, y: scale)),
               let cgImage = context.createCGImage(output, from: output.extent) else {
             return nil
