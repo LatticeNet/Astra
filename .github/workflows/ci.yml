@@ -1,0 +1,26 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: xcode version
+        run: xcodebuild -version
+      - name: core checks
+        run: swift run --scratch-path .build AstraCoreCheck
+      - name: simulator build
+        run: |
+          xcodebuild -project Astra.xcodeproj -scheme Astra \
+            -sdk iphonesimulator -configuration Debug \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath DerivedData/ci \
+            CODE_SIGNING_ALLOWED=NO build

@@ -1,6 +1,7 @@
 .build/
 DerivedData/
 .omx/
+.omc/
 .DS_Store
 *.xcuserstate
 xcuserdata/
