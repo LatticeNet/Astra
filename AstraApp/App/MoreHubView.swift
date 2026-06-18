@@ -28,6 +28,20 @@ struct MoreHubView: View {
 
                 Section("Control plane") {
                     NavigationLink { ActivityView() } label: { Label("Activity & audit", systemImage: "list.bullet.rectangle") }
+                    NavigationLink { NetworkView() } label: {
+                        HStack {
+                            Label("Network & security", systemImage: "lock.shield")
+                            if model.pendingApprovalCount > 0 {
+                                Spacer()
+                                Text("\(model.pendingApprovalCount)")
+                                    .font(.caption2.weight(.bold))
+                                    .foregroundStyle(.white)
+                                    .padding(.horizontal, 7)
+                                    .padding(.vertical, 2)
+                                    .background(Theme.warning, in: Capsule())
+                            }
+                        }
+                    }
                     NavigationLink { NotificationsView() } label: { Label("Notifications", systemImage: "bell.badge") }
                     NavigationLink { LogsView() } label: { Label("Logs", systemImage: "doc.text.magnifyingglass") }
                     NavigationLink { TasksView() } label: { Label("Tasks", systemImage: "terminal") }
@@ -45,6 +59,9 @@ struct MoreHubView: View {
             .navigationTitle("More")
             .task {
                 if model.configured, model.identity == nil { await model.loadAccount() }
+            }
+            .task {
+                if model.configured, model.approvals.isEmpty { await model.loadNetwork() }
             }
         }
     }

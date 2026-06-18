@@ -33,6 +33,8 @@
 		0A000001000000000000200E /* NotificationsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A000001000000000000100E /* NotificationsView.swift */; };
 		0A000001000000000000200F /* LogsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A000001000000000000100F /* LogsView.swift */; };
 		0A0000010000000000002010 /* TasksView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A0000010000000000001010 /* TasksView.swift */; };
+		0A0000010000000000002011 /* LatticeNetwork.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A0000010000000000001011 /* LatticeNetwork.swift */; };
+		0A0000010000000000002012 /* NetworkView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A0000010000000000001012 /* NetworkView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -64,6 +66,8 @@
 		0A000001000000000000100E /* NotificationsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationsView.swift; sourceTree = "<group>"; };
 		0A000001000000000000100F /* LogsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogsView.swift; sourceTree = "<group>"; };
 		0A0000010000000000001010 /* TasksView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TasksView.swift; sourceTree = "<group>"; };
+		0A0000010000000000001011 /* LatticeNetwork.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LatticeNetwork.swift; sourceTree = "<group>"; };
+		0A0000010000000000001012 /* NetworkView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -121,6 +125,7 @@
 				0A000001000000000000100E /* NotificationsView.swift */,
 				0A000001000000000000100F /* LogsView.swift */,
 				0A0000010000000000001010 /* TasksView.swift */,
+				0A0000010000000000001012 /* NetworkView.swift */,
 			);
 			path = App;
 			sourceTree = "<group>";
@@ -140,6 +145,7 @@
 				0A0000010000000000001001 /* LatticeModels.swift */,
 				0A0000010000000000001002 /* LatticeAPI.swift */,
 				0A0000010000000000001003 /* LatticeAnalytics.swift */,
+				0A0000010000000000001011 /* LatticeNetwork.swift */,
 			);
 			path = AstraCore;
 			sourceTree = "<group>";
@@ -253,6 +259,8 @@
 				0A000001000000000000200E /* NotificationsView.swift in Sources */,
 				0A000001000000000000200F /* LogsView.swift in Sources */,
 				0A0000010000000000002010 /* TasksView.swift in Sources */,
+				0A0000010000000000002011 /* LatticeNetwork.swift in Sources */,
+				0A0000010000000000002012 /* NetworkView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

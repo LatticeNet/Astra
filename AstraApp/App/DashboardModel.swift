@@ -45,6 +45,13 @@ final class DashboardModel: ObservableObject {
     @Published private(set) var geoNodes: [NodeGeoView] = []
     @Published private(set) var metricsHistory = MetricsHistory()
 
+    // Network & security (read-only views + gated approve)
+    @Published private(set) var netPolicies: [NetPolicy] = []
+    @Published var netGraph: NetGraph?
+    @Published private(set) var nftInputs: [NFTInputs] = []
+    @Published private(set) var tunnels: [TunnelProfile] = []
+    @Published private(set) var approvals: [Approval] = []
+
     // Per-section async state
     @Published private(set) var loadingKeys: Set<String> = []
     @Published private(set) var sectionErrors: [String: String] = [:]
@@ -362,6 +369,52 @@ final class DashboardModel: ObservableObject {
     func loadGeo() async {
         await run("geo") { client in
             self.geoNodes = try await client.fetchNodeGeo()
+        }
+    }
+
+    var pendingApprovalCount: Int {
+        approvals.filter { $0.isPending }.count
+    }
+
+    /// Loads all network/security read views. Each endpoint is tolerated
+    /// independently so a token missing one scope still shows the rest; failures
+    /// are surfaced (never silently swallowed) in the "network" section error.
+    func loadNetwork() async {
+        guard let client = latticeClient else {
+            sectionErrors["network"] = "Configure Lattice in Settings first."
+            return
+        }
+        loadingKeys.insert("network")
+        sectionErrors["network"] = nil
+        defer { loadingKeys.remove("network") }
+
+        var failed: [String] = []
+        do { approvals = try await client.listApprovals() } catch { failed.append("approvals") }
+        do { netPolicies = try await client.listNetPolicies() } catch { failed.append("policies") }
+        do { netGraph = try await client.netPolicyGraph() } catch { failed.append("graph") }
+        do { nftInputs = try await client.listNFTInputs() } catch { failed.append("nft") }
+        do { tunnels = try await client.listTunnels() } catch { failed.append("tunnels") }
+
+        if failed.count == 5 {
+            sectionErrors["network"] = "Couldn't load network data — check your connection or token scopes."
+        } else if !failed.isEmpty {
+            sectionErrors["network"] = "Some sections need higher scopes: \(failed.joined(separator: ", "))."
+        }
+    }
+
+    /// Approves a pending plan. Always sends the SHA-256 of the reviewed plan so
+    /// the server rejects a plan that changed since review. This is the one write
+    /// action in the network surface and is always behind an explicit confirm.
+    @discardableResult
+    func approve(_ approval: Approval, queueApply: Bool) async -> Bool {
+        guard let client = latticeClient else { lastError = "Configure Lattice first."; return false }
+        do {
+            _ = try await client.approveApproval(approvalID: approval.id, queueApply: queueApply, planSHA256: approval.planHash)
+            await loadNetwork()
+            return true
+        } catch {
+            lastError = error.localizedDescription
+            return false
         }
     }
 

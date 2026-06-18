@@ -488,6 +488,95 @@ func checkLatticeAnalytics() throws {
     try expectEqual(RelativeDateFormatter.string(from: now.addingTimeInterval(-120), now: now), "2m ago", "relative date ago")
 }
 
+func checkLatticeNetwork() async throws {
+    // SHA-256 plan hash (known vectors) — used for the approve TOCTOU defense.
+    try expectEqual(PlanHasher.sha256Hex(""), "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", "sha256 of empty string")
+    try expectEqual(PlanHasher.sha256Hex("abc"), "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad", "sha256 of abc")
+
+    let base = URL(string: "https://lattice.example.com")!
+    let transport = RecordingTransport(responses: [
+        "https://lattice.example.com/api/netpolicy": (
+            200,
+            """
+            {"policies":[
+              {"id":"node-a","target_node_id":"node-a","target_node_name":"Edge","enabled":true,
+               "rules":[{"id":"r1","action":"allow","direction":"egress","protocol":"tcp","ports":[443],
+                         "remote":{"kind":"cidr","cidr":"10.0.0.0/8"},"comment":"https"},
+                        {"id":"r2","action":"deny","direction":"ingress","protocol":"any",
+                         "remote":{"kind":"any"},"disabled":true}],
+               "last_plan_sha":"abc","updated_at":"2026-06-17T02:00:00Z"}
+            ]}
+            """.data(using: .utf8)!
+        ),
+        "https://lattice.example.com/api/netpolicy/graph": (
+            200,
+            """
+            {"nodes":[{"id":"node-a","name":"Edge","online":true},{"id":"node-b","name":"Core","online":false}],
+             "edges":[{"from":"node-a","to":"node-b","action":"allow","protocol":"tcp","ports":[22],"direction":"egress","rule_id":"r1"}],
+             "externals":[{"target_node_id":"node-a","action":"deny","remote":"0.0.0.0/0","protocol":"any","direction":"ingress","rule_id":"r2"}]}
+            """.data(using: .utf8)!
+        ),
+        "https://lattice.example.com/api/network/nft/inputs": (
+            200,
+            #"{"inputs":[{"id":"node-a","node_id":"node-a","node_name":"Edge","interface_name":"eth0","wireguard_cidr":"10.8.0.0/24","public_tcp":[443,80],"wireguard_udp":[51820],"updated_at":"2026-06-17T02:00:00Z"}]}"#.data(using: .utf8)!
+        ),
+        "https://lattice.example.com/api/tunnels": (
+            200,
+            #"[{"id":"t1","name":"web","node_id":"node-a","tunnel_id":"cf-123","ingress":[{"hostname":"app.example.com","service":"http://localhost:8088"}],"created_at":"2026-06-17T00:00:00Z"}]"#.data(using: .utf8)!
+        ),
+        "https://lattice.example.com/api/network/approvals": (
+            200,
+            #"[{"id":"ap1","node_id":"node-a","plugin":"nftpolicy","action":"apply nft","plan":"table inet lattice_guard {}","status":"pending","actor_id":"admin","created_at":"2026-06-17T02:00:00Z"}]"#.data(using: .utf8)!
+        ),
+        "https://lattice.example.com/api/network/approvals/approve": (
+            200,
+            #"{"id":"ap1","node_id":"node-a","plugin":"nftpolicy","action":"apply nft","plan":"table inet lattice_guard {}","status":"approved","actor_id":"admin","approved_by":"admin"}"#.data(using: .utf8)!
+        )
+    ])
+
+    let client = LatticeClient(baseURL: base, credential: LatticeCredential(sessionCookie: "sid", csrfToken: "csrf-token"), transport: transport)
+
+    let policies = try await client.listNetPolicies()
+    let policy = try expectUnwrapped(policies.first, "policy decoded from envelope")
+    try expectEqual(policy.targetNodeName, "Edge", "policy node name")
+    try expectEqual(policy.rules.count, 2, "policy rule count")
+    try expectEqual(policy.activeRules.count, 1, "policy active (non-disabled) rules")
+    let rule = try expectUnwrapped(policy.rules.first, "first rule")
+    try expect(rule.isAllow, "rule allow")
+    try expectEqual(rule.proto, "tcp", "rule protocol via 'protocol' key")
+    try expectEqual(rule.remote.displayText, "10.0.0.0/8", "rule remote cidr display")
+    try expectEqual(policy.rules[1].remote.displayText, "any", "deny rule remote any")
+
+    let graph = try await client.netPolicyGraph()
+    try expectEqual(graph.nodes.count, 2, "graph nodes")
+    try expectEqual(graph.edges.first?.ruleID, "r1", "graph edge rule id")
+    try expectEqual(graph.externals.first?.remote, "0.0.0.0/0", "graph external remote")
+    try expect(!(graph.externals.first?.isAllow ?? true), "graph external deny")
+
+    let inputs = try await client.listNFTInputs()
+    let nft = try expectUnwrapped(inputs.first, "nft inputs decoded from envelope")
+    try expectEqual(nft.interfaceName, "eth0", "nft interface")
+    try expectEqual(NFTInputs.portList(nft.publicTCP), "443, 80", "nft public tcp list")
+
+    let tunnels = try await client.listTunnels()
+    try expectEqual(tunnels.first?.ingress.first?.hostname, "app.example.com", "tunnel ingress hostname")
+
+    let approvals = try await client.listApprovals()
+    let approval = try expectUnwrapped(approvals.first, "approval decoded")
+    try expect(approval.isPending, "approval pending")
+    let expectedHash = PlanHasher.sha256Hex("table inet lattice_guard {}")
+    try expectEqual(approval.planHash, expectedHash, "approval plan hash computed")
+
+    let approved = try await client.approveApproval(approvalID: approval.id, queueApply: true, planSHA256: approval.planHash)
+    try expectEqual(approved.status, "approved", "approve returns approved status")
+    let approveBody = try await bodyObject(transport.bodies.last ?? nil)
+    try expectEqual(Set(approveBody.keys), ["approval_id", "queue_apply", "plan_sha256"], "approve sends exactly the server fields")
+    try expectEqual(approveBody["approval_id"] as? String, "ap1", "approve approval_id")
+    try expectEqual(approveBody["queue_apply"] as? Bool, true, "approve queue_apply")
+    try expectEqual(approveBody["plan_sha256"] as? String, expectedHash, "approve plan_sha256 matches plan hash")
+    try expectEqual(await transport.csrfHeaders.last ?? nil, "csrf-token", "approve carries CSRF header")
+}
+
 actor RecordingTransport: HTTPTransport {
     private var responses: [String: [(Int, Data)]]
     private var headers: [String: [String: String]]
@@ -538,6 +627,7 @@ do {
     try await checkBarkNetworkFlow()
     try await checkLatticeAPIClient()
     try checkLatticeAnalytics()
+    try await checkLatticeNetwork()
     print("AstraCoreCheck passed")
 } catch {
     fputs("AstraCoreCheck failed: \(error)\n", stderr)
