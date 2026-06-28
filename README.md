@@ -56,7 +56,7 @@ v2 把它从只读监控原型升级成一个手机优先的 Lattice 控制面�
 
 1. 打开 `Astra.xcodeproj`。
 2. 在 `Astra` target 的 Signing & Capabilities 中选择你的 Apple Team。
-3. 如果 `org.roobli.astra` 被占用，把 Bundle Identifier 改成自己的，例如 `com.yourname.lattice`.
+3. 如果 `org.roobli.astra` 被占用，把 Bundle Identifier 改成自己的，例如 `com.yourname.lattice`。长期自用时选定后尽量不要频繁更换。
 4. 连接 iPhone，选择真机作为 run destination。
 5. 按 Run。
 6. 手机上打开 `Lattice`，进入 `More → Settings`。
@@ -107,7 +107,6 @@ swift run --scratch-path .build AstraCoreCheck
 
 ```sh
 ASTRA_TEAM_ID=ABCDE12345 \
-ASTRA_BUNDLE_ID=com.yourname.lattice \
 ./scripts/build-ios-device.sh
 ```
 
@@ -115,11 +114,20 @@ Development archive 并导出 `.ipa`：
 
 ```sh
 ASTRA_TEAM_ID=ABCDE12345 \
-ASTRA_BUNDLE_ID=com.yourname.lattice \
 ./scripts/archive-ios-development.sh
 ```
 
 导出产物默认写到 `DerivedData/export/`。
+
+命令行构建脚本会默认读取 Xcode 工程里的当前 Bundle Identifier。只有在你明确想临时覆盖时，才需要传 `ASTRA_BUNDLE_ID`。
+
+## 长期自用建议
+
+- 固定一个 Apple Team 和 Bundle Identifier，避免 iOS 把升级当成另一个 App。
+- Lattice server 和 Bark server 尽量使用手机在蜂窝网络下也能访问的稳定 HTTPS 域名，或稳定 VPN 入口。
+- 手机端认证优先使用专门给 App 创建的低权限 Personal Access Token，权限只给 `node:read`。
+- iPhone App 适合做状态面板和辅助提醒；不能漏报的 always-on 告警仍应放在 Lattice server、Bark server、Prometheus/Alertmanager 或其他常驻服务中。
+- 每次升级 Xcode、iOS 或 Lattice API 后，先跑 `./scripts/check-local.sh`，再做一次真机安装验证。
 
 ## Bark 默认值
 

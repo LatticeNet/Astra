@@ -2,7 +2,9 @@
 DerivedData/
 .omx/
 .omc/
+.claude/worktrees/
 .DS_Store
 *.xcuserstate
 xcuserdata/
 *.xcresult
+Astra.xcodeproj/project.xcworkspace/

@@ -185,10 +185,52 @@ grep -q "NodeStore.save(nodes)" AstraApp/App/BackgroundRefresh.swift || {
   echo "error: background refresh must persist node snapshots" >&2
   exit 1
 }
-grep -q "PRODUCT_BUNDLE_IDENTIFIER = org.roobli.astra;" Astra.xcodeproj/project.pbxproj || {
-  echo "error: default bundle identifier changed unexpectedly" >&2
+bundle_ids="$(awk -F' = ' '
+  /PRODUCT_BUNDLE_IDENTIFIER = / {
+    value = $2
+    sub(/;$/, "", value)
+    seen[value] = 1
+  }
+  END {
+    for (value in seen) {
+      print value
+    }
+  }
+' Astra.xcodeproj/project.pbxproj)"
+bundle_id_count="$(printf "%s\n" "$bundle_ids" | awk 'NF { count++ } END { print count + 0 }')"
+if [ "$bundle_id_count" -eq 0 ]; then
+  echo "error: no PRODUCT_BUNDLE_IDENTIFIER entries found in Xcode project" >&2
   exit 1
-}
+fi
+if [ "$bundle_id_count" -ne 1 ]; then
+  echo "error: Debug and Release bundle identifiers must match" >&2
+  printf "%s\n" "$bundle_ids" >&2
+  exit 1
+fi
+actual_bundle_id="$(printf "%s\n" "$bundle_ids" | awk 'NF { print; exit }')"
+case "$actual_bundle_id" in
+  *.*) ;;
+  *)
+    echo "error: bundle identifier must use reverse-DNS form, got '$actual_bundle_id'" >&2
+    exit 1
+    ;;
+esac
+case "$actual_bundle_id" in
+  *[!A-Za-z0-9.-]*)
+    echo "error: bundle identifier contains unsupported characters: '$actual_bundle_id'" >&2
+    exit 1
+    ;;
+esac
+case "$actual_bundle_id" in
+  com.yourname.lattice|org.roobli.astra)
+    echo "warning: bundle identifier is still a template/default value: $actual_bundle_id" >&2
+    ;;
+esac
+if [ "${ASTRA_BUNDLE_ID:-}" ] && [ "$actual_bundle_id" != "$ASTRA_BUNDLE_ID" ]; then
+  echo "error: Xcode project bundle identifier '$actual_bundle_id' does not match ASTRA_BUNDLE_ID '$ASTRA_BUNDLE_ID'" >&2
+  exit 1
+fi
+echo "Bundle identifier: $actual_bundle_id"
 grep -q "ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;" Astra.xcodeproj/project.pbxproj || {
   echo "error: AppIcon is not configured as the app icon" >&2
   exit 1
@@ -253,6 +295,10 @@ echo "Checking helper scripts"
 sh -n scripts/doctor-ios.sh
 sh -n scripts/build-ios-device.sh
 sh -n scripts/archive-ios-development.sh
+if grep -Fq 'BUNDLE_ID="${ASTRA_BUNDLE_ID:-org.roobli.astra}"' scripts/build-ios-device.sh scripts/archive-ios-development.sh; then
+  echo "error: build/export scripts must default to the project bundle identifier, not the old template value" >&2
+  exit 1
+fi
 swiftc -typecheck scripts/generate-icons.swift
 
 echo "Running AstraCoreCheck"

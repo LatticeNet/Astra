@@ -93,6 +93,14 @@ xcodebuild -showsdks | grep iphoneos
 - Lattice core check 通过。
 - SwiftUI app sources 能用当前 SDK type-check。
 
+如果你想在本地检查里强制确认某个个人 Bundle Identifier，可以传：
+
+```sh
+ASTRA_BUNDLE_ID=com.yourname.lattice ./scripts/check-local.sh
+```
+
+不传 `ASTRA_BUNDLE_ID` 时，检查脚本会接受 Xcode 工程里 Debug/Release 一致的当前 Bundle Identifier。
+
 只跑核心协议检查：
 
 ```sh
@@ -137,7 +145,7 @@ swift run --scratch-path .build AstraCoreCheck
    com.yourname.lattice
    ```
 
-   默认 `org.roobli.astra` 可能在你的账号下不可用。
+   默认 `org.roobli.astra` 可能在你的账号下不可用。长期自用时，选定一个 Bundle Identifier 后尽量保持不变；频繁更换会让 iOS 把安装包当成不同 App，配置、权限和 Keychain 状态也会变得难排查。
 
 8. 连接 iPhone。
 9. iPhone 上点 Trust this computer。
@@ -167,6 +175,13 @@ swift run --scratch-path .build AstraCoreCheck
 
 ```sh
 ASTRA_TEAM_ID=ABCDE12345 \
+./scripts/build-ios-device.sh
+```
+
+脚本默认使用 Xcode 工程里的当前 Bundle Identifier。只有在你想临时覆盖工程设置时，才需要额外传：
+
+```sh
+ASTRA_TEAM_ID=ABCDE12345 \
 ASTRA_BUNDLE_ID=com.yourname.lattice \
 ./scripts/build-ios-device.sh
 ```
@@ -180,7 +195,7 @@ xcodebuild \
   -configuration Debug \
   -destination 'generic/platform=iOS' \
   DEVELOPMENT_TEAM="$ASTRA_TEAM_ID" \
-  PRODUCT_BUNDLE_IDENTIFIER="$ASTRA_BUNDLE_ID" \
+  PRODUCT_BUNDLE_IDENTIFIER="$BUNDLE_ID" \
   CODE_SIGN_STYLE=Automatic \
   build
 ```
@@ -193,9 +208,10 @@ xcodebuild \
 
 ```sh
 ASTRA_TEAM_ID=ABCDE12345 \
-ASTRA_BUNDLE_ID=com.yourname.lattice \
 ./scripts/archive-ios-development.sh
 ```
+
+同样，`ASTRA_BUNDLE_ID` 默认来自 Xcode 工程当前设置；只有需要临时覆盖时再传。
 
 默认路径：
 
@@ -211,7 +227,18 @@ ASTRA_BUNDLE_ID=com.yourname.lattice \
 - 设备必须在你的 Apple 开发账号或自动签名 profile 覆盖范围内。
 - 这不是 App Store/TestFlight 发布流程。
 
-## 8. 首次打开 App
+## 8. 长期自用建议
+
+个人长期使用时，推荐把稳定性放在签名、服务入口和告警位置上：
+
+- 固定 Apple Team 和 Bundle Identifier，避免每次重装都像新 App。
+- 如果要脱离 Mac 长期安装，优先使用 Apple Developer Program 的签名能力；免费个人签名适合短期测试，不适合长期可用。
+- Lattice 和 Bark 尽量使用稳定 HTTPS 域名，或稳定 VPN 入口，避免手机离开家用 Wi-Fi 后不可访问。
+- App 内优先保存低权限 `node:read` PAT；用户名密码 session 更适合临时登录，不适合作为长期机器凭据。
+- iOS 后台刷新是 best-effort。不能漏报的告警应放在 Lattice server、Bark server、Prometheus/Alertmanager 或其他常驻服务中。
+- 每次升级 Xcode、iOS 或 Lattice API 后，先跑 `./scripts/check-local.sh`，再做一次真机 Run。
+
+## 9. 首次打开 App
 
 打开手机上的 `Lattice`。
 
@@ -259,7 +286,7 @@ PAT 会存入 Keychain。
 
 把对应 secret 输入框清空，再点 `Save and refresh`，会删除 Keychain item。
 
-## 9. 配置 Bark
+## 10. 配置 Bark
 
 默认：
 
@@ -289,7 +316,7 @@ Send test notification
 
 手机收到测试通知后，再开启轮询。
 
-## 10. 轮询和阈值
+## 11. 轮询和阈值
 
 Settings 中可以调整：
 
@@ -303,7 +330,7 @@ Settings 中可以调整：
 
 Nodes 页显示当前节点状态。Events 页显示本地健康事件历史。
 
-## 11. 后台刷新现实情况
+## 12. 后台刷新现实情况
 
 App 注册：
 
@@ -328,7 +355,7 @@ iOS 会自己决定：
 - Bark server 或其他常驻服务负责推送。
 - iOS 客户端只做个人面板和辅助通知。
 
-## 12. 常见故障
+## 13. 常见故障
 
 ### `xcode-select is not pointing at full Xcode`
 

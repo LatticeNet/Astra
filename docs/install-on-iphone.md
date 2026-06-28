@@ -53,7 +53,7 @@ sudo xcodebuild -license
 3. 选择 `Astra` target。
 4. 打开 Signing & Capabilities。
 5. Team 选择你的 Apple ID team。
-6. 如果 `org.roobli.astra` 不可用，把 Bundle Identifier 改成自己的，例如 `com.yourname.lattice`。
+6. 如果 `org.roobli.astra` 不可用，把 Bundle Identifier 改成自己的，例如 `com.yourname.lattice`。长期自用时，选定后尽量保持不变。
 7. 顶部 run destination 选择你的 iPhone。
 8. 按 Run。
 9. 如果 iPhone 提示开发者未受信任，到 iPhone 设置中信任该 Apple ID。
@@ -87,22 +87,26 @@ sudo xcodebuild -license
 
 ```sh
 ASTRA_TEAM_ID=ABCDE12345 \
-ASTRA_BUNDLE_ID=com.yourname.lattice \
 ./scripts/build-ios-device.sh
 ```
 
 变量说明：
 
 - `ASTRA_TEAM_ID`：Apple Developer Team ID，必填。
-- `ASTRA_BUNDLE_ID`：Bundle Identifier，默认 `org.roobli.astra`，建议改成你自己的。
+- `ASTRA_BUNDLE_ID`：可选。默认读取 Xcode 工程里的当前 Bundle Identifier；只有临时覆盖时才需要传。
 - `ASTRA_DESTINATION`：默认 `generic/platform=iOS`。通常不用改。
 
 ## 导出 Development IPA
 
 ```sh
 ASTRA_TEAM_ID=ABCDE12345 \
-ASTRA_BUNDLE_ID=com.yourname.lattice \
 ./scripts/archive-ios-development.sh
+```
+
+如果需要临时覆盖工程里的 Bundle Identifier，可以给上面两个命令额外加：
+
+```sh
+ASTRA_BUNDLE_ID=com.yourname.lattice
 ```
 
 默认输出：
@@ -124,3 +128,10 @@ org.roobli.astra.refresh
 它使用 iOS `BGAppRefreshTask`。系统不保证固定频率，也不保证每次都执行。Settings 页会显示最近一次后台刷新结果。
 
 如果你需要可靠的 24 小时告警，不要依赖 iOS 后台刷新。把 always-on 告警放在 Lattice server 或常驻告警系统中。
+
+## 长期自用建议
+
+- 固定 Apple Team 和 Bundle Identifier，避免重装/升级时变成另一个 App。
+- Lattice server 和 Bark server 尽量使用手机在蜂窝网络下也能访问的稳定 HTTPS 域名，或稳定 VPN 入口。
+- 优先使用专门给手机 App 创建的低权限 `node:read` Personal Access Token。
+- 每次升级 Xcode、iOS 或 Lattice API 后，先跑 `./scripts/check-local.sh`，再做一次真机安装验证。

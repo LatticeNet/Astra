@@ -28,7 +28,8 @@ Astra/
 - Target: `Astra`
 - Scheme: `Astra`
 - Installed app display name: `Lattice`
-- Bundle ID default: `org.roobli.astra`
+- 仓库默认 Bundle ID: `org.roobli.astra`
+- 本地个人构建可以使用另一个稳定 Bundle Identifier，例如 `org.roobli.cdcd.Astra`
 - Marketing version: `0.1.0`
 - iOS deployment target: `16.0`
 
@@ -134,9 +135,11 @@ swift run --scratch-path .build AstraCoreCheck
 - `doctor-ios.sh`
   - 检查完整 Xcode、license、iPhoneOS SDK、scheme、Simulator build。
 - `build-ios-device.sh`
-  - 使用 `ASTRA_TEAM_ID` 和 `ASTRA_BUNDLE_ID` 做 signed device build。
+  - 使用 `ASTRA_TEAM_ID` 做 signed device build。
+  - 默认读取 Xcode 工程里的当前 Bundle Identifier；`ASTRA_BUNDLE_ID` 只用于临时覆盖。
 - `archive-ios-development.sh`
   - 生成 development archive，并导出 development `.ipa`。
+  - 默认读取 Xcode 工程里的当前 Bundle Identifier；`ASTRA_BUNDLE_ID` 只用于临时覆盖。
 - `generate-icons.swift`
   - 生成 App icon set。
 
