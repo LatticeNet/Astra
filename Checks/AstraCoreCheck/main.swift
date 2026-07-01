@@ -111,7 +111,7 @@ func checkLatticeDecoding() throws {
         throw CheckFailure.failed("expected API error")
     } catch LatticeAPIError.serverError(let code, let message) {
         try expectEqual(code, "forbidden", "api error code")
-        try expectEqual(message, "missing node:read", "api error message")
+        try expectEqual(message, "missing node:read (request_id: req_1)", "api error message includes request id")
     }
 }
 
@@ -179,6 +179,10 @@ func checkLatticeNetworkFlow() async throws {
         "https://lattice.example.com/api/login": (
             200,
             #"{"csrf_token":"csrf-123","actor_id":"admin"}"#.data(using: .utf8)!
+        ),
+        "https://lattice.example.com/api/login/totp": (
+            403,
+            #"{"error":{"code":"forbidden","message":"missing auth:login","request_id":"req_totp"}}"#.data(using: .utf8)!
         )
     ], headers: [
         "https://lattice.example.com/api/login": [
@@ -202,6 +206,17 @@ func checkLatticeNetworkFlow() async throws {
     try expectEqual(session.actorID, "admin", "login actor id")
     try expectEqual(session.csrfToken, "csrf-123", "login csrf")
     try expectEqual(session.sessionCookie, "session-123", "login cookie")
+
+    do {
+        _ = try await LatticeClient(
+            baseURL: URL(string: "https://lattice.example.com")!,
+            transport: transport
+        ).loginTOTP(challengeID: "challenge", code: "000000")
+        throw CheckFailure.failed("expected TOTP API error")
+    } catch LatticeAPIError.serverError(let code, let message) {
+        try expectEqual(code, "forbidden", "TOTP api error code")
+        try expectEqual(message, "missing auth:login (request_id: req_totp)", "TOTP api error includes request id")
+    }
 }
 
 func checkLatticeMonitorEngine() throws {
@@ -526,7 +541,18 @@ func checkLatticeNetwork() async throws {
         ),
         "https://lattice.example.com/api/network/approvals": (
             200,
-            #"[{"id":"ap1","node_id":"node-a","plugin":"nftpolicy","action":"apply nft","plan":"table inet lattice_guard {}","status":"pending","actor_id":"admin","created_at":"2026-06-17T02:00:00Z"}]"#.data(using: .utf8)!
+            """
+            [
+              {"id":"ap1","node_id":"node-a","plugin":"nftpolicy","action":"apply nft",
+               "plan":"table inet lattice_guard {}","status":"pending","actor_id":"admin",
+               "created_at":"2026-06-17T02:00:00Z"},
+              {"id":"ap-stale","node_id":"node-a","plugin":"agentupdate","action":"agent.update",
+               "plan":"target_version: 0.2.7","status":"pending","actor_id":"admin",
+               "reason":"agent update policy changed since this approval was planned; re-plan before approving",
+               "stale":true,"stale_code":"agent_update_policy_changed",
+               "created_at":"2026-06-17T02:01:00Z"}
+            ]
+            """.data(using: .utf8)!
         ),
         "https://lattice.example.com/api/network/approvals/approve": (
             200,
@@ -564,8 +590,15 @@ func checkLatticeNetwork() async throws {
     let approvals = try await client.listApprovals()
     let approval = try expectUnwrapped(approvals.first, "approval decoded")
     try expect(approval.isPending, "approval pending")
+    try expect(approval.isApprovable, "fresh pending approval is approvable")
     let expectedHash = PlanHasher.sha256Hex("table inet lattice_guard {}")
     try expectEqual(approval.planHash, expectedHash, "approval plan hash computed")
+    let staleApproval = try expectUnwrapped(approvals.first(where: { $0.id == "ap-stale" }), "stale approval decoded")
+    try expect(staleApproval.isPending, "stale approval can remain pending until server cleanup")
+    try expect(staleApproval.isStale, "stale approval exposes structured stale flag")
+    try expect(!staleApproval.isApprovable, "stale approval is not approvable")
+    try expectEqual(staleApproval.staleCode, "agent_update_policy_changed", "stale code decoded")
+    try expect(staleApproval.reason.contains("re-plan"), "stale reason decoded")
 
     let approved = try await client.approveApproval(approvalID: approval.id, queueApply: true, planSHA256: approval.planHash)
     try expectEqual(approved.status, "approved", "approve returns approved status")

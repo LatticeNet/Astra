@@ -24,7 +24,7 @@ v2 把它从只读监控原型升级成一个手机优先的 Lattice 控制面�
 - 机器清单：list / update / delete / renew / reminders-run
 - Monitors：list / create / delete / results
 - Notify：channels、rules、test
-- Network & security：approvals、NetPolicy list/graph、nft baseline inputs、tunnels，以及带 `plan_sha256` 的 approve
+- Network & security：approvals、NetPolicy list/graph、nft baseline inputs、tunnels，以及带 `plan_sha256` 的 approve；stale approvals 只读展示并要求回到 Web 端 re-plan
 - Audit：查询（分页）+ 链校验
 - Tasks：tasks + task-results
 - Logs：sources / query（分页）/ stats

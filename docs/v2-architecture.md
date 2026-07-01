@@ -42,6 +42,7 @@ storage/kv/workers/static, plugins, OIDC provider admin, 2FA enroll/disable.
   (`{"rules":[]}`, `{"sources":[]}`, `{"stats":[]}`, `{"results":[]}`, `{"fired":[]}`, audit-with-params `{events,total,limit,offset}`).
 - POST bodies are strict (`DisallowUnknownFields`); request payload structs match server structs exactly.
 - Error envelope `{"error":{code,message,request_id}}`; auth via bearer OR `lattice_session` cookie + `X-Lattice-CSRF`.
+- Approval views expose `stale`/`stale_code`; stale approvals remain inspectable but mobile must not offer approve actions. Re-plan stays on the Web dashboard.
 - Secret-free views: machines expose `has_console_url`/`has_detail_url` (not URLs); tasks expose `script_sha256`/`script_size_bytes`; notify channels expose `config_keys`.
 
 ## UI structure (v2)

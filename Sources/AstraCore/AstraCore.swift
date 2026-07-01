@@ -432,16 +432,37 @@ struct LatticeAPIErrorBody: Decodable {
         case message
         case requestID = "request_id"
     }
+
+    func asAPIError(statusCode: Int? = nil) -> LatticeAPIError {
+        let normalizedCode = code.trimmingCharacters(in: .whitespacesAndNewlines)
+        if normalizedCode == "unauthorized" || statusCode == 401 {
+            return .unauthorized
+        }
+        return .serverError(normalizedCode, messageForDisplay)
+    }
+
+    private var messageForDisplay: String {
+        let trimmedMessage = message.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let requestID = requestID?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !requestID.isEmpty
+        else {
+            return trimmedMessage
+        }
+        if trimmedMessage.isEmpty {
+            return "request_id: \(requestID)"
+        }
+        if trimmedMessage.contains(requestID) {
+            return trimmedMessage
+        }
+        return "\(trimmedMessage) (request_id: \(requestID))"
+    }
 }
 
 public enum LatticeDecoder {
     public static func decodeNodes(from data: Data) throws -> [LatticeNode] {
         let decoder = JSONDecoder()
         if let envelope = try? decoder.decode(LatticeErrorEnvelope.self, from: data) {
-            if envelope.error.code == "unauthorized" {
-                throw LatticeAPIError.unauthorized
-            }
-            throw LatticeAPIError.serverError(envelope.error.code, envelope.error.message)
+            throw envelope.error.asAPIError()
         }
         if let nodes = try? decoder.decode([LatticeNode].self, from: data) {
             return nodes.sortedByID()
@@ -452,10 +473,7 @@ public enum LatticeDecoder {
     static func decodeLogin(from data: Data) throws -> LatticeLoginResponse {
         let decoder = JSONDecoder()
         if let envelope = try? decoder.decode(LatticeErrorEnvelope.self, from: data) {
-            if envelope.error.code == "unauthorized" {
-                throw LatticeAPIError.unauthorized
-            }
-            throw LatticeAPIError.serverError(envelope.error.code, envelope.error.message)
+            throw envelope.error.asAPIError()
         }
         if let response = try? decoder.decode(LatticeLoginResponse.self, from: data) {
             return response
@@ -653,10 +671,7 @@ public struct LatticeClient: Sendable {
         }
         guard (200...299).contains(http.statusCode) else {
             if let envelope = try? JSONDecoder().decode(LatticeErrorEnvelope.self, from: data) {
-                if envelope.error.code == "unauthorized" || http.statusCode == 401 {
-                    throw LatticeAPIError.unauthorized
-                }
-                throw LatticeAPIError.serverError(envelope.error.code, envelope.error.message)
+                throw envelope.error.asAPIError(statusCode: http.statusCode)
             }
             if http.statusCode == 401 {
                 throw LatticeAPIError.unauthorized

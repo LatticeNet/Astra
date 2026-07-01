@@ -397,18 +397,38 @@ public struct Approval: Identifiable, Codable, Equatable, Hashable, Sendable {
     public var action: String
     public var plan: String
     public var status: String
+    public var reason: String
+    public var stale: Bool
+    public var staleCode: String
     public var actorID: String
     public var approvedBy: String
     public var createdAt: Date?
     public var updatedAt: Date?
 
-    public init(id: String, nodeID: String = "", plugin: String = "", action: String = "", plan: String = "", status: String = "", actorID: String = "", approvedBy: String = "", createdAt: Date? = nil, updatedAt: Date? = nil) {
+    public init(
+        id: String,
+        nodeID: String = "",
+        plugin: String = "",
+        action: String = "",
+        plan: String = "",
+        status: String = "",
+        reason: String = "",
+        stale: Bool = false,
+        staleCode: String = "",
+        actorID: String = "",
+        approvedBy: String = "",
+        createdAt: Date? = nil,
+        updatedAt: Date? = nil
+    ) {
         self.id = id
         self.nodeID = nodeID
         self.plugin = plugin
         self.action = action
         self.plan = plan
         self.status = status
+        self.reason = reason
+        self.stale = stale
+        self.staleCode = staleCode
         self.actorID = actorID
         self.approvedBy = approvedBy
         self.createdAt = createdAt
@@ -416,13 +436,16 @@ public struct Approval: Identifiable, Codable, Equatable, Hashable, Sendable {
     }
 
     public var isPending: Bool { status.lowercased() == "pending" }
+    public var isStale: Bool { stale || !staleCode.isEmpty }
+    public var isApprovable: Bool { isPending && !isStale }
 
     /// SHA-256 hex of the plan text, for the `plan_sha256` approval field.
     public var planHash: String { PlanHasher.sha256Hex(plan) }
 
     enum CodingKeys: String, CodingKey {
-        case id, plugin, action, plan, status
+        case id, plugin, action, plan, status, reason, stale
         case nodeID = "node_id"
+        case staleCode = "stale_code"
         case actorID = "actor_id"
         case approvedBy = "approved_by"
         case createdAt = "created_at"
@@ -437,6 +460,9 @@ public struct Approval: Identifiable, Codable, Equatable, Hashable, Sendable {
         action = try c.decodeIfPresent(String.self, forKey: .action) ?? ""
         plan = try c.decodeIfPresent(String.self, forKey: .plan) ?? ""
         status = try c.decodeIfPresent(String.self, forKey: .status) ?? ""
+        reason = try c.decodeIfPresent(String.self, forKey: .reason) ?? ""
+        stale = try c.decodeIfPresent(Bool.self, forKey: .stale) ?? false
+        staleCode = try c.decodeIfPresent(String.self, forKey: .staleCode) ?? ""
         actorID = try c.decodeIfPresent(String.self, forKey: .actorID) ?? ""
         approvedBy = try c.decodeIfPresent(String.self, forKey: .approvedBy) ?? ""
         createdAt = try DateValue.decodeIfPresent(from: c, forKey: .createdAt)

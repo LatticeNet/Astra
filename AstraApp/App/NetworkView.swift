@@ -140,6 +140,9 @@ struct ApprovalRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 8) {
+                if approval.isStale {
+                    StatusPill(text: "stale", systemImage: "exclamationmark.triangle.fill", color: Theme.warning)
+                }
                 StatusPill(text: approval.status.isEmpty ? "unknown" : approval.status, systemImage: statusIcon, color: statusColor)
                 Spacer(minLength: 8)
                 if let created = approval.createdAt {
@@ -160,22 +163,24 @@ struct ApprovalRow: View {
     }
 
     private var statusIcon: String {
+        if approval.isStale { return "exclamationmark.triangle.fill" }
         switch approval.status.lowercased() {
-        case "pending": "clock.fill"
-        case "approved": "checkmark.seal.fill"
-        case "applied": "checkmark.circle.fill"
-        case "rejected": "xmark.octagon.fill"
-        default: "circle.dashed"
+        case "pending": return "clock.fill"
+        case "approved": return "checkmark.seal.fill"
+        case "applied": return "checkmark.circle.fill"
+        case "rejected": return "xmark.octagon.fill"
+        default: return "circle.dashed"
         }
     }
 
     private var statusColor: Color {
+        if approval.isStale { return Theme.warning }
         switch approval.status.lowercased() {
-        case "pending": Theme.warning
-        case "approved": Theme.online
-        case "applied": Theme.accent
-        case "rejected": Theme.offline
-        default: Theme.secondary
+        case "pending": return Theme.warning
+        case "approved": return Theme.online
+        case "applied": return Theme.accent
+        case "rejected": return Theme.offline
+        default: return Theme.secondary
         }
     }
 }
@@ -253,8 +258,11 @@ struct ApprovalDetailView: View {
             if let approval {
                 VStack(spacing: 16) {
                     headerCard(approval)
+                    if approval.isStale {
+                        staleCard(approval)
+                    }
                     planCard(approval)
-                    if approval.isPending {
+                    if approval.isApprovable {
                         approveCard(approval)
                     }
                 }
@@ -290,16 +298,33 @@ struct ApprovalDetailView: View {
                     .font(.headline)
                 Spacer()
                 StatusPill(
-                    text: approval.status,
-                    systemImage: approval.isPending ? "clock.fill" : "checkmark.seal.fill",
-                    color: approval.isPending ? Theme.warning : Theme.online
+                    text: approval.isStale ? "stale" : approval.status,
+                    systemImage: approval.isStale ? "exclamationmark.triangle.fill" : approval.isPending ? "clock.fill" : "checkmark.seal.fill",
+                    color: approval.isStale ? Theme.warning : approval.isPending ? Theme.warning : Theme.online
                 )
             }
             DetailRow(label: "Plugin", value: approval.plugin)
             DetailRow(label: "Node", value: approval.nodeID, monospaced: true, copyable: true)
             if !approval.actorID.isEmpty { DetailRow(label: "Requested by", value: approval.actorID) }
+            if !approval.reason.isEmpty { DetailRow(label: "Reason", value: approval.reason) }
             if let created = approval.createdAt {
                 DetailRow(label: "Created", value: RelativeDateFormatter.string(from: created))
+            }
+        }
+        .latticeCard()
+    }
+
+    private func staleCard(_ approval: Approval) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            SectionHeaderView("Stale approval", systemImage: "exclamationmark.triangle.fill")
+            Text("This approval no longer matches the current server policy or target state. Re-plan in the web dashboard before approving.")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+            if !approval.reason.isEmpty {
+                DetailRow(label: "Server reason", value: approval.reason)
+            }
+            if !approval.staleCode.isEmpty {
+                DetailRow(label: "Stale code", value: approval.staleCode, monospaced: true, copyable: true)
             }
         }
         .latticeCard()
@@ -337,7 +362,7 @@ struct ApprovalDetailView: View {
             }
             .buttonStyle(.borderedProminent)
             .tint(Theme.online)
-            .disabled(working)
+            .disabled(working || !approval.isApprovable)
             Text("The app sends the SHA-256 of the plan above; the server rejects approval if the plan changed since it was reviewed.")
                 .font(.caption2)
                 .foregroundStyle(.tertiary)

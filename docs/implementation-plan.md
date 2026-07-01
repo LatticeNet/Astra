@@ -40,6 +40,10 @@ v1 的目标不是完整控制面，而是：
 }
 ```
 
+客户端会把非空 `request_id` 追加到 `LatticeAPIError.serverError`
+的 message 文本中，所以 Settings、后台刷新状态和本地检查输出能直接带上
+server 端排障 ID。
+
 ## v1 已实现范围
 
 - SwiftUI iOS App。

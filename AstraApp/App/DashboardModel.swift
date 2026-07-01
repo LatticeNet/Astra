@@ -408,6 +408,12 @@ final class DashboardModel: ObservableObject {
     @discardableResult
     func approve(_ approval: Approval, queueApply: Bool) async -> Bool {
         guard let client = latticeClient else { lastError = "Configure Lattice first."; return false }
+        guard approval.isApprovable else {
+            lastError = approval.isStale
+                ? (approval.reason.isEmpty ? "Approval is stale. Re-plan in the web dashboard before approving." : approval.reason)
+                : "Approval is not pending."
+            return false
+        }
         do {
             _ = try await client.approveApproval(approvalID: approval.id, queueApply: queueApply, planSHA256: approval.planHash)
             await loadNetwork()
