@@ -122,35 +122,47 @@ public struct LatticeGeo: Codable, Equatable, Hashable, Sendable {
 public struct LatticeMetrics: Codable, Equatable, Hashable, Sendable {
     public var cpuPercent: Double
     public var load1: Double
+    public var load5: Double
+    public var load15: Double
     public var memoryUsed: UInt64
     public var memoryTotal: UInt64
     public var diskUsed: UInt64
     public var diskTotal: UInt64
     public var netRxBytes: UInt64
     public var netTxBytes: UInt64
+    public var netRxSpeed: Double
+    public var netTxSpeed: Double
     public var uptimeSeconds: UInt64
     public var collectedAt: Date?
 
     public init(
         cpuPercent: Double = 0,
         load1: Double = 0,
+        load5: Double = 0,
+        load15: Double = 0,
         memoryUsed: UInt64 = 0,
         memoryTotal: UInt64 = 0,
         diskUsed: UInt64 = 0,
         diskTotal: UInt64 = 0,
         netRxBytes: UInt64 = 0,
         netTxBytes: UInt64 = 0,
+        netRxSpeed: Double = 0,
+        netTxSpeed: Double = 0,
         uptimeSeconds: UInt64 = 0,
         collectedAt: Date? = nil
     ) {
         self.cpuPercent = cpuPercent
         self.load1 = load1
+        self.load5 = load5
+        self.load15 = load15
         self.memoryUsed = memoryUsed
         self.memoryTotal = memoryTotal
         self.diskUsed = diskUsed
         self.diskTotal = diskTotal
         self.netRxBytes = netRxBytes
         self.netTxBytes = netTxBytes
+        self.netRxSpeed = netRxSpeed
+        self.netTxSpeed = netTxSpeed
         self.uptimeSeconds = uptimeSeconds
         self.collectedAt = collectedAt
     }
@@ -158,12 +170,16 @@ public struct LatticeMetrics: Codable, Equatable, Hashable, Sendable {
     enum CodingKeys: String, CodingKey {
         case cpuPercent = "cpu_percent"
         case load1
+        case load5
+        case load15
         case memoryUsed = "memory_used"
         case memoryTotal = "memory_total"
         case diskUsed = "disk_used"
         case diskTotal = "disk_total"
         case netRxBytes = "net_rx_bytes"
         case netTxBytes = "net_tx_bytes"
+        case netRxSpeed = "net_rx_speed"
+        case netTxSpeed = "net_tx_speed"
         case uptimeSeconds = "uptime_seconds"
         case collectedAt = "collected_at"
     }
@@ -172,12 +188,16 @@ public struct LatticeMetrics: Codable, Equatable, Hashable, Sendable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         cpuPercent = try container.decodeIfPresent(Double.self, forKey: .cpuPercent) ?? 0
         load1 = try container.decodeIfPresent(Double.self, forKey: .load1) ?? 0
+        load5 = try container.decodeIfPresent(Double.self, forKey: .load5) ?? 0
+        load15 = try container.decodeIfPresent(Double.self, forKey: .load15) ?? 0
         memoryUsed = try container.decodeIfPresent(UInt64.self, forKey: .memoryUsed) ?? 0
         memoryTotal = try container.decodeIfPresent(UInt64.self, forKey: .memoryTotal) ?? 0
         diskUsed = try container.decodeIfPresent(UInt64.self, forKey: .diskUsed) ?? 0
         diskTotal = try container.decodeIfPresent(UInt64.self, forKey: .diskTotal) ?? 0
         netRxBytes = try container.decodeIfPresent(UInt64.self, forKey: .netRxBytes) ?? 0
         netTxBytes = try container.decodeIfPresent(UInt64.self, forKey: .netTxBytes) ?? 0
+        netRxSpeed = try container.decodeIfPresent(Double.self, forKey: .netRxSpeed) ?? 0
+        netTxSpeed = try container.decodeIfPresent(Double.self, forKey: .netTxSpeed) ?? 0
         uptimeSeconds = try container.decodeIfPresent(UInt64.self, forKey: .uptimeSeconds) ?? 0
         collectedAt = try DateValue.decodeIfPresent(from: container, forKey: .collectedAt)
     }
@@ -186,12 +206,16 @@ public struct LatticeMetrics: Codable, Equatable, Hashable, Sendable {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(cpuPercent, forKey: .cpuPercent)
         try container.encode(load1, forKey: .load1)
+        try container.encode(load5, forKey: .load5)
+        try container.encode(load15, forKey: .load15)
         try container.encode(memoryUsed, forKey: .memoryUsed)
         try container.encode(memoryTotal, forKey: .memoryTotal)
         try container.encode(diskUsed, forKey: .diskUsed)
         try container.encode(diskTotal, forKey: .diskTotal)
         try container.encode(netRxBytes, forKey: .netRxBytes)
         try container.encode(netTxBytes, forKey: .netTxBytes)
+        try container.encode(netRxSpeed, forKey: .netRxSpeed)
+        try container.encode(netTxSpeed, forKey: .netTxSpeed)
         try container.encode(uptimeSeconds, forKey: .uptimeSeconds)
         if let collectedAt {
             try container.encode(AstraDateParser.string(from: collectedAt), forKey: .collectedAt)
@@ -1198,6 +1222,14 @@ public enum ByteFormatter {
 
     public static func speed(_ value: UInt64) -> String {
         "\(bytes(value))/s"
+    }
+
+    public static func speed(_ value: Double) -> String {
+        let clamped = max(0, value)
+        if clamped >= Double(UInt64.max) {
+            return speed(UInt64.max)
+        }
+        return speed(UInt64(clamped.rounded()))
     }
 }
 

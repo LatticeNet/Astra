@@ -47,12 +47,16 @@ func checkLatticeDecoding() throws {
         "metrics": {
           "cpu_percent": 12.5,
           "load1": 0.42,
+          "load5": 0.38,
+          "load15": 0.31,
           "memory_used": 1073741824,
           "memory_total": 4294967296,
           "disk_used": 53687091200,
           "disk_total": 107374182400,
           "net_rx_bytes": 123456,
           "net_tx_bytes": 654321,
+          "net_rx_speed": 2048.5,
+          "net_tx_speed": 1024.25,
           "uptime_seconds": 3600,
           "collected_at": "2026-06-17T01:59:50Z"
         },
@@ -98,6 +102,10 @@ func checkLatticeDecoding() throws {
     try expectEqual(edge.hostFacts.hostname, "tokyo-edge", "host hostname")
     try expectEqual(edge.hostFacts.cpuCores, 4, "host cpu cores")
     try expectEqual(edge.metrics.cpuPercent, 12.5, "cpu")
+    try expectEqual(edge.metrics.load5, 0.38, "load5")
+    try expectEqual(edge.metrics.load15, 0.31, "load15")
+    try expectEqual(edge.metrics.netRxSpeed, 2048.5, "net rx speed")
+    try expectEqual(edge.metrics.netTxSpeed, 1024.25, "net tx speed")
     try expectEqual(edge.memoryUsedFraction, 0.25, "memory fraction")
     try expectEqual(edge.diskUsedFraction, 0.5, "disk fraction")
     try expectEqual(edge.geo?.country, "JP", "geo country")
@@ -324,6 +332,7 @@ func checkBarkRequest() throws {
     try expectEqual(object["level"] as? String, "critical", "Bark level")
     try expectEqual(object["id"] as? String, "node-node-a.cpu", "Bark id")
     try expectEqual(object["url"] as? String, "https://lattice.example.com", "Bark click URL")
+    try expectEqual(ByteFormatter.speed(2048.5), "2.0 KB/s", "fractional byte speed rounds for display")
 }
 
 func checkBarkNetworkFlow() async throws {

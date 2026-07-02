@@ -107,19 +107,30 @@ struct NodeDetailView: View {
 
     private func quickFacts(_ node: LatticeNode) -> some View {
         VStack(spacing: 0) {
-            DetailRow(label: "Load (1m)", value: String(format: "%.2f", node.metrics.load1))
+            DetailRow(label: "Load (1/5/15m)", value: loadAverageText(node.metrics))
             Divider()
             DetailRow(label: "Memory", value: "\(ByteFormatter.bytes(node.metrics.memoryUsed)) / \(ByteFormatter.bytes(memoryTotal(node)))")
             Divider()
             DetailRow(label: "Disk", value: "\(ByteFormatter.bytes(node.metrics.diskUsed)) / \(ByteFormatter.bytes(node.metrics.diskTotal))")
             Divider()
-            DetailRow(label: "Net ↓ / ↑", value: "\(ByteFormatter.bytes(node.metrics.netRxBytes)) / \(ByteFormatter.bytes(node.metrics.netTxBytes))")
+            DetailRow(label: "Net ↓ / ↑", value: networkText(node.metrics))
             if let lastSeen = node.lastSeen {
                 Divider()
                 DetailRow(label: "Last seen", value: RelativeDateFormatter.string(from: lastSeen))
             }
         }
         .latticeCard()
+    }
+
+    private func loadAverageText(_ metrics: LatticeMetrics) -> String {
+        String(format: "%.2f / %.2f / %.2f", metrics.load1, metrics.load5, metrics.load15)
+    }
+
+    private func networkText(_ metrics: LatticeMetrics) -> String {
+        if metrics.netRxSpeed > 0 || metrics.netTxSpeed > 0 {
+            return "\(ByteFormatter.speed(metrics.netRxSpeed)) / \(ByteFormatter.speed(metrics.netTxSpeed))"
+        }
+        return "\(ByteFormatter.bytes(metrics.netRxBytes)) / \(ByteFormatter.bytes(metrics.netTxBytes))"
     }
 
     private func networkCard(_ node: LatticeNode) -> some View {
