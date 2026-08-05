@@ -31,10 +31,14 @@ Implemented in AstraCore (`LatticeClient`):
 - Audit: query (paged) + chain verify
 - Tasks: list tasks + task-results
 - Logs: sources, query (paged), stats
+- Network & security (read-only + gated approve): netpolicy list, netpolicy graph,
+  nft baseline inputs, tunnels, approvals; approve sends `plan_sha256` (SHA-256 of
+  the reviewed plan, computed via `PlanHasher`/CryptoKit) so a changed plan is rejected.
 
 Deliberately deferred (operator-heavy, poor phone fit) — read-only or later:
-netpolicy, nft/wireguard/tunnels, dns/ddns/geo-routing, proxy/subscription,
-storage/kv/workers/static, plugins, OIDC provider admin, 2FA enroll/disable.
+dns/ddns/geo-routing, proxy/subscription, storage/kv/workers/static, plugins,
+OIDC provider admin, 2FA enroll/disable. Network *authoring* (create policy, plan
+nft/wireguard, create tunnels) also stays web-only; the phone only reads + approves.
 
 ## Key server contract notes
 

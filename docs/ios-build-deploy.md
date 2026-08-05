@@ -328,7 +328,7 @@ Settings 中可以调整：
 - Disk threshold。
 - Background refresh 开关。
 
-Nodes 页显示当前节点状态。Events 页显示本地健康事件历史。
+设置位于 `More → Settings`。Overview 页显示 Fleet 概览，Nodes 页显示节点状态，本地健康事件历史在 `More → Activity`。
 
 ## 12. 后台刷新现实情况
 
