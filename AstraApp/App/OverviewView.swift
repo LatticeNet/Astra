@@ -58,7 +58,7 @@ struct OverviewView: View {
             }
             .task {
                 if model.configured {
-                    if model.nodes.isEmpty { await model.refresh(sendNotifications: false) }
+                    if model.nodes.isEmpty { await model.refresh() }
                     await model.loadGeo()
                     await model.loadMachines()
                 }

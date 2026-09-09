@@ -1,4 +1,8 @@
 import Foundation
+import Combine
+#if os(iOS)
+import UIKit
+#endif
 
 enum ConnectionCheckState: Equatable {
     case idle
@@ -7,9 +11,44 @@ enum ConnectionCheckState: Equatable {
     case failure(String)
 }
 
+enum AppTab: Hashable {
+    case inbox, fleet, more
+}
+
+struct ReviewRoute: Identifiable, Equatable {
+    var id: String
+}
+
+enum MoreDestination: Hashable {
+    case monitors
+    case monitor(String)
+    case inventory
+}
+
+struct AttentionItem: Identifiable, Equatable {
+    enum Kind: Equatable {
+        case node(String)
+        case monitor(String)
+        case inventory(String)
+        case waiting(String)
+    }
+
+    enum Tone: Equatable {
+        case warning, critical, accent, offline
+    }
+
+    var id: String
+    var kind: Kind
+    var title: String
+    var detail: String
+    var badge: String
+    var systemImage: String
+    var tone: Tone
+}
+
 @MainActor
 final class DashboardModel: ObservableObject {
-    // Core (v1) state
+    // Core state
     @Published var settings: AppSettings
     @Published var latticeToken: String
     @Published var latticeSessionCookie: String
@@ -23,10 +62,16 @@ final class DashboardModel: ObservableObject {
     @Published private(set) var isPolling = false
     @Published private(set) var isBusy = false
     @Published private(set) var lastRefresh: Date?
+    @Published private(set) var lastInboxNotifyAt: Date?
     @Published private(set) var latticeCheckState: ConnectionCheckState = .idle
     @Published private(set) var barkCheckState: ConnectionCheckState = .idle
     @Published private(set) var backgroundRefreshStatus: BackgroundRefreshStatus
     @Published var lastError: String?
+    @Published var selectedTab: AppTab = .inbox
+    @Published var reviewRoute: ReviewRoute?
+    @Published var companionBehindServer = false
+    @Published var fleetPath: [String] = []
+    @Published var morePath: [MoreDestination] = []
 
     // v2 control-plane state
     @Published var identity: LatticeIdentity?
@@ -45,18 +90,17 @@ final class DashboardModel: ObservableObject {
     @Published private(set) var geoNodes: [NodeGeoView] = []
     @Published private(set) var metricsHistory = MetricsHistory()
 
-    // Network & security (read-only views + gated approve)
     @Published private(set) var netPolicies: [NetPolicy] = []
     @Published var netGraph: NetGraph?
     @Published private(set) var nftInputs: [NFTInputs] = []
     @Published private(set) var tunnels: [TunnelProfile] = []
     @Published private(set) var approvals: [Approval] = []
+    @Published private(set) var sshGuardByNode: [String: SSHGuardNodeStatus] = [:]
+    @Published private(set) var capabilitiesByNode: [String: [NodeCapabilityEffective]] = [:]
 
-    // Per-section async state
     @Published private(set) var loadingKeys: Set<String> = []
     @Published private(set) var sectionErrors: [String: String] = [:]
 
-    private var monitorEngine: MonitorEngine
     private var pollingTask: Task<Void, Never>?
     private var pendingTOTPChallengeID = ""
 
@@ -72,7 +116,7 @@ final class DashboardModel: ObservableObject {
         lastRefresh = nodeSnapshot.refreshedAt
         events = EventStore.load()
         backgroundRefreshStatus = BackgroundRefreshStatusStore.load()
-        monitorEngine = MonitorEngine(configuration: loadedSettings.monitorConfiguration, state: MonitorEngineStateStore.load())
+        lastInboxNotifyAt = InboxQuietStore.lastNotifyAt
     }
 
     deinit {
@@ -166,20 +210,19 @@ final class DashboardModel: ObservableObject {
         SecretStore.save(latticeSessionCookie, account: AppSecretAccount.latticeSessionCookie)
         SecretStore.save(latticeCSRFToken, account: AppSecretAccount.latticeCSRFToken)
         SecretStore.save(barkDeviceKey, account: AppSecretAccount.barkDeviceKey)
-        monitorEngine.configuration = settings.monitorConfiguration
         AstraBackgroundRefreshCoordinator.shared.schedule(settings: settings)
     }
 
     // MARK: - Refresh & polling (nodes)
 
-    func refresh(sendNotifications: Bool = true) async {
+    func refresh() async {
         guard !isBusy else { return }
         isBusy = true
         defer { isBusy = false }
-        await performRefresh(sendNotifications: sendNotifications)
+        await performRefresh()
     }
 
-    private func performRefresh(sendNotifications: Bool) async {
+    private func performRefresh() async {
         saveSettings()
         guard let url = normalizedLatticeURL(settings.latticeBaseURL) else {
             lastError = "Enter a Lattice server URL in Settings."
@@ -198,23 +241,6 @@ final class DashboardModel: ObservableObject {
             NodeStore.save(fetched, refreshedAt: refreshedAt)
             lastRefresh = refreshedAt
             lastError = nil
-
-            let generated = monitorEngine.evaluate(nodes: fetched)
-            if sendNotifications, settings.notificationsEnabled {
-                do {
-                    try await sendBarkNotifications(for: generated)
-                } catch let failure as BarkDeliveryFailure {
-                    monitorEngine.markDeliveryFailed(events: failure.undeliveredEvents)
-                    lastError = failure.localizedDescription
-                } catch {
-                    monitorEngine.markDeliveryFailed(events: generated)
-                    lastError = error.localizedDescription
-                }
-            } else {
-                monitorEngine.markDeliveryFailed(events: generated)
-            }
-            MonitorEngineStateStore.save(monitorEngine.state)
-            record(events: generated)
         } catch {
             lastError = error.localizedDescription
         }
@@ -265,7 +291,7 @@ final class DashboardModel: ObservableObject {
         pollingTask = Task { [weak self] in
             while !Task.isCancelled {
                 guard let self else { return }
-                await self.refresh(sendNotifications: true)
+                await self.refresh()
                 let seconds = UInt64(max(10, self.settings.pollInterval))
                 try? await Task.sleep(nanoseconds: seconds * 1_000_000_000)
             }
@@ -372,8 +398,79 @@ final class DashboardModel: ObservableObject {
         }
     }
 
-    var pendingApprovalCount: Int {
-        approvals.filter { $0.isPending }.count
+    var humanPendingCount: Int { humanPendingApprovals.count }
+
+    var humanPendingApprovals: [Approval] {
+        approvals.filter(\.isHumanPending)
+    }
+
+    var waitingApprovals: [Approval] {
+        approvals.filter { $0.waiting != nil }
+    }
+
+    var quietSinceText: String {
+        if !humanPendingApprovals.isEmpty || !attentionItems.isEmpty {
+            return "not quiet"
+        }
+        if let last = lastInboxNotifyAt ?? lastRefresh {
+            return RelativeDateFormatter.string(from: last)
+        }
+        return "since this device connected"
+    }
+
+    var attentionItems: [AttentionItem] {
+        var items: [AttentionItem] = []
+        for node in nodes where node.needsAttention {
+            let word = node.honestyWord
+            items.append(AttentionItem(
+                id: "node.\(node.id)",
+                kind: .node(node.id),
+                title: node.displayName,
+                detail: node.statusReason.isEmpty ? word : "\(word): \(node.statusReason)",
+                badge: word,
+                systemImage: honestyImage(word),
+                tone: honestyTone(word)
+            ))
+        }
+        for approval in waitingApprovals {
+            let waiting = approval.waiting
+            items.append(AttentionItem(
+                id: "waiting.\(approval.id)",
+                kind: .waiting(approval.id),
+                title: approval.action.isEmpty ? approval.plugin : approval.action,
+                detail: waiting?.reason.isEmpty == false ? (waiting?.reason ?? "waiting") : "Approved, waiting to apply",
+                badge: "waiting",
+                systemImage: "hourglass",
+                tone: .warning
+            ))
+        }
+        for monitor in monitors where monitor.enabled {
+            guard let last = monitorResults[monitor.id]?.max(by: { ($0.at ?? .distantPast) < ($1.at ?? .distantPast) }),
+                  !last.success else { continue }
+            items.append(AttentionItem(
+                id: "monitor.\(monitor.id)",
+                kind: .monitor(monitor.id),
+                title: monitor.displayName,
+                detail: last.error?.isEmpty == false ? (last.error ?? "down") : "Last probe failed",
+                badge: "down",
+                systemImage: "waveform.path.ecg",
+                tone: .critical
+            ))
+        }
+        let inventory = InventorySummary(machines: machines)
+        for machine in inventory.overdue + inventory.dueSoon {
+            let days = machine.daysUntilRenewal() ?? 0
+            items.append(AttentionItem(
+                id: "machine.\(machine.id)",
+                kind: .inventory(machine.id),
+                title: machine.displayLabel,
+                detail: days < 0 ? "Renewal overdue" : "Renewal in \(days) day\(days == 1 ? "" : "s")",
+                badge: days < 0 ? "overdue" : "due",
+                systemImage: "shippingbox",
+                tone: days < 0 ? .critical : .warning
+            ))
+        }
+        return items
     }
 
     /// Loads all network/security read views. Each endpoint is tolerated
@@ -389,38 +486,207 @@ final class DashboardModel: ObservableObject {
         defer { loadingKeys.remove("network") }
 
         var failed: [String] = []
-        do { approvals = try await client.listApprovals() } catch { failed.append("approvals") }
         do { netPolicies = try await client.listNetPolicies() } catch { failed.append("policies") }
         do { netGraph = try await client.netPolicyGraph() } catch { failed.append("graph") }
         do { nftInputs = try await client.listNFTInputs() } catch { failed.append("nft") }
         do { tunnels = try await client.listTunnels() } catch { failed.append("tunnels") }
 
-        if failed.count == 5 {
+        if failed.count == 4 {
             sectionErrors["network"] = "Couldn't load network data — check your connection or token scopes."
         } else if !failed.isEmpty {
             sectionErrors["network"] = "Some sections need higher scopes: \(failed.joined(separator: ", "))."
         }
     }
 
-    /// Approves a pending plan. Always sends the SHA-256 of the reviewed plan so
-    /// the server rejects a plan that changed since review. This is the one write
-    /// action in the network surface and is always behind an explicit confirm.
-    @discardableResult
-    func approve(_ approval: Approval, queueApply: Bool) async -> Bool {
-        guard let client = latticeClient else { lastError = "Configure Lattice first."; return false }
-        guard approval.isApprovable else {
-            lastError = approval.isStale
-                ? (approval.reason.isEmpty ? "Approval is stale. Re-plan in the web dashboard before approving." : approval.reason)
-                : "Approval is not pending."
-            return false
+    func refreshInbox() async {
+        await run("inbox") { client in
+            async let pending = client.listHumanPendingApprovals()
+            async let approved = client.listApprovals(status: "approved")
+            async let nodes = client.fetchNodes()
+            async let machines = client.listMachines()
+            async let monitors = client.listMonitors()
+            let pendingRows = try await pending
+            let approvedRows = (try? await approved) ?? []
+            let waitingRows = approvedRows.filter { $0.waiting != nil }
+            var merged: [Approval] = pendingRows
+            for row in waitingRows where !merged.contains(where: { $0.id == row.id }) {
+                merged.append(row)
+            }
+            self.approvals = merged
+            if let fetchedNodes = try? await nodes {
+                self.nodes = fetchedNodes
+                let refreshedAt = Date()
+                self.lastRefresh = refreshedAt
+                NodeStore.save(fetchedNodes, refreshedAt: refreshedAt)
+            } else {
+                self.lastRefresh = Date()
+            }
+            self.machines = (try? await machines) ?? self.machines
+            self.monitors = (try? await monitors) ?? self.monitors
+            await self.refreshMonitorAttention(client: client)
+            self.applyInboxBadge(self.humanPendingCount)
+        }
+    }
+
+    private func refreshMonitorAttention(client: LatticeClient) async {
+        let enabled = monitors.filter(\.enabled).prefix(20)
+        for monitor in enabled {
+            if let cached = monitorResults[monitor.id], !cached.isEmpty { continue }
+            if let results = try? await client.monitorResults(monitorID: monitor.id) {
+                monitorResults[monitor.id] = results
+            }
+        }
+    }
+
+    func applyInboxBadge(_ count: Int) {
+        InboxQuietStore.recordPendingCount(count)
+        lastInboxNotifyAt = InboxQuietStore.lastNotifyAt
+        InboxBadge.apply(count: count)
+    }
+
+    func markCompanionBehind() {
+        companionBehindServer = true
+    }
+
+    func openReview(id: String) {
+        selectedTab = .inbox
+        reviewRoute = ReviewRoute(id: id)
+    }
+
+    func openAttention(_ item: AttentionItem) {
+        switch item.kind {
+        case .node(let id):
+            selectedTab = .fleet
+            fleetPath = [id]
+        case .monitor(let id):
+            selectedTab = .more
+            morePath = [.monitors, .monitor(id)]
+        case .inventory(_):
+            selectedTab = .more
+            morePath = [.inventory]
+        case .waiting(let id):
+            openReview(id: id)
+        }
+    }
+
+    func openDeepLink(_ url: URL) {
+        guard let link = LatticeDeepLink(url: url) else { return }
+        switch link {
+        case .approval(let id):
+            openReview(id: id)
+        case .node(let id):
+            selectedTab = .fleet
+            fleetPath = [id]
+        case .monitor(let id):
+            selectedTab = .more
+            morePath = [.monitors, .monitor(id)]
+        }
+    }
+
+    func fetchReviewApproval(id: String) async throws -> Approval {
+        guard let client = latticeClient else {
+            throw LatticeAPIError.invalidURL("Lattice is not configured.")
         }
         do {
-            _ = try await client.approveApproval(approvalID: approval.id, queueApply: queueApply, planSHA256: approval.planHash)
-            await loadNetwork()
+            let approval = try await client.fetchApproval(id: id)
+            companionBehindServer = false
+            return approval
+        } catch LatticeAPIError.invalidResponse {
+            companionBehindServer = true
+            throw LatticeAPIError.invalidResponse
+        }
+    }
+
+    func approveReviewed(_ approval: Approval, queueApply: Bool) async throws -> Approval {
+        guard let client = latticeClient else {
+            lastError = "Configure Lattice first."
+            throw LatticeAPIError.invalidURL("Lattice is not configured.")
+        }
+        return try await client.approveReviewed(approval, queueApply: queueApply)
+    }
+
+    func rejectApproval(id: String) async throws -> Approval {
+        guard let client = latticeClient else {
+            lastError = "Configure Lattice first."
+            throw LatticeAPIError.invalidURL("Lattice is not configured.")
+        }
+        return try await client.rejectApproval(approvalID: id)
+    }
+
+    func dismissApproval(id: String, note: String) async throws -> Approval {
+        guard let client = latticeClient else {
+            lastError = "Configure Lattice first."
+            throw LatticeAPIError.invalidURL("Lattice is not configured.")
+        }
+        return try await client.dismissApproval(approvalID: id, note: note)
+    }
+
+    func consoleURL(forApproval id: String) -> URL? {
+        guard let dashboard = dashboardURL else { return nil }
+        return LatticeConsolePath.approvals(id, dashboard: dashboard)
+    }
+
+    func consoleURL(forNode id: String) -> URL? {
+        guard let dashboard = dashboardURL else { return nil }
+        return LatticeConsolePath.nodes(id, dashboard: dashboard)
+    }
+
+    func consoleURL(forMonitor id: String) -> URL? {
+        guard let dashboard = dashboardURL else { return nil }
+        return LatticeConsolePath.monitors(id, dashboard: dashboard)
+    }
+
+    func loadNodeGlance(nodeID: String) async {
+        guard let client = latticeClient else {
+            sectionErrors["glance.\(nodeID)"] = "Configure Lattice in Settings first."
+            return
+        }
+        let key = "glance.\(nodeID)"
+        loadingKeys.insert(key)
+        sectionErrors[key] = nil
+        defer { loadingKeys.remove(key) }
+
+        var failed: [String] = []
+        do { sshGuardByNode[nodeID] = try await client.fetchSSHGuardStatus(nodeID: nodeID) } catch { failed.append("sshguard") }
+        do { capabilitiesByNode[nodeID] = try await client.fetchNodeCapabilities(nodeID: nodeID) } catch { failed.append("capabilities") }
+        do {
+            if tasks.isEmpty { tasks = try await client.listTasks() }
+        } catch { failed.append("tasks") }
+        if !failed.isEmpty {
+            sectionErrors[key] = "Some glance facts need higher scopes: \(failed.joined(separator: ", "))."
+        }
+    }
+
+    @discardableResult
+    func cancelWaitingTask(id: String) async -> Bool {
+        guard let client = latticeClient else { lastError = "Configure Lattice first."; return false }
+        do {
+            _ = try await client.cancelTask(id: id)
+            await loadTasks()
             return true
         } catch {
             lastError = error.localizedDescription
             return false
+        }
+    }
+
+    func honestyImage(_ word: String) -> String {
+        switch word {
+        case "online": "checkmark.circle.fill"
+        case "degraded": "exclamationmark.triangle.fill"
+        case "disabled": "nosign"
+        case "never_reported": "questionmark.circle.fill"
+        case "offline": "xmark.circle.fill"
+        default: "exclamationmark.circle.fill"
+        }
+    }
+
+    func honestyTone(_ word: String) -> AttentionItem.Tone {
+        switch word {
+        case "online": .accent
+        case "degraded": .warning
+        case "offline", "never_reported", "disabled": .offline
+        default: .warning
         }
     }
 
@@ -431,7 +697,7 @@ final class DashboardModel: ObservableObject {
         guard let client = latticeClient else { lastError = "Configure Lattice first."; return false }
         do {
             try await client.setNodeDisabled(nodeID: nodeID, disabled: disabled)
-            await refresh(sendNotifications: false)
+            await refresh()
             return true
         } catch {
             lastError = error.localizedDescription
@@ -449,7 +715,7 @@ final class DashboardModel: ObservableObject {
         guard let client = latticeClient else { lastError = "Configure Lattice first."; return nil }
         do {
             let result = try await client.enrollNode(nodeID: nodeID, name: name, tags: tags, role: role, wireGuardIP: wireGuardIP)
-            await refresh(sendNotifications: false)
+            await refresh()
             return result
         } catch { lastError = error.localizedDescription; return nil }
     }
@@ -534,50 +800,6 @@ final class DashboardModel: ObservableObject {
         catch { lastError = error.localizedDescription; return 0 }
     }
 
-    // MARK: - Bark test
-
-    func sendTestBark() async {
-        guard !isBusy else { return }
-        saveSettings()
-        guard let serverURL = normalizedBarkURL(settings.barkServerURL) else {
-            let message = "Bark server URL is invalid."
-            barkCheckState = .failure(message)
-            lastError = message
-            return
-        }
-        let event = MonitorEvent(
-            id: "lattice.test",
-            nodeID: "local",
-            nodeName: "Lattice",
-            kind: .recovered,
-            title: "Lattice test",
-            body: "Bark notifications are configured.",
-            date: Date()
-        )
-        let configuration = BarkConfiguration(
-            serverURL: serverURL,
-            deviceKey: barkDeviceKey,
-            defaultGroup: settings.barkGroup,
-            sound: settings.barkSound.isEmpty ? nil : settings.barkSound,
-            icon: URL(string: "https://day.app/assets/images/avatar.jpg"),
-            url: normalizedLatticeDashboardURL(settings.latticeBaseURL),
-            level: settings.barkLevel
-        )
-
-        isBusy = true
-        barkCheckState = .checking
-        defer { isBusy = false }
-
-        do {
-            try await BarkClient().send(configuration: configuration, event: event)
-            lastError = nil
-            barkCheckState = .success("Test notification sent.")
-        } catch {
-            lastError = error.localizedDescription
-            barkCheckState = .failure(error.localizedDescription)
-        }
-    }
-
     // MARK: - Login
 
     func loginToLattice() async {
@@ -618,7 +840,7 @@ final class DashboardModel: ObservableObject {
             saveSettings()
             lastError = nil
             latticeCheckState = .success("Logged in as \(session.actorID ?? username).")
-            await performRefresh(sendNotifications: false)
+            await performRefresh()
             await loadAccount()
         } catch LatticeAPIError.totpRequired(let challengeID) {
             pendingTOTPChallengeID = challengeID
@@ -659,39 +881,8 @@ final class DashboardModel: ObservableObject {
         latticeCSRFToken = session.csrfToken
     }
 
-    private func sendBarkNotifications(for events: [MonitorEvent]) async throws {
-        guard !events.isEmpty else { return }
-        guard let serverURL = normalizedBarkURL(settings.barkServerURL) else {
-            throw BarkError.invalidURL
-        }
-        let configuration = BarkConfiguration(
-            serverURL: serverURL,
-            deviceKey: barkDeviceKey,
-            defaultGroup: settings.barkGroup,
-            sound: settings.barkSound.isEmpty ? nil : settings.barkSound,
-            icon: URL(string: "https://day.app/assets/images/avatar.jpg"),
-            url: normalizedLatticeDashboardURL(settings.latticeBaseURL),
-            level: settings.barkLevel
-        )
-        let client = BarkClient()
-        try await client.sendAll(configuration: configuration, events: events)
-    }
-
-    private func record(events newEvents: [MonitorEvent]) {
-        guard !newEvents.isEmpty else { return }
-        events.insert(contentsOf: newEvents.reversed(), at: 0)
-        if events.count > 100 {
-            events.removeLast(events.count - 100)
-        }
-        EventStore.save(events)
-    }
-
     private func normalizedLatticeURL(_ rawValue: String) -> URL? {
         AstraURLNormalizer.serviceURL(from: rawValue)
-    }
-
-    private func normalizedBarkURL(_ rawValue: String) -> URL? {
-        AstraURLNormalizer.serviceURL(from: rawValue, defaultScheme: "http")
     }
 
     private func normalizedLatticeDashboardURL(_ rawValue: String) -> URL? {

@@ -4,8 +4,7 @@ struct SettingsView: View {
     @EnvironmentObject private var model: DashboardModel
 
     var body: some View {
-        NavigationStack {
-            Form {
+        Form {
                 Section("Lattice") {
                     TextField("Server URL", text: $model.settings.latticeBaseURL)
                         .astraURLInput()
@@ -42,44 +41,19 @@ struct SettingsView: View {
                     Stepper("Offline after \(Int(model.settings.offlineTimeout))s", value: $model.settings.offlineTimeout, in: 30...1800, step: 30)
                 }
 
-                Section("Alert thresholds") {
-                    ThresholdSlider(title: "CPU", value: $model.settings.cpuCritical)
-                    ThresholdSlider(title: "Memory", value: $model.settings.memoryCritical)
-                    ThresholdSlider(title: "Disk", value: $model.settings.diskCritical)
-                    Stepper("Cooldown \(Int(model.settings.alertCooldown / 60))m", value: $model.settings.alertCooldown, in: 60...7200, step: 60)
-                }
-
                 Section {
-                    Toggle("Send Bark notifications", isOn: $model.settings.notificationsEnabled)
-                    Toggle("Best-effort background refresh", isOn: $model.settings.backgroundRefreshEnabled)
+                    Toggle("Background Inbox badge", isOn: $model.settings.backgroundRefreshEnabled)
                     BackgroundRefreshStatusView(status: model.backgroundRefreshStatus)
-                    TextField("Bark server", text: $model.settings.barkServerURL)
-                        .astraURLInput()
-                    SecureField("Device key", text: $model.barkDeviceKey)
-                        .astraSecretInput()
-                    TextField("Group", text: $model.settings.barkGroup)
-                    TextField("Sound", text: $model.settings.barkSound)
-                    Picker("Notification level", selection: $model.settings.barkLevel) {
-                        ForEach(BarkInterruptionLevel.allCases, id: \.self) { level in
-                            Text(level.settingsTitle).tag(level)
-                        }
-                    }
-                    Button {
-                        Task { await model.sendTestBark() }
-                    } label: {
-                        Label("Send test notification", systemImage: "paperplane.fill")
-                    }
-                    ConnectionStatusView(state: model.barkCheckState)
                 } header: {
-                    Text("Bark notifications")
+                    Text("Background refresh")
                 } footer: {
-                    Text("iOS limits reliable 24/7 background polling. Bark alerts here are best-effort personal reminders; keep serious always-on alerting on the server.")
+                    Text("The system decides if this runs. When it does, it only refreshes the Inbox badge. Always-on alerting is the Lattice server notify channel (Bark on the server), not this app.")
                 }
 
                 Section {
                     Button {
                         model.saveSettings()
-                        Task { await model.refresh(sendNotifications: false) }
+                        Task { await model.refresh(); await model.refreshInbox() }
                     } label: {
                         Label("Save and refresh", systemImage: "checkmark.circle.fill")
                     }
@@ -88,7 +62,6 @@ struct SettingsView: View {
             .navigationTitle("Settings")
             .onAppear { model.reloadBackgroundRefreshStatus() }
             .onDisappear { model.saveSettings() }
-        }
     }
 }
 

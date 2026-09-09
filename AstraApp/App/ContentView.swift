@@ -4,21 +4,19 @@ struct ContentView: View {
     @EnvironmentObject private var model: DashboardModel
 
     var body: some View {
-        TabView {
-            OverviewView()
-                .tabItem { Label("Overview", systemImage: "square.grid.2x2") }
+        TabView(selection: $model.selectedTab) {
+            InboxView()
+                .tabItem { Label("Inbox", systemImage: "tray.full") }
+                .badge(model.humanPendingCount)
+                .tag(AppTab.inbox)
 
             NodesView()
-                .tabItem { Label("Nodes", systemImage: "server.rack") }
-
-            MonitorsView()
-                .tabItem { Label("Monitors", systemImage: "waveform.path.ecg") }
-
-            InventoryView()
-                .tabItem { Label("Inventory", systemImage: "shippingbox") }
+                .tabItem { Label("Fleet", systemImage: "server.rack") }
+                .tag(AppTab.fleet)
 
             MoreHubView()
                 .tabItem { Label("More", systemImage: "ellipsis.circle") }
+                .tag(AppTab.more)
         }
         .tint(Theme.accent)
     }

@@ -1,10 +1,8 @@
 import SwiftUI
 
-/// Network & security read-only surface: pending approvals (with a gated
-/// approve), per-node NetPolicy rules + a reachability view, nft baseline
-/// inputs, and Cloudflare tunnel topology. Dangerous authoring (creating
-/// policies, planning nft/wireguard, applying) stays on the web dashboard;
-/// the one write action here is approving an already-reviewed plan.
+/// Network & security read-only surface: per-node NetPolicy, reachability,
+/// nft baseline inputs, and Cloudflare tunnel topology. Authoring stays on
+/// the web console. Plan review lives in Inbox.
 ///
 /// Pushed inside MoreHub's NavigationStack — not wrapped in its own.
 struct NetworkView: View {
@@ -12,7 +10,6 @@ struct NetworkView: View {
 
     var body: some View {
         List {
-            approvalsSection
             policiesSection
             reachabilitySection
             nftSection
@@ -21,7 +18,7 @@ struct NetworkView: View {
             Section {
                 InlineStatusView(isLoading: model.isLoading("network"), error: model.error(for: "network"))
             } footer: {
-                Text("Read-only. Authoring network policy, nft/WireGuard plans, and tunnels stays on the web dashboard. Approving here applies an already-reviewed plan.")
+                Text("Read-only. Authoring network policy, nft/WireGuard plans, and tunnels stays on the web console. Review pending plans in Inbox.")
             }
             .listRowBackground(Color.clear)
         }
@@ -29,36 +26,6 @@ struct NetworkView: View {
         .navigationTitle("Network")
         .task { if model.configured { await model.loadNetwork() } }
         .refreshable { await model.loadNetwork() }
-    }
-
-    // MARK: - Approvals
-
-    @ViewBuilder
-    private var approvalsSection: some View {
-        let pending = model.approvals.filter { $0.isPending }
-        let others = model.approvals.filter { !$0.isPending }
-        Section {
-            if model.approvals.isEmpty {
-                if !model.isLoading("network") {
-                    Text("No approvals.")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                }
-            } else {
-                ForEach(pending) { approval in
-                    NavigationLink { ApprovalDetailView(approvalID: approval.id) } label: { ApprovalRow(approval: approval) }
-                }
-                ForEach(others.prefix(8)) { approval in
-                    NavigationLink { ApprovalDetailView(approvalID: approval.id) } label: { ApprovalRow(approval: approval) }
-                }
-            }
-        } header: {
-            SectionHeaderView(
-                "Approvals",
-                systemImage: "checkmark.shield.fill",
-                accessory: model.pendingApprovalCount > 0 ? "\(model.pendingApprovalCount) pending" : nil
-            )
-        }
     }
 
     // MARK: - Policies
@@ -158,6 +125,12 @@ struct ApprovalRow: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
+            if !approval.planSHA256.isEmpty {
+                Text(approval.proofLine)
+                    .font(.caption.monospaced())
+                    .foregroundStyle(Theme.accent)
+                    .lineLimit(1)
+            }
         }
         .padding(.vertical, 4)
     }
@@ -238,136 +211,6 @@ struct TunnelRow: View {
                 .lineLimit(1)
         }
         .padding(.vertical, 2)
-    }
-}
-
-// MARK: - Approval detail (gated approve)
-
-struct ApprovalDetailView: View {
-    @EnvironmentObject private var model: DashboardModel
-    var approvalID: String
-
-    @State private var queueApply = true
-    @State private var confirming = false
-    @State private var working = false
-
-    private var approval: Approval? { model.approvals.first { $0.id == approvalID } }
-
-    var body: some View {
-        ScrollView {
-            if let approval {
-                VStack(spacing: 16) {
-                    headerCard(approval)
-                    if approval.isStale {
-                        staleCard(approval)
-                    }
-                    planCard(approval)
-                    if approval.isApprovable {
-                        approveCard(approval)
-                    }
-                }
-                .padding(16)
-            } else {
-                AstraEmptyStateView(title: "Approval unavailable", systemImage: "checkmark.shield", message: "This approval is no longer pending.")
-                    .padding(.top, 60)
-            }
-        }
-        .navigationTitle("Approval")
-        .navigationBarTitleDisplayMode(.inline)
-        .confirmationDialog("Approve this plan?", isPresented: $confirming, titleVisibility: .visible) {
-            Button(queueApply ? "Approve & apply" : "Approve only", role: .destructive) {
-                guard let approval else { return }
-                Task {
-                    working = true
-                    _ = await model.approve(approval, queueApply: queueApply)
-                    working = false
-                }
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text(queueApply
-                 ? "Lattice will apply this reviewed plan on the target node. The plan hash is checked, so a changed plan is rejected."
-                 : "Marks the plan approved without queuing the apply task.")
-        }
-    }
-
-    private func headerCard(_ approval: Approval) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Text(approval.action.isEmpty ? approval.plugin : approval.action)
-                    .font(.headline)
-                Spacer()
-                StatusPill(
-                    text: approval.isStale ? "stale" : approval.status,
-                    systemImage: approval.isStale ? "exclamationmark.triangle.fill" : approval.isPending ? "clock.fill" : "checkmark.seal.fill",
-                    color: approval.isStale ? Theme.warning : approval.isPending ? Theme.warning : Theme.online
-                )
-            }
-            DetailRow(label: "Plugin", value: approval.plugin)
-            DetailRow(label: "Node", value: approval.nodeID, monospaced: true, copyable: true)
-            if !approval.actorID.isEmpty { DetailRow(label: "Requested by", value: approval.actorID) }
-            if !approval.reason.isEmpty { DetailRow(label: "Reason", value: approval.reason) }
-            if let created = approval.createdAt {
-                DetailRow(label: "Created", value: RelativeDateFormatter.string(from: created))
-            }
-        }
-        .latticeCard()
-    }
-
-    private func staleCard(_ approval: Approval) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            SectionHeaderView("Stale approval", systemImage: "exclamationmark.triangle.fill")
-            Text("This approval no longer matches the current server policy or target state. Re-plan in the web dashboard before approving.")
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-            if !approval.reason.isEmpty {
-                DetailRow(label: "Server reason", value: approval.reason)
-            }
-            if !approval.staleCode.isEmpty {
-                DetailRow(label: "Stale code", value: approval.staleCode, monospaced: true, copyable: true)
-            }
-        }
-        .latticeCard()
-    }
-
-    private func planCard(_ approval: Approval) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            SectionHeaderView("Reviewed plan", systemImage: "doc.plaintext")
-            Text(approval.plan.isEmpty ? "(empty plan)" : approval.plan)
-                .font(.system(.caption, design: .monospaced))
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(12)
-                .background(Color.secondary.opacity(0.1), in: RoundedRectangle(cornerRadius: 10))
-                .textSelection(.enabled)
-            DetailRow(label: "Plan SHA-256", value: String(approval.planHash.prefix(16)) + "…", monospaced: true, copyable: true)
-        }
-        .latticeCard()
-    }
-
-    private func approveCard(_ approval: Approval) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            SectionHeaderView("Approve", systemImage: "checkmark.shield.fill")
-            Toggle(isOn: $queueApply) {
-                Label("Queue apply after approval", systemImage: "bolt.fill")
-            }
-            .tint(Theme.accent)
-            Button {
-                confirming = true
-            } label: {
-                HStack {
-                    if working { ProgressView() }
-                    Label("Approve plan", systemImage: "checkmark.seal.fill")
-                }
-                .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.borderedProminent)
-            .tint(Theme.online)
-            .disabled(working || !approval.isApprovable)
-            Text("The app sends the SHA-256 of the plan above; the server rejects approval if the plan changed since it was reviewed.")
-                .font(.caption2)
-                .foregroundStyle(.tertiary)
-        }
-        .latticeCard()
     }
 }
 

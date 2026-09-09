@@ -31,8 +31,23 @@
 		<key>NSAllowsArbitraryLoads</key>
 		<true/>
 	</dict>
+	<key>NSFaceIDUsageDescription</key>
+	<string>Lattice confirms approve and reject with Face ID or your device passcode. Cancelling does not send anything.</string>
 	<key>NSLocalNetworkUsageDescription</key>
-	<string>Lattice connects to your self-hosted Lattice and Bark services on your network.</string>
+	<string>Lattice connects to your self-hosted Lattice server on your network.</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>org.roobli.lattice</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>lattice</string>
+			</array>
+		</dict>
+	</array>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

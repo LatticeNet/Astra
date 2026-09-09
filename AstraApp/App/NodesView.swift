@@ -2,9 +2,8 @@ import SwiftUI
 
 enum NodeFilter: String, CaseIterable, Identifiable {
     case all = "All"
+    case needsYou = "Needs you"
     case online = "Online"
-    case offline = "Offline"
-    case critical = "Critical"
     var id: String { rawValue }
 }
 
@@ -12,18 +11,25 @@ struct NodesView: View {
     @EnvironmentObject private var model: DashboardModel
     @State private var search = ""
     @State private var filter: NodeFilter = .all
-    @State private var showEnroll = false
 
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $model.fleetPath) {
             List {
+                if model.geoNodes.contains(where: { $0.hasCoordinate }) {
+                    Section {
+                        FleetMapCard(nodes: model.geoNodes.filter { $0.hasCoordinate })
+                            .listRowInsets(EdgeInsets())
+                            .listRowBackground(Color.clear)
+                    }
+                }
+
                 if model.nodes.isEmpty {
                     Section {
                         AstraEmptyStateView(
                             title: model.configured ? "No nodes yet" : "Not connected",
                             systemImage: "server.rack",
                             message: model.configured
-                                ? "Pull to refresh, or enroll a node with the + button."
+                                ? "Pull to refresh. Enroll stays on the web console."
                                 : "Add your Lattice server in More → Settings."
                         )
                         .listRowBackground(Color.clear)
@@ -39,7 +45,7 @@ struct NodesView: View {
 
                     Section {
                         ForEach(filteredNodes) { node in
-                            NavigationLink(value: node) {
+                            NavigationLink(value: node.id) {
                                 NodeRow(node: node)
                             }
                         }
@@ -57,28 +63,33 @@ struct NodesView: View {
                 }
             }
             .listStyle(.insetGrouped)
-            .navigationTitle("Nodes")
+            .navigationTitle("Fleet")
             .searchable(text: $search, prompt: "Search nodes, tags, IP")
-            .navigationDestination(for: LatticeNode.self) { node in
-                NodeDetailView(nodeID: node.id)
+            .navigationDestination(for: String.self) { nodeID in
+                NodeDetailView(nodeID: nodeID)
             }
-            .refreshable { await model.refresh() }
+            .refreshable {
+                await model.refresh()
+                await model.loadGeo()
+            }
             .toolbar {
-                ToolbarItemGroup(placement: .primaryAction) {
-                    Button { showEnroll = true } label: { Image(systemName: "plus") }
-                        .disabled(!model.configured)
-                    Button { Task { await model.refresh() } } label: { Image(systemName: "arrow.clockwise") }
-                        .disabled(model.isBusy || !model.configured)
+                ToolbarItem(placement: .primaryAction) {
+                    Button { Task { await model.refresh(); await model.loadGeo() } } label: {
+                        Image(systemName: "arrow.clockwise")
+                    }
+                    .disabled(model.isBusy || !model.configured)
                 }
             }
-            .sheet(isPresented: $showEnroll) {
-                EnrollNodeView()
+            .task {
+                if model.configured {
+                    if model.nodes.isEmpty { await model.refresh() }
+                    if model.geoNodes.isEmpty { await model.loadGeo() }
+                }
             }
         }
     }
 
     private var filteredNodes: [LatticeNode] {
-        let timeout = model.settings.offlineTimeout
         return model.nodes.filter { node in
             let matchesSearch: Bool = {
                 guard !search.isEmpty else { return true }
@@ -89,15 +100,12 @@ struct NodesView: View {
             guard matchesSearch else { return false }
             switch filter {
             case .all: return true
-            case .online: return !node.isOffline(timeout: timeout)
-            case .offline: return node.isOffline(timeout: timeout)
-            case .critical: return model.criticalNodes.contains { $0.id == node.id }
+            case .needsYou: return node.needsAttention
+            case .online: return node.honestyWord == "online"
             }
         }
     }
 }
-
-// MARK: - Node row (shared across Overview & Nodes)
 
 struct NodeRow: View {
     @EnvironmentObject private var model: DashboardModel
@@ -115,7 +123,7 @@ struct NodeRow: View {
                         .lineLimit(1)
                 }
                 Spacer()
-                StatusPill(text: statusText, systemImage: statusImage, color: statusColor)
+                StatusPill(text: node.honestyWord, systemImage: model.honestyImage(node.honestyWord), color: Theme.honestyColor(node.honestyWord))
             }
 
             if !node.tags.isEmpty {
@@ -146,9 +154,4 @@ struct NodeRow: View {
         let ip = node.publicIP ?? node.wireGuardIP ?? node.id
         return "\(platform) · \(arch) · \(ip)"
     }
-
-    private var isOffline: Bool { node.isOffline(timeout: model.settings.offlineTimeout) }
-    private var statusText: String { node.disabled ? "Disabled" : (isOffline ? "Offline" : "Online") }
-    private var statusImage: String { node.disabled ? "nosign" : (isOffline ? "xmark.circle.fill" : "checkmark.circle.fill") }
-    private var statusColor: Color { node.disabled ? Theme.disabled : (isOffline ? Theme.offline : Theme.online) }
 }

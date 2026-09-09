@@ -257,17 +257,18 @@ struct CreateTokenView: View {
     @Environment(\.dismiss) private var dismiss
 
     @State private var name = ""
-    @State private var selectedScopes: Set<String> = []
+    @State private var selectedScopes: Set<String> = [
+        "network:apply", "node:read", "audit:read", "task:read"
+    ]
     @State private var allowlistText = ""
     @State private var created: CreatedTokenResponse?
     @State private var working = false
 
     private let commonScopes = [
-        "node:read", "node:admin",
-        "inventory:read", "inventory:admin",
+        "network:apply", "node:read", "audit:read", "task:read",
+        "node:admin", "inventory:read", "inventory:admin",
         "monitor:read", "monitor:admin",
-        "audit:read", "token:admin",
-        "log:read", "notify:send",
+        "token:admin", "log:read",
         "geo:read", "geo:admin"
     ]
 
@@ -308,7 +309,7 @@ struct CreateTokenView: View {
                 } header: {
                     Text("Scopes")
                 } footer: {
-                    Text("Grant only what this token needs. \(selectedScopes.count) selected.")
+                    Text("Phone companion minimum: network:apply, node:read, audit:read, task:read. Do not grant notify:send; alerting is the server notify channel. \(selectedScopes.count) selected.")
                 }
 
                 Section {

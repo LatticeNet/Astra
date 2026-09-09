@@ -34,7 +34,15 @@ enum Theme {
         LinearGradient(colors: [color, color.opacity(0.6)], startPoint: .topLeading, endPoint: .bottomTrailing)
     }
 
-    /// Color for a metric fraction (0...1) against a critical threshold (also 0...1).
+    static func honestyColor(_ word: String) -> Color {
+        switch word {
+        case "online": online
+        case "degraded": warning
+        case "offline", "never_reported", "disabled": offline
+        default: warning
+        }
+    }
+
     static func usageColor(fraction: Double, critical: Double = 0.9) -> Color {
         switch fraction {
         case ..<(critical * 0.7): return online

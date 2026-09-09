@@ -35,6 +35,11 @@
 		0A0000010000000000002010 /* TasksView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A0000010000000000001010 /* TasksView.swift */; };
 		0A0000010000000000002011 /* LatticeNetwork.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A0000010000000000001011 /* LatticeNetwork.swift */; };
 		0A0000010000000000002012 /* NetworkView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A0000010000000000001012 /* NetworkView.swift */; };
+		0A0000010000000000002013 /* InboxView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A0000010000000000001013 /* InboxView.swift */; };
+		0A0000010000000000002014 /* ReviewSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A0000010000000000001014 /* ReviewSheet.swift */; };
+		0A0000010000000000002015 /* IntentAuth.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A0000010000000000001015 /* IntentAuth.swift */; };
+		0A0000010000000000002016 /* LatticeDeepLink.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A0000010000000000001016 /* LatticeDeepLink.swift */; };
+		0A000001000000000000000B /* LocalAuthentication.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 0A0000010000000000000113 /* LocalAuthentication.framework */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -68,6 +73,11 @@
 		0A0000010000000000001010 /* TasksView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TasksView.swift; sourceTree = "<group>"; };
 		0A0000010000000000001011 /* LatticeNetwork.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LatticeNetwork.swift; sourceTree = "<group>"; };
 		0A0000010000000000001012 /* NetworkView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkView.swift; sourceTree = "<group>"; };
+		0A0000010000000000001013 /* InboxView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InboxView.swift; sourceTree = "<group>"; };
+		0A0000010000000000001014 /* ReviewSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReviewSheet.swift; sourceTree = "<group>"; };
+		0A0000010000000000001015 /* IntentAuth.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IntentAuth.swift; sourceTree = "<group>"; };
+		0A0000010000000000001016 /* LatticeDeepLink.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LatticeDeepLink.swift; sourceTree = "<group>"; };
+		0A0000010000000000000113 /* LocalAuthentication.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = LocalAuthentication.framework; path = System/Library/Frameworks/LocalAuthentication.framework; sourceTree = SDKROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -77,6 +87,7 @@
 			files = (
 				0A0000010000000000000008 /* Security.framework in Frameworks */,
 				0A000001000000000000000A /* BackgroundTasks.framework in Frameworks */,
+				0A000001000000000000000B /* LocalAuthentication.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -126,6 +137,9 @@
 				0A000001000000000000100F /* LogsView.swift */,
 				0A0000010000000000001010 /* TasksView.swift */,
 				0A0000010000000000001012 /* NetworkView.swift */,
+				0A0000010000000000001013 /* InboxView.swift */,
+				0A0000010000000000001014 /* ReviewSheet.swift */,
+				0A0000010000000000001015 /* IntentAuth.swift */,
 			);
 			path = App;
 			sourceTree = "<group>";
@@ -146,6 +160,7 @@
 				0A0000010000000000001002 /* LatticeAPI.swift */,
 				0A0000010000000000001003 /* LatticeAnalytics.swift */,
 				0A0000010000000000001011 /* LatticeNetwork.swift */,
+				0A0000010000000000001016 /* LatticeDeepLink.swift */,
 			);
 			path = AstraCore;
 			sourceTree = "<group>";
@@ -155,6 +170,7 @@
 			children = (
 				0A0000010000000000000108 /* Security.framework */,
 				0A0000010000000000000112 /* BackgroundTasks.framework */,
+				0A0000010000000000000113 /* LocalAuthentication.framework */,
 			);
 			name = Frameworks;
 			sourceTree = "<group>";
@@ -261,6 +277,10 @@
 				0A0000010000000000002010 /* TasksView.swift in Sources */,
 				0A0000010000000000002011 /* LatticeNetwork.swift in Sources */,
 				0A0000010000000000002012 /* NetworkView.swift in Sources */,
+				0A0000010000000000002013 /* InboxView.swift in Sources */,
+				0A0000010000000000002014 /* ReviewSheet.swift in Sources */,
+				0A0000010000000000002015 /* IntentAuth.swift in Sources */,
+				0A0000010000000000002016 /* LatticeDeepLink.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

@@ -894,15 +894,19 @@ public struct NodeGeoView: Identifiable, Codable, Equatable, Hashable, Sendable 
     public var online: Bool
     public var publicIP: String
     public var publicIPv6: String
+    public var status: String
+    public var statusReason: String
     public var geo: NodeGeoInfo?
 
-    public init(id: String, name: String = "", role: String = "", online: Bool = false, publicIP: String = "", publicIPv6: String = "", geo: NodeGeoInfo? = nil) {
+    public init(id: String, name: String = "", role: String = "", online: Bool = false, publicIP: String = "", publicIPv6: String = "", status: String = "", statusReason: String = "", geo: NodeGeoInfo? = nil) {
         self.id = id
         self.name = name
         self.role = role
         self.online = online
         self.publicIP = publicIP
         self.publicIPv6 = publicIPv6
+        self.status = status
+        self.statusReason = statusReason
         self.geo = geo
     }
 
@@ -918,6 +922,8 @@ public struct NodeGeoView: Identifiable, Codable, Equatable, Hashable, Sendable 
         case id, name, role, online, geo
         case publicIP = "public_ip"
         case publicIPv6 = "public_ipv6"
+        case status
+        case statusReason = "status_reason"
     }
 
     public init(from decoder: Decoder) throws {
@@ -928,6 +934,198 @@ public struct NodeGeoView: Identifiable, Codable, Equatable, Hashable, Sendable 
         online = try container.decodeIfPresent(Bool.self, forKey: .online) ?? false
         publicIP = try container.decodeIfPresent(String.self, forKey: .publicIP) ?? ""
         publicIPv6 = try container.decodeIfPresent(String.self, forKey: .publicIPv6) ?? ""
+        status = try container.decodeIfPresent(String.self, forKey: .status) ?? ""
+        statusReason = try container.decodeIfPresent(String.self, forKey: .statusReason) ?? ""
         geo = try container.decodeIfPresent(NodeGeoInfo.self, forKey: .geo)
+    }
+}
+
+// MARK: - SSH Guard posture (read)
+
+public struct SSHGuardPosture: Codable, Equatable, Hashable, Sendable {
+    public var state: String
+    public var keyAccess: Bool
+    public var keyEvidence: String
+    public var reason: String
+
+    public init(state: String = "unknown", keyAccess: Bool = false, keyEvidence: String = "", reason: String = "") {
+        self.state = state
+        self.keyAccess = keyAccess
+        self.keyEvidence = keyEvidence
+        self.reason = reason
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case state, reason
+        case keyAccess = "key_access"
+        case keyEvidence = "key_evidence"
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        state = try c.decodeIfPresent(String.self, forKey: .state) ?? "unknown"
+        keyAccess = try c.decodeIfPresent(Bool.self, forKey: .keyAccess) ?? false
+        keyEvidence = try c.decodeIfPresent(String.self, forKey: .keyEvidence) ?? ""
+        reason = try c.decodeIfPresent(String.self, forKey: .reason) ?? ""
+    }
+}
+
+public struct SSHGuardSSHDFacts: Codable, Equatable, Hashable, Sendable {
+    public var passwordAuthentication: Bool
+    public var pubkeyAuthentication: Bool
+    public var permitRootLogin: String
+    public var ports: [Int]
+    public var observedAt: Date?
+
+    enum CodingKeys: String, CodingKey {
+        case passwordAuthentication = "password_authentication"
+        case pubkeyAuthentication = "pubkey_authentication"
+        case permitRootLogin = "permit_root_login"
+        case ports
+        case observedAt = "observed_at"
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        passwordAuthentication = try c.decodeIfPresent(Bool.self, forKey: .passwordAuthentication) ?? false
+        pubkeyAuthentication = try c.decodeIfPresent(Bool.self, forKey: .pubkeyAuthentication) ?? false
+        permitRootLogin = try c.decodeIfPresent(String.self, forKey: .permitRootLogin) ?? ""
+        ports = try c.decodeIfPresent([Int].self, forKey: .ports) ?? []
+        observedAt = try DateValue.decodeIfPresent(from: c, forKey: .observedAt)
+    }
+}
+
+public struct SSHGuardKnockView: Codable, Equatable, Hashable, Sendable {
+    public var knowledge: String
+    public var revealable: Bool
+    public var requiresStepUp: Bool
+    public var interactiveOnly: Bool
+    public var note: String
+    public var approvalID: String
+    public var confirmed: Bool?
+
+    enum CodingKeys: String, CodingKey {
+        case knowledge, revealable, note, confirmed
+        case requiresStepUp = "requires_step_up"
+        case interactiveOnly = "interactive_only"
+        case approvalID = "approval_id"
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        knowledge = try c.decodeIfPresent(String.self, forKey: .knowledge) ?? ""
+        revealable = try c.decodeIfPresent(Bool.self, forKey: .revealable) ?? false
+        requiresStepUp = try c.decodeIfPresent(Bool.self, forKey: .requiresStepUp) ?? false
+        interactiveOnly = try c.decodeIfPresent(Bool.self, forKey: .interactiveOnly) ?? false
+        note = try c.decodeIfPresent(String.self, forKey: .note) ?? ""
+        approvalID = try c.decodeIfPresent(String.self, forKey: .approvalID) ?? ""
+        confirmed = try c.decodeIfPresent(Bool.self, forKey: .confirmed)
+    }
+}
+
+public struct SSHGuardNodeStatus: Identifiable, Codable, Equatable, Hashable, Sendable {
+    public var nodeID: String
+    public var nodeName: String
+    public var enrolled: Bool
+    public var posture: SSHGuardPosture
+    public var sshd: SSHGuardSSHDFacts?
+    public var sshdNote: String
+    public var knockGate: Bool
+    public var stage: String
+    public var stageIsHistory: Bool
+    public var revertArmed: Bool
+    public var revertDeadline: Date?
+    public var actionableApprovalID: String
+    public var knock: SSHGuardKnockView?
+
+    public var id: String { nodeID }
+
+    enum CodingKeys: String, CodingKey {
+        case enrolled, posture, sshd, stage, knock
+        case nodeID = "node_id"
+        case nodeName = "node_name"
+        case sshdNote = "sshd_note"
+        case knockGate = "knock_gate"
+        case stageIsHistory = "stage_is_history"
+        case revertArmed = "revert_armed"
+        case revertDeadline = "revert_deadline"
+        case actionableApprovalID = "actionable_approval_id"
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        nodeID = try c.decodeIfPresent(String.self, forKey: .nodeID) ?? ""
+        nodeName = try c.decodeIfPresent(String.self, forKey: .nodeName) ?? ""
+        enrolled = try c.decodeIfPresent(Bool.self, forKey: .enrolled) ?? false
+        posture = try c.decodeIfPresent(SSHGuardPosture.self, forKey: .posture) ?? SSHGuardPosture()
+        sshd = try c.decodeIfPresent(SSHGuardSSHDFacts.self, forKey: .sshd)
+        sshdNote = try c.decodeIfPresent(String.self, forKey: .sshdNote) ?? ""
+        knockGate = try c.decodeIfPresent(Bool.self, forKey: .knockGate) ?? false
+        stage = try c.decodeIfPresent(String.self, forKey: .stage) ?? ""
+        stageIsHistory = try c.decodeIfPresent(Bool.self, forKey: .stageIsHistory) ?? false
+        revertArmed = try c.decodeIfPresent(Bool.self, forKey: .revertArmed) ?? false
+        revertDeadline = try DateValue.decodeIfPresent(from: c, forKey: .revertDeadline)
+        actionableApprovalID = try c.decodeIfPresent(String.self, forKey: .actionableApprovalID) ?? ""
+        knock = try c.decodeIfPresent(SSHGuardKnockView.self, forKey: .knock)
+    }
+}
+
+public struct SSHGuardStatusResponse: Decodable, Sendable {
+    public var ok: Bool
+    public var node: SSHGuardNodeStatus?
+    public var nodes: [SSHGuardNodeStatus]
+
+    enum CodingKeys: String, CodingKey { case ok, node, nodes }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        ok = try c.decodeIfPresent(Bool.self, forKey: .ok) ?? false
+        node = try c.decodeIfPresent(SSHGuardNodeStatus.self, forKey: .node)
+        nodes = try c.decodeIfPresent([SSHGuardNodeStatus].self, forKey: .nodes) ?? []
+    }
+}
+
+// MARK: - Capability admission (read)
+
+public struct NodeCapabilityEffective: Identifiable, Codable, Equatable, Hashable, Sendable {
+    public var capability: String
+    public var enforced: Bool
+    public var mutates: Bool
+    public var allowed: Bool
+    public var source: String
+    public var reason: String
+    public var state: String
+
+    public var id: String { capability }
+
+    enum CodingKeys: String, CodingKey {
+        case capability, enforced, mutates, allowed, source, reason, state
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        capability = try c.decodeIfPresent(String.self, forKey: .capability) ?? ""
+        enforced = try c.decodeIfPresent(Bool.self, forKey: .enforced) ?? false
+        mutates = try c.decodeIfPresent(Bool.self, forKey: .mutates) ?? false
+        allowed = try c.decodeIfPresent(Bool.self, forKey: .allowed) ?? false
+        source = try c.decodeIfPresent(String.self, forKey: .source) ?? ""
+        reason = try c.decodeIfPresent(String.self, forKey: .reason) ?? ""
+        state = try c.decodeIfPresent(String.self, forKey: .state) ?? ""
+    }
+}
+
+public struct NodeCapabilitiesResponse: Decodable, Sendable {
+    public var nodeID: String
+    public var effective: [NodeCapabilityEffective]
+
+    enum CodingKeys: String, CodingKey {
+        case nodeID = "node_id"
+        case effective
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        nodeID = try c.decodeIfPresent(String.self, forKey: .nodeID) ?? ""
+        effective = try c.decodeIfPresent([NodeCapabilityEffective].self, forKey: .effective) ?? []
     }
 }

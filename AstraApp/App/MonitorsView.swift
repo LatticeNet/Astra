@@ -10,8 +10,7 @@ struct MonitorsView: View {
     @State private var showCreate = false
 
     var body: some View {
-        NavigationStack {
-            ScrollView {
+        ScrollView {
                 VStack(spacing: 16) {
                     if !model.configured {
                         notConfiguredCard
@@ -68,7 +67,6 @@ struct MonitorsView: View {
             .sheet(isPresented: $showCreate) {
                 MonitorEditView()
             }
-        }
     }
 
     private var backgroundGradient: some View {

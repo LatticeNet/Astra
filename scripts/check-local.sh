@@ -54,8 +54,8 @@ grep -q "/\\* Security.framework in Frameworks \\*/" Astra.xcodeproj/project.pbx
   echo "error: Security.framework is not linked" >&2
   exit 1
 }
-grep -q "/\\* BackgroundTasks.framework in Frameworks \\*/" Astra.xcodeproj/project.pbxproj || {
-  echo "error: BackgroundTasks.framework is not linked" >&2
+grep -q "/\\* LocalAuthentication.framework in Frameworks \\*/" Astra.xcodeproj/project.pbxproj || {
+  echo "error: LocalAuthentication.framework is not linked" >&2
   exit 1
 }
 grep -q "SecItemDelete(query as CFDictionary)" AstraApp/App/AppSettings.swift || {
@@ -98,7 +98,7 @@ grep -Fq "guard !isBusy else {" AstraApp/App/DashboardModel.swift || {
   echo "error: foreground network actions must guard against overlapping busy work" >&2
   exit 1
 }
-grep -Fq "performRefresh(sendNotifications:" AstraApp/App/DashboardModel.swift || {
+grep -Fq "private func performRefresh()" AstraApp/App/DashboardModel.swift || {
   echo "error: refresh implementation must be split so login can refresh after releasing busy state" >&2
   exit 1
 }
@@ -141,24 +141,32 @@ grep -q "var barkLevel: BarkInterruptionLevel" AstraApp/App/AppSettings.swift ||
   echo "error: Settings must persist Bark notification level" >&2
   exit 1
 }
-grep -q "level: settings.barkLevel" AstraApp/App/DashboardModel.swift || {
-  echo "error: foreground Bark configuration must use the persisted notification level" >&2
+grep -q "InboxBadge.apply" AstraApp/App/BackgroundRefresh.swift || {
+  echo "error: background refresh must update the Inbox badge only" >&2
   exit 1
 }
-grep -q "level: settings.barkLevel" AstraApp/App/BackgroundRefresh.swift || {
-  echo "error: background Bark configuration must use the persisted notification level" >&2
+grep -q "listHumanPendingApprovals" AstraApp/App/BackgroundRefresh.swift || {
+  echo "error: background refresh must count human-pending approvals" >&2
+  exit 1
+}
+if grep -q "BarkClient" AstraApp/App/BackgroundRefresh.swift AstraApp/App/DashboardModel.swift; then
+  echo "error: the app must not send Bark; alerting stays on the Lattice server notify channel" >&2
+  exit 1
+fi
+if grep -q "MonitorEngine(" AstraApp/App/BackgroundRefresh.swift AstraApp/App/DashboardModel.swift; then
+  echo "error: MonitorEngine must not run as an app alerter" >&2
+  exit 1
+fi
+grep -q "CFBundleURLSchemes" AstraApp/Info.plist || {
+  echo "error: custom URL scheme lattice is missing from Info.plist" >&2
+  exit 1
+}
+grep -q "NSFaceIDUsageDescription" AstraApp/Info.plist || {
+  echo "error: Face ID usage description is missing from Info.plist" >&2
   exit 1
 }
 grep -q "latticeDashboardURL(from rawValue" Sources/AstraCore/AstraCore.swift || {
   echo "error: Lattice dashboard URL normalization is missing from core" >&2
-  exit 1
-}
-grep -q "url: normalizedLatticeDashboardURL(settings.latticeBaseURL)" AstraApp/App/DashboardModel.swift || {
-  echo "error: foreground Bark configuration must include the Lattice click-through URL" >&2
-  exit 1
-}
-grep -q "url: normalizedLatticeDashboardURL(settings.latticeBaseURL)" AstraApp/App/BackgroundRefresh.swift || {
-  echo "error: background Bark configuration must include the Lattice click-through URL" >&2
   exit 1
 }
 grep -q "enum NodeStore" AstraApp/App/AppSettings.swift || {
@@ -181,8 +189,8 @@ grep -q "NodeStore.save(fetched, refreshedAt: refreshedAt)" AstraApp/App/Dashboa
   echo "error: foreground refresh must persist node snapshots" >&2
   exit 1
 }
-grep -q "NodeStore.save(nodes)" AstraApp/App/BackgroundRefresh.swift || {
-  echo "error: background refresh must persist node snapshots" >&2
+grep -q "NodeStore.save(fetched, refreshedAt: refreshedAt)" AstraApp/App/DashboardModel.swift || {
+  echo "error: foreground refresh must persist node snapshots" >&2
   exit 1
 }
 bundle_ids="$(awk -F' = ' '
@@ -310,14 +318,17 @@ swift run \
   --scratch-path .build \
   AstraCoreCheck
 
-echo "Type-checking SwiftUI app sources with the available SDK"
+echo "Type-checking non-UI app sources with the available SDK"
 swiftc -typecheck -parse-as-library \
   Sources/AstraCore/AstraCore.swift \
-  AstraApp/App/AstraApp.swift \
+  Sources/AstraCore/LatticeModels.swift \
+  Sources/AstraCore/LatticeAPI.swift \
+  Sources/AstraCore/LatticeAnalytics.swift \
+  Sources/AstraCore/LatticeNetwork.swift \
+  Sources/AstraCore/LatticeDeepLink.swift \
   AstraApp/App/AppSettings.swift \
   AstraApp/App/BackgroundRefresh.swift \
   AstraApp/App/DashboardModel.swift \
-  AstraApp/App/ContentView.swift \
-  AstraApp/App/ServerDetailView.swift
+  AstraApp/App/IntentAuth.swift
 
 echo "Local checks passed"

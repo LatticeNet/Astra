@@ -388,22 +388,120 @@ public struct TunnelProfile: Identifiable, Codable, Equatable, Hashable, Sendabl
 
 // MARK: - Approvals
 
-/// Server `approvalView`. `plan` is the full reviewed text whose SHA-256 must be
-/// echoed back when approving high-risk changes.
+/// Why an approved plan has not applied. Present only on `status=approved`
+/// rows; omitted everywhere else. Matches server `approvalWaitView`.
+public struct ApprovalWaiting: Codable, Equatable, Hashable, Sendable {
+    public var code: String
+    public var reason: String
+    public var blocked: Bool
+    public var nodeID: String
+    public var nodeName: String
+    public var nodeStatus: String
+    public var nodeStatusSince: Date?
+    public var nodeStatusReason: String
+    public var taskID: String
+    public var taskStatus: String
+    public var supersededBy: String
+    public var dismissible: Bool
+
+    public init(
+        code: String = "",
+        reason: String = "",
+        blocked: Bool = false,
+        nodeID: String = "",
+        nodeName: String = "",
+        nodeStatus: String = "",
+        nodeStatusSince: Date? = nil,
+        nodeStatusReason: String = "",
+        taskID: String = "",
+        taskStatus: String = "",
+        supersededBy: String = "",
+        dismissible: Bool = false
+    ) {
+        self.code = code
+        self.reason = reason
+        self.blocked = blocked
+        self.nodeID = nodeID
+        self.nodeName = nodeName
+        self.nodeStatus = nodeStatus
+        self.nodeStatusSince = nodeStatusSince
+        self.nodeStatusReason = nodeStatusReason
+        self.taskID = taskID
+        self.taskStatus = taskStatus
+        self.supersededBy = supersededBy
+        self.dismissible = dismissible
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case code, reason, blocked, dismissible
+        case nodeID = "node_id"
+        case nodeName = "node_name"
+        case nodeStatus = "node_status"
+        case nodeStatusSince = "node_status_since"
+        case nodeStatusReason = "node_status_reason"
+        case taskID = "task_id"
+        case taskStatus = "task_status"
+        case supersededBy = "superseded_by"
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        code = try c.decodeIfPresent(String.self, forKey: .code) ?? ""
+        reason = try c.decodeIfPresent(String.self, forKey: .reason) ?? ""
+        blocked = try c.decodeIfPresent(Bool.self, forKey: .blocked) ?? false
+        nodeID = try c.decodeIfPresent(String.self, forKey: .nodeID) ?? ""
+        nodeName = try c.decodeIfPresent(String.self, forKey: .nodeName) ?? ""
+        nodeStatus = try c.decodeIfPresent(String.self, forKey: .nodeStatus) ?? ""
+        nodeStatusSince = try DateValue.decodeIfPresent(from: c, forKey: .nodeStatusSince)
+        nodeStatusReason = try c.decodeIfPresent(String.self, forKey: .nodeStatusReason) ?? ""
+        taskID = try c.decodeIfPresent(String.self, forKey: .taskID) ?? ""
+        taskStatus = try c.decodeIfPresent(String.self, forKey: .taskStatus) ?? ""
+        supersededBy = try c.decodeIfPresent(String.self, forKey: .supersededBy) ?? ""
+        dismissible = try c.decodeIfPresent(Bool.self, forKey: .dismissible) ?? false
+    }
+}
+
+public enum ApprovalReviewError: Error, Equatable, LocalizedError, Sendable {
+    case emptyPlan
+    case hashMismatch(computed: String, expected: String)
+
+    public var errorDescription: String? {
+        switch self {
+        case .emptyPlan:
+            "This listing row has no plan body. Reload the approval by id before hashing or approving."
+        case .hashMismatch(let computed, let expected):
+            "Plan hash \(computed.prefix(8))… does not match server plan_sha256 \(expected.prefix(8))…. Reload before approving."
+        }
+    }
+}
+
+/// Server `approvalView`. Listing omits `plan` unless `include=plan`; every row
+/// still carries `plan_sha256`. Review must load by id and hash that body.
 public struct Approval: Identifiable, Codable, Equatable, Hashable, Sendable {
     public var id: String
     public var nodeID: String
     public var plugin: String
     public var action: String
     public var plan: String
+    /// Server-computed SHA-256 of the stored plan. Always present, even when
+    /// the listing omitted the plan body.
+    public var planSHA256: String
     public var status: String
     public var reason: String
     public var stale: Bool
     public var staleCode: String
     public var actorID: String
     public var approvedBy: String
+    public var rejectedBy: String
+    public var rejectedAt: Date?
     public var createdAt: Date?
     public var updatedAt: Date?
+    public var pluginVersion: String
+    public var artifactDigest: String
+    public var service: String
+    public var method: String
+    public var targets: [String]
+    public var waiting: ApprovalWaiting?
 
     public init(
         id: String,
@@ -411,45 +509,119 @@ public struct Approval: Identifiable, Codable, Equatable, Hashable, Sendable {
         plugin: String = "",
         action: String = "",
         plan: String = "",
+        planSHA256: String = "",
         status: String = "",
         reason: String = "",
         stale: Bool = false,
         staleCode: String = "",
         actorID: String = "",
         approvedBy: String = "",
+        rejectedBy: String = "",
+        rejectedAt: Date? = nil,
         createdAt: Date? = nil,
-        updatedAt: Date? = nil
+        updatedAt: Date? = nil,
+        pluginVersion: String = "",
+        artifactDigest: String = "",
+        service: String = "",
+        method: String = "",
+        targets: [String] = [],
+        waiting: ApprovalWaiting? = nil
     ) {
         self.id = id
         self.nodeID = nodeID
         self.plugin = plugin
         self.action = action
         self.plan = plan
+        self.planSHA256 = planSHA256
         self.status = status
         self.reason = reason
         self.stale = stale
         self.staleCode = staleCode
         self.actorID = actorID
         self.approvedBy = approvedBy
+        self.rejectedBy = rejectedBy
+        self.rejectedAt = rejectedAt
         self.createdAt = createdAt
         self.updatedAt = updatedAt
+        self.pluginVersion = pluginVersion
+        self.artifactDigest = artifactDigest
+        self.service = service
+        self.method = method
+        self.targets = targets
+        self.waiting = waiting
     }
 
     public var isPending: Bool { status.lowercased() == "pending" }
+    public var isApproved: Bool { status.lowercased() == "approved" }
+    public var isDismissed: Bool { status.lowercased() == "dismissed" }
+    public var isRejected: Bool { status.lowercased() == "rejected" }
     public var isStale: Bool { stale || !staleCode.isEmpty }
-    public var isApprovable: Bool { isPending && !isStale }
+    public var hasPlanBody: Bool { !plan.isEmpty }
 
-    /// SHA-256 hex of the plan text, for the `plan_sha256` approval field.
+    /// System-authored line-metadata syncs auto-approve (KI-6). Inbox is
+    /// human-pending only, so those rows never badge.
+    public var isAutoApprovedLineMeta: Bool {
+        plugin == "singbox-linemeta" && (actorID == "lattice-server" || actorID == "system")
+    }
+
+    public var isHumanPending: Bool { isPending && !isAutoApprovedLineMeta }
+
+    public var isApprovable: Bool { isHumanPending && !isStale && hasPlanBody }
+
+    public var isSSHGuardConfirm: Bool { plugin == "sshguard" && action == "sshguard-confirm:v1" }
+    public var isSSHGuardArm: Bool { plugin == "sshguard" && action == "sshguard-arm:v1" }
+
+    /// SHA-256 of the local `plan` field. Empty on listing rows that omitted
+    /// the body: never send this as `plan_sha256` without loading by id.
     public var planHash: String { PlanHasher.sha256Hex(plan) }
 
+    public var planHashMatchesServer: Bool {
+        !planSHA256.isEmpty && planHash.caseInsensitiveCompare(planSHA256) == .orderedSame
+    }
+
+    /// Hash of the plan body on screen. Fails closed if this is a listing row
+    /// or if the body does not match `plan_sha256`.
+    public func reviewedPlanSHA256() throws -> String {
+        guard hasPlanBody else { throw ApprovalReviewError.emptyPlan }
+        guard planHashMatchesServer else {
+            throw ApprovalReviewError.hashMismatch(computed: planHash, expected: planSHA256)
+        }
+        return planHash
+    }
+
+    /// Proof line for Review: `plan a1f3… · 3 targets · waiting on node`.
+    public var proofLine: String {
+        let hashSource = planSHA256.isEmpty ? planHash : planSHA256
+        let prefix = hashSource.isEmpty ? "plan" : "plan \(hashSource.prefix(4))…"
+        let targetText: String
+        let count = targets.isEmpty ? (nodeID.isEmpty ? 0 : 1) : targets.count
+        if count == 1 {
+            targetText = "1 target"
+        } else {
+            targetText = "\(count) targets"
+        }
+        if let waiting, !waiting.reason.isEmpty {
+            return "\(prefix) · \(targetText) · waiting"
+        }
+        if isStale {
+            return "\(prefix) · \(targetText) · stale"
+        }
+        return "\(prefix) · \(targetText)"
+    }
+
     enum CodingKeys: String, CodingKey {
-        case id, plugin, action, plan, status, reason, stale
+        case id, plugin, action, plan, status, reason, stale, targets, waiting, service, method
+        case planSHA256 = "plan_sha256"
         case nodeID = "node_id"
         case staleCode = "stale_code"
         case actorID = "actor_id"
         case approvedBy = "approved_by"
+        case rejectedBy = "rejected_by"
+        case rejectedAt = "rejected_at"
         case createdAt = "created_at"
         case updatedAt = "updated_at"
+        case pluginVersion = "plugin_version"
+        case artifactDigest = "artifact_digest"
     }
 
     public init(from decoder: Decoder) throws {
@@ -459,14 +631,45 @@ public struct Approval: Identifiable, Codable, Equatable, Hashable, Sendable {
         plugin = try c.decodeIfPresent(String.self, forKey: .plugin) ?? ""
         action = try c.decodeIfPresent(String.self, forKey: .action) ?? ""
         plan = try c.decodeIfPresent(String.self, forKey: .plan) ?? ""
+        // Required on the live contract. Missing it is a companion-behind-server
+        // failure on Review; listing fixtures must include it.
+        planSHA256 = try c.decodeIfPresent(String.self, forKey: .planSHA256) ?? ""
         status = try c.decodeIfPresent(String.self, forKey: .status) ?? ""
         reason = try c.decodeIfPresent(String.self, forKey: .reason) ?? ""
         stale = try c.decodeIfPresent(Bool.self, forKey: .stale) ?? false
         staleCode = try c.decodeIfPresent(String.self, forKey: .staleCode) ?? ""
         actorID = try c.decodeIfPresent(String.self, forKey: .actorID) ?? ""
         approvedBy = try c.decodeIfPresent(String.self, forKey: .approvedBy) ?? ""
+        rejectedBy = try c.decodeIfPresent(String.self, forKey: .rejectedBy) ?? ""
+        rejectedAt = try DateValue.decodeIfPresent(from: c, forKey: .rejectedAt)
         createdAt = try DateValue.decodeIfPresent(from: c, forKey: .createdAt)
         updatedAt = try DateValue.decodeIfPresent(from: c, forKey: .updatedAt)
+        pluginVersion = try c.decodeIfPresent(String.self, forKey: .pluginVersion) ?? ""
+        artifactDigest = try c.decodeIfPresent(String.self, forKey: .artifactDigest) ?? ""
+        service = try c.decodeIfPresent(String.self, forKey: .service) ?? ""
+        method = try c.decodeIfPresent(String.self, forKey: .method) ?? ""
+        targets = try c.decodeIfPresent([String].self, forKey: .targets) ?? []
+        waiting = try c.decodeIfPresent(ApprovalWaiting.self, forKey: .waiting)
+    }
+}
+
+/// Fail-closed decode for Review: `id`, `plan_sha256`, and `status` must be
+/// present. Additive fields stay optional.
+public enum ApprovalReviewDecoder {
+    public static func decode(_ data: Data) throws -> Approval {
+        let approval = try JSONDecoder().decode(Approval.self, from: data)
+        if approval.id.isEmpty || approval.planSHA256.isEmpty || approval.status.isEmpty {
+            throw LatticeAPIError.invalidResponse
+        }
+        return approval
+    }
+
+    public static func decodeEnvelope(_ data: Data) throws -> Approval {
+        let envelope = try JSONDecoder().decode(ApprovalEnvelope.self, from: data)
+        if envelope.approval.id.isEmpty || envelope.approval.planSHA256.isEmpty || envelope.approval.status.isEmpty {
+            throw LatticeAPIError.invalidResponse
+        }
+        return envelope.approval
     }
 }
 
@@ -474,6 +677,61 @@ public struct Approval: Identifiable, Codable, Equatable, Hashable, Sendable {
 
 private struct PoliciesEnvelope: Decodable { var policies: [NetPolicy] }
 private struct NFTInputsEnvelope: Decodable { var inputs: [NFTInputs] }
+struct ApprovalEnvelope: Decodable, Sendable { var approval: Approval }
+
+struct ApprovalsQueryResponse: Decodable, Sendable {
+    var approvals: [Approval]
+    var total: Int
+    var limit: Int
+    var offset: Int
+
+    enum CodingKeys: String, CodingKey { case approvals, total, limit, offset }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        approvals = try c.decodeIfPresent([Approval].self, forKey: .approvals) ?? []
+        total = try c.decodeIfPresent(Int.self, forKey: .total) ?? 0
+        limit = try c.decodeIfPresent(Int.self, forKey: .limit) ?? 0
+        offset = try c.decodeIfPresent(Int.self, forKey: .offset) ?? 0
+    }
+}
+
+public struct ApprovalCounts: Decodable, Equatable, Sendable {
+    public var pending: Int
+    public var approved: Int
+    public var stale: Int
+    public var applied: Int
+    public var rejected: Int
+    public var dismissed: Int
+    public var total: Int
+
+    public init(pending: Int = 0, approved: Int = 0, stale: Int = 0, applied: Int = 0, rejected: Int = 0, dismissed: Int = 0, total: Int = 0) {
+        self.pending = pending
+        self.approved = approved
+        self.stale = stale
+        self.applied = applied
+        self.rejected = rejected
+        self.dismissed = dismissed
+        self.total = total
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case pending, approved, stale, applied, rejected, dismissed, total
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        pending = try c.decodeIfPresent(Int.self, forKey: .pending) ?? 0
+        approved = try c.decodeIfPresent(Int.self, forKey: .approved) ?? 0
+        stale = try c.decodeIfPresent(Int.self, forKey: .stale) ?? 0
+        applied = try c.decodeIfPresent(Int.self, forKey: .applied) ?? 0
+        rejected = try c.decodeIfPresent(Int.self, forKey: .rejected) ?? 0
+        dismissed = try c.decodeIfPresent(Int.self, forKey: .dismissed) ?? 0
+        total = try c.decodeIfPresent(Int.self, forKey: .total) ?? 0
+    }
+}
+
+private struct ApprovalCountsEnvelope: Decodable { var counts: ApprovalCounts }
 
 struct ApproveRequest: Encodable {
     var approvalID: String
@@ -483,6 +741,20 @@ struct ApproveRequest: Encodable {
         case approvalID = "approval_id"
         case queueApply = "queue_apply"
         case planSHA256 = "plan_sha256"
+    }
+}
+
+struct ApprovalIDRequest: Encodable {
+    var approvalID: String
+    enum CodingKeys: String, CodingKey { case approvalID = "approval_id" }
+}
+
+struct DismissApprovalRequest: Encodable {
+    var approvalID: String
+    var note: String
+    enum CodingKeys: String, CodingKey {
+        case approvalID = "approval_id"
+        case note
     }
 }
 
@@ -513,14 +785,60 @@ public extension LatticeClient {
         try await perform([TunnelProfile].self, path: "/api/tunnels")
     }
 
-    /// `GET /api/network/approvals` → bare array.
-    func listApprovals() async throws -> [Approval] {
-        try await perform([Approval].self, path: "/api/network/approvals")
+    /// `GET /api/network/approvals`. Without filters the server returns a bare
+    /// array. With `status`, `limit`, `node_id`, `plugin`, `since`, or `offset`
+    /// it returns `{"approvals","total","limit","offset"}`. Listing omits `plan`
+    /// unless `includePlan` is true.
+    func listApprovals(
+        status: String? = nil,
+        includePlan: Bool = false,
+        includeDismissed: Bool = false,
+        nodeID: String? = nil,
+        plugin: String? = nil,
+        limit: Int? = nil,
+        offset: Int? = nil
+    ) async throws -> [Approval] {
+        var query: [URLQueryItem] = []
+        if let status, !status.isEmpty { query.append(URLQueryItem(name: "status", value: status)) }
+        if includePlan { query.append(URLQueryItem(name: "include", value: "plan")) }
+        if includeDismissed { query.append(URLQueryItem(name: "include_dismissed", value: "1")) }
+        if let nodeID, !nodeID.isEmpty { query.append(URLQueryItem(name: "node_id", value: nodeID)) }
+        if let plugin, !plugin.isEmpty { query.append(URLQueryItem(name: "plugin", value: plugin)) }
+        if let limit { query.append(URLQueryItem(name: "limit", value: String(limit))) }
+        if let offset { query.append(URLQueryItem(name: "offset", value: String(offset))) }
+        let data = try await performData(path: "/api/network/approvals", query: query)
+        return try Self.decodeApprovalList(data)
     }
 
-    /// `POST /api/network/approvals/approve`. Always sends `plan_sha256` computed
-    /// over the reviewed plan so the server can reject a plan that changed since
-    /// review. `queueApply` queues the apply task on approval.
+    /// Pending rows that still need a person. Skips system-authored linemeta.
+    func listHumanPendingApprovals() async throws -> [Approval] {
+        try await listApprovals(status: "pending").filter(\.isHumanPending)
+    }
+
+    /// `GET /api/network/approvals?count=1` → `{"counts":{...}}`.
+    func countApprovals() async throws -> ApprovalCounts {
+        let data = try await performData(
+            path: "/api/network/approvals",
+            query: [URLQueryItem(name: "count", value: "1")]
+        )
+        return try JSONDecoder().decode(ApprovalCountsEnvelope.self, from: data).counts
+    }
+
+    /// `GET /api/network/approvals?id=` → `{"approval":...}` with the plan body.
+    func fetchApproval(id: String) async throws -> Approval {
+        let data = try await performData(
+            path: "/api/network/approvals",
+            query: [URLQueryItem(name: "id", value: id)]
+        )
+        do {
+            return try ApprovalReviewDecoder.decodeEnvelope(data)
+        } catch {
+            throw LatticeAPIError.invalidResponse
+        }
+    }
+
+    /// `POST /api/network/approvals/approve`. `planSHA256` must be the hash of
+    /// the reviewed plan body, never of an empty listing row.
     @discardableResult
     func approveApproval(approvalID: String, queueApply: Bool, planSHA256: String) async throws -> Approval {
         try await perform(
@@ -529,5 +847,47 @@ public extension LatticeClient {
             method: "POST",
             body: ApproveRequest(approvalID: approvalID, queueApply: queueApply, planSHA256: planSHA256)
         )
+    }
+
+    /// Approve from a loaded review row. Refuses if the plan body is missing
+    /// or does not hash to `plan_sha256`.
+    @discardableResult
+    func approveReviewed(_ approval: Approval, queueApply: Bool) async throws -> Approval {
+        let hash = try approval.reviewedPlanSHA256()
+        return try await approveApproval(approvalID: approval.id, queueApply: queueApply, planSHA256: hash)
+    }
+
+    @discardableResult
+    func rejectApproval(approvalID: String) async throws -> Approval {
+        try await perform(
+            Approval.self,
+            path: "/api/network/approvals/reject",
+            method: "POST",
+            body: ApprovalIDRequest(approvalID: approvalID)
+        )
+    }
+
+    @discardableResult
+    func dismissApproval(approvalID: String, note: String) async throws -> Approval {
+        try await perform(
+            Approval.self,
+            path: "/api/network/approvals/dismiss",
+            method: "POST",
+            body: DismissApprovalRequest(approvalID: approvalID, note: note)
+        )
+    }
+
+    static func decodeApprovalList(_ data: Data) throws -> [Approval] {
+        if let envelope = try? JSONDecoder().decode(ApprovalsQueryResponse.self, from: data),
+           !envelope.approvals.isEmpty || envelope.total > 0 || envelope.limit > 0 {
+            return envelope.approvals
+        }
+        if let rows = try? JSONDecoder().decode([Approval].self, from: data) {
+            return rows
+        }
+        if let envelope = try? JSONDecoder().decode(ApprovalsQueryResponse.self, from: data) {
+            return envelope.approvals
+        }
+        throw LatticeAPIError.invalidResponse
     }
 }

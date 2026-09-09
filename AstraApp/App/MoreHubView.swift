@@ -4,7 +4,7 @@ struct MoreHubView: View {
     @EnvironmentObject private var model: DashboardModel
 
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $model.morePath) {
             List {
                 if let identity = model.identity {
                     Section {
@@ -26,25 +26,14 @@ struct MoreHubView: View {
                     }
                 }
 
-                Section("Control plane") {
-                    NavigationLink { ActivityView() } label: { Label("Activity & audit", systemImage: "list.bullet.rectangle") }
-                    NavigationLink { NetworkView() } label: {
-                        HStack {
-                            Label("Network & security", systemImage: "lock.shield")
-                            if model.pendingApprovalCount > 0 {
-                                Spacer()
-                                Text("\(model.pendingApprovalCount)")
-                                    .font(.caption2.weight(.bold))
-                                    .foregroundStyle(.white)
-                                    .padding(.horizontal, 7)
-                                    .padding(.vertical, 2)
-                                    .background(Theme.warning, in: Capsule())
-                            }
-                        }
-                    }
-                    NavigationLink { NotificationsView() } label: { Label("Notifications", systemImage: "bell.badge") }
+                Section("On this phone") {
+                    NavigationLink { ActivityView() } label: { Label("Audit", systemImage: "list.bullet.rectangle") }
+                    NavigationLink { TasksView() } label: { Label("Tasks", systemImage: "checklist") }
+                    NavigationLink(value: MoreDestination.inventory) { Label("Inventory", systemImage: "shippingbox") }
+                    NavigationLink(value: MoreDestination.monitors) { Label("Monitors", systemImage: "waveform.path.ecg") }
                     NavigationLink { LogsView() } label: { Label("Logs", systemImage: "doc.text.magnifyingglass") }
-                    NavigationLink { TasksView() } label: { Label("Tasks", systemImage: "terminal") }
+                    NavigationLink { NetworkView() } label: { Label("Network (read)", systemImage: "lock.shield") }
+                    NavigationLink { NotificationsView() } label: { Label("Notify channels", systemImage: "bell") }
                 }
 
                 Section("Account") {
@@ -54,14 +43,24 @@ struct MoreHubView: View {
 
                 Section {
                     NavigationLink { AboutView() } label: { Label("About Lattice", systemImage: "info.circle") }
+                    if let url = model.dashboardURL {
+                        Link(destination: url) { Label("Open console", systemImage: "safari") }
+                    }
                 }
             }
             .navigationTitle("More")
-            .task {
-                if model.configured, model.identity == nil { await model.loadAccount() }
+            .navigationDestination(for: MoreDestination.self) { destination in
+                switch destination {
+                case .monitors:
+                    MonitorsView()
+                case .monitor(let id):
+                    MonitorDetailView(monitorID: id)
+                case .inventory:
+                    InventoryView()
+                }
             }
             .task {
-                if model.configured, model.approvals.isEmpty { await model.loadNetwork() }
+                if model.configured, model.identity == nil { await model.loadAccount() }
             }
         }
     }
@@ -89,7 +88,7 @@ struct AboutView: View {
                         .font(.system(size: 44))
                         .foregroundStyle(Theme.brandGradient)
                     Text("Lattice").font(.title2.weight(.bold))
-                    Text("Phone-first client for your self-hosted Lattice control plane.")
+                    Text("Phone approval device for the Lattice control plane. Plugin authoring, Terminal, and host mutation stay on the web.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
@@ -97,6 +96,14 @@ struct AboutView: View {
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 12)
                 .listRowBackground(Color.clear)
+            }
+
+            if model.companionBehindServer {
+                Section {
+                    Label("Companion is behind this server. Approve stays disabled until this app can decode the approval view.", systemImage: "exclamationmark.triangle.fill")
+                        .font(.subheadline)
+                        .foregroundStyle(Theme.warning)
+                }
             }
 
             if let version = model.serverVersion {
@@ -113,13 +120,16 @@ struct AboutView: View {
 
             Section {
                 if let url = model.dashboardURL {
-                    Link(destination: url) { Label("Open web dashboard", systemImage: "safari") }
+                    Link(destination: url) { Label("Open web console", systemImage: "safari") }
                 }
             } footer: {
-                Text("Advanced operator surfaces (network policy, proxy, DNS, storage, plugins) remain on the web dashboard.")
+                Text("Custom URL scheme lattice:// opens a plan, node, or monitor. Universal Links wait for a signed build.")
             }
         }
         .navigationTitle("About")
         .navigationBarTitleDisplayMode(.inline)
+        .task {
+            if model.configured, model.serverVersion == nil { await model.loadAccount() }
+        }
     }
 }

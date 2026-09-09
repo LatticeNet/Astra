@@ -517,6 +517,51 @@ func checkLatticeNetwork() async throws {
     try expectEqual(PlanHasher.sha256Hex(""), "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", "sha256 of empty string")
     try expectEqual(PlanHasher.sha256Hex("abc"), "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad", "sha256 of abc")
 
+    let planBody = "table inet lattice_guard {}"
+    let planHash = PlanHasher.sha256Hex(planBody)
+
+    let pendingListJSON = """
+    {"approvals":[
+      {"id":"ap1","node_id":"node-a","plugin":"nftpolicy","action":"apply nft",
+       "plan_sha256":"\(planHash)","status":"pending","actor_id":"admin",
+       "targets":["node-a"],"created_at":"2026-06-17T02:00:00Z"},
+      {"id":"ap-linemeta","node_id":"node-a","plugin":"singbox-linemeta","action":"apply-metadata",
+       "plan_sha256":"\(planHash)","status":"pending","actor_id":"lattice-server",
+       "created_at":"2026-06-17T02:00:01Z"},
+      {"id":"ap-stale","node_id":"node-a","plugin":"agentupdate","action":"agent.update",
+       "plan_sha256":"deadbeef","status":"pending","actor_id":"admin",
+       "reason":"agent update policy changed since this approval was planned; re-plan before approving",
+       "stale":true,"stale_code":"agent_update_policy_changed",
+       "created_at":"2026-06-17T02:01:00Z"}
+    ],"total":3,"limit":100,"offset":0}
+    """
+
+    let getByIDJSON = """
+    {"approval":{"id":"ap1","node_id":"node-a","plugin":"nftpolicy","action":"apply nft",
+     "plan":"\(planBody)","plan_sha256":"\(planHash)","status":"pending","actor_id":"admin",
+     "plugin_version":"1.2.3","artifact_digest":"sha256:abc","targets":["node-a"],
+     "created_at":"2026-06-17T02:00:00Z"}}
+    """
+
+    let waitingJSON = """
+    {"approval":{"id":"ap-wait","node_id":"node-a","plugin":"nftpolicy","action":"apply nft",
+     "plan":"\(planBody)","plan_sha256":"\(planHash)","status":"approved","actor_id":"admin",
+     "approved_by":"admin","targets":["node-a"],
+     "waiting":{"code":"node_offline","reason":"node-a has not reported","blocked":true,
+                "node_id":"node-a","node_status":"offline","dismissible":true}}}
+    """
+
+    let rejectJSON = """
+    {"id":"ap1","node_id":"node-a","plugin":"nftpolicy","action":"apply nft",
+     "plan":"\(planBody)","plan_sha256":"\(planHash)","status":"rejected","actor_id":"admin",
+     "rejected_by":"admin","created_at":"2026-06-17T02:00:00Z"}
+    """
+
+    let dismissJSON = """
+    {"id":"ap-stale","node_id":"node-a","plugin":"agentupdate","action":"agent.update",
+     "plan":"target_version: 0.2.7","plan_sha256":"deadbeef","status":"dismissed","actor_id":"admin"}
+    """
+
     let base = URL(string: "https://lattice.example.com")!
     let transport = RecordingTransport(responses: [
         "https://lattice.example.com/api/netpolicy": (
@@ -548,24 +593,37 @@ func checkLatticeNetwork() async throws {
             200,
             #"[{"id":"t1","name":"web","node_id":"node-a","tunnel_id":"cf-123","ingress":[{"hostname":"app.example.com","service":"http://localhost:8088"}],"created_at":"2026-06-17T00:00:00Z"}]"#.data(using: .utf8)!
         ),
-        "https://lattice.example.com/api/network/approvals": (
-            200,
-            """
-            [
-              {"id":"ap1","node_id":"node-a","plugin":"nftpolicy","action":"apply nft",
-               "plan":"table inet lattice_guard {}","status":"pending","actor_id":"admin",
-               "created_at":"2026-06-17T02:00:00Z"},
-              {"id":"ap-stale","node_id":"node-a","plugin":"agentupdate","action":"agent.update",
-               "plan":"target_version: 0.2.7","status":"pending","actor_id":"admin",
-               "reason":"agent update policy changed since this approval was planned; re-plan before approving",
-               "stale":true,"stale_code":"agent_update_policy_changed",
-               "created_at":"2026-06-17T02:01:00Z"}
-            ]
-            """.data(using: .utf8)!
+        "https://lattice.example.com/api/network/approvals?status=pending": (
+            200, pendingListJSON.data(using: .utf8)!
+        ),
+        "https://lattice.example.com/api/network/approvals?count=1": (
+            200, #"{"counts":{"pending":2,"approved":1,"stale":1,"applied":0,"rejected":0,"dismissed":0,"total":4}}"#.data(using: .utf8)!
+        ),
+        "https://lattice.example.com/api/network/approvals?id=ap1": (
+            200, getByIDJSON.data(using: .utf8)!
+        ),
+        "https://lattice.example.com/api/network/approvals?id=ap-wait": (
+            200, waitingJSON.data(using: .utf8)!
         ),
         "https://lattice.example.com/api/network/approvals/approve": (
             200,
-            #"{"id":"ap1","node_id":"node-a","plugin":"nftpolicy","action":"apply nft","plan":"table inet lattice_guard {}","status":"approved","actor_id":"admin","approved_by":"admin"}"#.data(using: .utf8)!
+            """
+            {"id":"ap1","node_id":"node-a","plugin":"nftpolicy","action":"apply nft","plan":"\(planBody)","plan_sha256":"\(planHash)","status":"approved","actor_id":"admin","approved_by":"admin"}
+            """.data(using: .utf8)!
+        ),
+        "https://lattice.example.com/api/network/approvals/reject": (
+            200, rejectJSON.data(using: .utf8)!
+        ),
+        "https://lattice.example.com/api/network/approvals/dismiss": (
+            200, dismissJSON.data(using: .utf8)!
+        ),
+        "https://lattice.example.com/api/sshguard/status?node_id=node-a": (
+            200,
+            #"{"ok":true,"node":{"node_id":"node-a","node_name":"Edge","enrolled":true,"posture":{"state":"secured","key_access":true,"reason":"key only"},"knock_gate":true,"stage":"confirmed","knock":{"knowledge":"installed","revealable":true,"requires_step_up":true,"interactive_only":true,"note":"web only"}},"nodes":[]}"#.data(using: .utf8)!
+        ),
+        "https://lattice.example.com/api/nodes/capabilities?node_id=node-a": (
+            200,
+            #"{"node_id":"node-a","effective":[{"capability":"sshguard","enforced":true,"mutates":true,"allowed":true,"source":"record","state":"enrolled"}]}"#.data(using: .utf8)!
         )
     ])
 
@@ -596,27 +654,90 @@ func checkLatticeNetwork() async throws {
     let tunnels = try await client.listTunnels()
     try expectEqual(tunnels.first?.ingress.first?.hostname, "app.example.com", "tunnel ingress hostname")
 
-    let approvals = try await client.listApprovals()
-    let approval = try expectUnwrapped(approvals.first, "approval decoded")
-    try expect(approval.isPending, "approval pending")
-    try expect(approval.isApprovable, "fresh pending approval is approvable")
-    let expectedHash = PlanHasher.sha256Hex("table inet lattice_guard {}")
-    try expectEqual(approval.planHash, expectedHash, "approval plan hash computed")
-    let staleApproval = try expectUnwrapped(approvals.first(where: { $0.id == "ap-stale" }), "stale approval decoded")
+    let listed = try await client.listApprovals(status: "pending")
+    try expectEqual(listed.count, 3, "pending listing count")
+    let listRow = try expectUnwrapped(listed.first, "listing row")
+    try expect(!listRow.hasPlanBody, "listing omits plan body")
+    try expectEqual(listRow.planSHA256, planHash, "listing carries plan_sha256")
+    try expectEqual(listRow.planHash, PlanHasher.sha256Hex(""), "hashing a listing row hashes empty plan")
+    do {
+        _ = try listRow.reviewedPlanSHA256()
+        throw CheckFailure.failed("listing row must not be hash-bindable")
+    } catch ApprovalReviewError.emptyPlan {
+        // expected
+    }
+    try expect(listRow.isHumanPending, "human pending nft row")
+    let linemeta = try expectUnwrapped(listed.first(where: { $0.id == "ap-linemeta" }), "linemeta row")
+    try expect(linemeta.isAutoApprovedLineMeta, "system linemeta is auto-approved class")
+    try expect(!linemeta.isHumanPending, "linemeta skipped from human inbox")
+    let staleApproval = try expectUnwrapped(listed.first(where: { $0.id == "ap-stale" }), "stale approval decoded")
     try expect(staleApproval.isPending, "stale approval can remain pending until server cleanup")
     try expect(staleApproval.isStale, "stale approval exposes structured stale flag")
     try expect(!staleApproval.isApprovable, "stale approval is not approvable")
-    try expectEqual(staleApproval.staleCode, "agent_update_policy_changed", "stale code decoded")
     try expect(staleApproval.reason.contains("re-plan"), "stale reason decoded")
 
-    let approved = try await client.approveApproval(approvalID: approval.id, queueApply: true, planSHA256: approval.planHash)
+    let human = listed.filter(\.isHumanPending)
+    try expectEqual(human.map(\.id), ["ap1", "ap-stale"], "human pending skips linemeta")
+
+    let counts = try await client.countApprovals()
+    try expectEqual(counts.pending, 2, "count pending")
+
+    let loaded = try await client.fetchApproval(id: "ap1")
+    try expect(loaded.hasPlanBody, "get-by-id carries plan")
+    try expectEqual(try loaded.reviewedPlanSHA256(), planHash, "reviewed hash matches server")
+    try expectEqual(loaded.pluginVersion, "1.2.3", "plugin version")
+    try expectEqual(loaded.targets, ["node-a"], "targets")
+    try expectEqual(loaded.proofLine, "plan \(planHash.prefix(4))… · 1 target", "proof line")
+
+    let waiting = try await client.fetchApproval(id: "ap-wait")
+    try expectEqual(waiting.waiting?.code, "node_offline", "waiting code")
+    try expect(waiting.waiting?.blocked == true, "waiting blocked")
+    try expect(waiting.proofLine.contains("waiting"), "waiting proof line")
+
+    let approved = try await client.approveReviewed(loaded, queueApply: true)
     try expectEqual(approved.status, "approved", "approve returns approved status")
     let approveBody = try await bodyObject(transport.bodies.last ?? nil)
     try expectEqual(Set(approveBody.keys), ["approval_id", "queue_apply", "plan_sha256"], "approve sends exactly the server fields")
     try expectEqual(approveBody["approval_id"] as? String, "ap1", "approve approval_id")
     try expectEqual(approveBody["queue_apply"] as? Bool, true, "approve queue_apply")
-    try expectEqual(approveBody["plan_sha256"] as? String, expectedHash, "approve plan_sha256 matches plan hash")
+    try expectEqual(approveBody["plan_sha256"] as? String, planHash, "approve plan_sha256 matches plan hash")
     try expectEqual(await transport.csrfHeaders.last ?? nil, "csrf-token", "approve carries CSRF header")
+
+    let rejected = try await client.rejectApproval(approvalID: "ap1")
+    try expectEqual(rejected.status, "rejected", "reject status")
+    try expectEqual(rejected.rejectedBy, "admin", "rejected_by")
+    let rejectBody = try await bodyObject(transport.bodies.last ?? nil)
+    try expectEqual(rejectBody["approval_id"] as? String, "ap1", "reject approval_id")
+
+    let dismissed = try await client.dismissApproval(approvalID: "ap-stale", note: "superseded")
+    try expectEqual(dismissed.status, "dismissed", "dismiss status")
+    let dismissBody = try await bodyObject(transport.bodies.last ?? nil)
+    try expectEqual(dismissBody["note"] as? String, "superseded", "dismiss note")
+
+    let guardStatus = try await client.fetchSSHGuardStatus(nodeID: "node-a")
+    try expectEqual(guardStatus.posture.state, "secured", "ssh guard posture")
+    try expect(guardStatus.knockGate, "knock gate present")
+
+    let caps = try await client.fetchNodeCapabilities(nodeID: "node-a")
+    try expectEqual(caps.first?.capability, "sshguard", "capability id")
+    try expect(caps.first?.allowed == true, "capability allowed")
+
+    let approvalLink = try expectUnwrapped(LatticeDeepLink(url: URL(string: "lattice://approvals/ap1")!), "approval deep link")
+    try expectEqual(approvalLink, LatticeDeepLink.approval(id: "ap1"), "custom scheme approval deep link")
+    let nodeLink = try expectUnwrapped(LatticeDeepLink(url: URL(string: "https://lattice.roobli.org/nodes/node-a")!), "node deep link")
+    try expectEqual(nodeLink, LatticeDeepLink.node(id: "node-a"), "https node path")
+}
+
+func checkLatticeNodeHonesty() throws {
+    let json = """
+    {"id":"node-b","name":"Tokyo Edge","online":true,"status":"degraded",
+     "status_reason":"Reporting, but sing-box has been down.","reachability":"online",
+     "last_seen":"2026-06-17T02:00:00Z","metrics":{},"host_facts":{},"created_at":"2026-06-16T00:00:00Z"}
+    """.data(using: .utf8)!
+    let node = try JSONDecoder().decode(LatticeNode.self, from: json)
+    try expectEqual(node.honestyWord, "degraded", "status honesty prefers server status")
+    try expect(node.needsAttention, "degraded needs attention")
+    try expectEqual(node.statusReason.contains("sing-box"), true, "status reason decoded")
 }
 
 actor RecordingTransport: HTTPTransport {
@@ -645,18 +766,43 @@ actor RecordingTransport: HTTPTransport {
         bodies.append(request.httpBody)
         lastBody = request.httpBody
 
-        guard var availableResponses = responses[url.absoluteString], !availableResponses.isEmpty else {
-            throw CheckFailure.failed("missing mock response for \(url.absoluteString)")
+        let key = url.absoluteString
+        if var available = responses[key], !available.isEmpty {
+            let response = available.removeFirst()
+            responses[key] = available
+            return httpResponse(url: url, payload: response)
         }
-        let response = availableResponses.removeFirst()
-        responses[url.absoluteString] = availableResponses
+        if let match = responses.first(where: { !$0.value.isEmpty && Self.queryCompatible($0.key, key) }) {
+            var available = match.value
+            let response = available.removeFirst()
+            responses[match.key] = available
+            return httpResponse(url: url, payload: response)
+        }
+        throw CheckFailure.failed("missing mock response for \(key); have \(responses.filter { !$0.value.isEmpty }.keys.sorted()); seen \(requestURLs)")
+    }
+
+    private func httpResponse(url: URL, payload: (Int, Data)) -> (Data, URLResponse) {
         let http = HTTPURLResponse(
             url: url,
-            statusCode: response.0,
+            statusCode: payload.0,
             httpVersion: "HTTP/1.1",
             headerFields: headers[url.absoluteString]
         )!
-        return (response.1, http)
+        return (payload.1, http)
+    }
+
+    private static func queryCompatible(_ registered: String, _ actual: String) -> Bool {
+        guard let registeredURL = URL(string: registered), let actualURL = URL(string: actual) else {
+            return false
+        }
+        guard registeredURL.scheme == actualURL.scheme,
+              registeredURL.host == actualURL.host,
+              registeredURL.path == actualURL.path else {
+            return false
+        }
+        let registeredItems = URLComponents(url: registeredURL, resolvingAgainstBaseURL: false)?.queryItems ?? []
+        let actualItems = URLComponents(url: actualURL, resolvingAgainstBaseURL: false)?.queryItems ?? []
+        return Set(registeredItems.map { "\($0.name)=\($0.value ?? "")" }) == Set(actualItems.map { "\($0.name)=\($0.value ?? "")" })
     }
 }
 
@@ -670,6 +816,7 @@ do {
     try await checkLatticeAPIClient()
     try checkLatticeAnalytics()
     try await checkLatticeNetwork()
+    try checkLatticeNodeHonesty()
     print("AstraCoreCheck passed")
 } catch {
     fputs("AstraCoreCheck failed: \(error)\n", stderr)

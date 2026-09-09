@@ -1,159 +1,65 @@
-# Lattice iOS Client
+# Lattice iOS client (Astra)
 
-`Astra` 现在是 Lattice 的个人 iOS 客户端。Xcode 工程和 target 仍然叫 `Astra`，这是为了保留原工程结构；安装到手机后的 App 显示名是 `Lattice`。
+The Xcode project and target stay `Astra`. The installed display name is `Lattice`. This is the phone approval device for the same Lattice control plane as the Vue console. Plugin authoring, Terminal, Store, Publishing, DNS, and host mutation stay on the web.
 
-v2 把它从只读监控原型升级成一个手机优先的 Lattice 控制面伴侣 App：覆盖控制面里大部分适合在手机上操作的功能，配合一套统一的 SwiftUI 设计语言（卡片、环形仪表、Swift Charts 趋势图、Fleet Map）。它仍然不是完整控制面替代品——网络策略、proxy、DNS、存储、插件这类重操作仍留在 Web dashboard；手机端只暴露 Network & security 的只读视图和已经审阅计划的受控批准入口。
+## Information architecture
 
-## 界面结构（v2）
+Three tabs:
 
-底部五个 Tab：
+- **Inbox.** Plans that still need a person (not auto-approved linemeta) and Attention (node honesty, waiting apply, monitor down, inventory due). Empty Inbox is last refresh, last notify, quiet since.
+- **Fleet.** Searchable nodes with honesty words (`never_reported` / `online` / `degraded` / `offline` / `disabled`), a compact map, and node glance (facts, SSH Guard posture read, capability admission, waiting tasks, Open on web).
+- **More.** Audit, tasks, inventory, monitors, logs, network read views, notify channels, account, settings, About, Open console.
 
-- **Overview**：Fleet 健康环、在线/critical/月度成本/续费 统计卡、Fleet Map（MapKit 地图标注各节点）、需要关注的节点、最近告警。
-- **Nodes**：可搜索/过滤的节点列表 → 节点详情（CPU/内存/磁盘实时趋势图、host facts、网络、geo、启用/禁用、轮换 agent token、节点注册二维码）。
-- **Monitors**：上线/延迟探针列表 → 探针详情（uptime 环、延迟折线图、最近探测记录）、新建/删除。
-- **Inventory**：机器成本与续费清单（月度开销汇总、到期/逾期提醒）、新增/编辑/续费/删除、跑提醒。
-- **More**：Activity（审计 + 本地告警）、Network & security（pending approvals、NetPolicy、reachability、nft baseline、Cloudflare tunnels，只读 + SHA-256 绑定 approve）、Notifications（通道/规则 + 测试）、Logs（日志源 + 行查询）、Tasks（远程任务 + 结果）、Account（身份/scopes/服务器版本/PAT 管理）、Settings、About。
+Review is a sheet. It loads `GET /api/network/approvals?id=`, hashes the plan body on screen, and sends that `plan_sha256`. Face ID or the device passcode gates approve and reject. Cancelled authentication does not POST. Reject and dismiss are first-class. Stale rows are inspect-only.
 
-## 覆盖的 Lattice API
+Deep links use the custom URL scheme `lattice://approvals/{id}`, `lattice://nodes/{id}`, and `lattice://monitors/{id}`. Universal Links wait for a signed build.
 
-`Sources/AstraCore/LatticeAPI.swift` 里的 `LatticeClient` 现在覆盖：
+## Approval contract
 
-- 身份：`/api/me`、`/api/version`
-- 节点：`/api/nodes`、disable/enable、rotate-token、enroll-token、geo get/set/resolve
-- Token（PAT）：list / create / revoke
-- 机器清单：list / update / delete / renew / reminders-run
-- Monitors：list / create / delete / results
-- Notify：channels、rules、test
-- Network & security：approvals、NetPolicy list/graph、nft baseline inputs、tunnels，以及带 `plan_sha256` 的 approve；stale approvals 只读展示并要求回到 Web 端 re-plan
-- Audit：查询（分页）+ 链校验
-- Tasks：tasks + task-results
-- Logs：sources / query（分页）/ stats
+Listing omits `plan` unless `include=plan`. Every row still has `plan_sha256`. Review must load by id and hash that body. Never hash an empty list-row plan. After approve, reload by id to read `waiting`.
 
-鉴权同时支持 PAT 和 `/api/login` session cookie + `X-Lattice-CSRF`，含 TOTP 登录挑战。请求体严格按服务端结构体字段构造（服务端开启了 `DisallowUnknownFields`）。
+Inbox is human-pending only. Auto-approved `singbox-linemeta` rows with actor `lattice-server` or `system` do not badge.
 
-## 保留的 v1 能力
+## Auth
 
-- 本地节点快照缓存（重开 App 先显示缓存再刷新）。
-- 本地健康事件引擎：disabled/offline/stale、CPU/内存/磁盘阈值、恢复事件。
-- Bark 自托管 `/push` 通知，带规范化 dashboard 点击 URL 和可配置 interruption level。
-- Token、session cookie、CSRF token、Bark device key 全部进 iOS Keychain。
-- `BGAppRefreshTask` best-effort 后台刷新，并在设置页显示最近一次结果。
+Prefer a dedicated PAT in Keychain. Minimum scopes: `network:apply`, `node:read`, `audit:read`, `task:read`. Do not mint `notify:send`. Session plus TOTP remains a fallback.
 
-## 目录结构
+## Alerting
 
-详细结构说明在 [docs/project-structure.md](docs/project-structure.md)。
+The Lattice server notify channel (including Bark on the server) is the alerter. This app does not send Bark and does not run `MonitorEngine` as a client-side dispatcher. `BGAppRefresh` may refresh the Inbox badge only. The system decides if it runs.
 
-核心文件：
+## Directory
 
-- `Astra.xcodeproj/`：iOS App 工程。target 和 scheme 仍叫 `Astra`。
-- `AstraApp/App/`：SwiftUI App 层（设计系统、各 Tab 与详情页）。
-- `Sources/AstraCore/`：可测试的核心逻辑——`AstraCore.swift`（节点/登录/监控/Bark）、`LatticeModels.swift`（领域模型）、`LatticeAPI.swift`（完整控制面 API 客户端）、`LatticeNetwork.swift`（网络策略/审批/隧道模型与 API）、`LatticeAnalytics.swift`（Fleet/库存/Monitor 汇总与趋势缓冲）。
-- `Checks/AstraCoreCheck/`：轻量级 Swift 回归检查，不依赖真机。
-- `scripts/`：本地检查、iOS doctor、真机构建、development archive/export 脚本。
-- `docs/`：项目结构、iOS 编译部署、实现计划。
+- `Astra.xcodeproj/` — iOS app. Target and scheme stay `Astra`.
+- `AstraApp/App/` — SwiftUI shell (Inbox / Fleet / More, Review sheet).
+- `Sources/AstraCore/` — testable core, no SwiftUI. New files are auto-included by SwiftPM and must also be added to the Xcode target.
+- `Checks/AstraCoreCheck/` — golden fixtures for the live approval API, nodes, SSH Guard, capabilities, deep links.
+- `scripts/` — local checks, iOS doctor, device build, development archive.
 
-## 快速使用
+Details: [docs/project-structure.md](docs/project-structure.md).
 
-1. 打开 `Astra.xcodeproj`。
-2. 在 `Astra` target 的 Signing & Capabilities 中选择你的 Apple Team。
-3. 如果 `org.roobli.astra` 被占用，把 Bundle Identifier 改成自己的，例如 `com.yourname.lattice`。长期自用时选定后尽量不要频繁更换。
-4. 连接 iPhone，选择真机作为 run destination。
-5. 按 Run。
-6. 手机上打开 `Lattice`，进入 `More → Settings`。
-7. 填入 Lattice server URL。
-8. 填入 `node:read`（或更高权限）PAT，或用用户名密码登录保存 session。
-9. 点 `Test Lattice connection`。
-10. 填入 Bark device key，点 `Send test notification`。
-11. 回到 Overview / Nodes 开始刷新和轮询，其余功能按权限自动加载。
+## First run
 
-## 本地验证 App 编译
+1. Open `Astra.xcodeproj`.
+2. Choose your Apple Team under Signing & Capabilities.
+3. If `org.roobli.cdcd.Astra` is taken, change the bundle identifier and keep it stable.
+4. Connect an iPhone (iOS 16+) or use the simulator.
+5. Run. Open **Lattice**, then **More → Settings**.
+6. Enter the Lattice server URL and a PAT with the minimum scopes above, or log in with username, password, and TOTP.
+7. Test the connection. Open Inbox.
 
-除了 `AstraCoreCheck` 核心回归检查，本机可直接用模拟器编译整个 App（无需签名）：
-
-```sh
-xcodebuild -project Astra.xcodeproj -scheme Astra \
-  -sdk iphonesimulator -configuration Debug \
-  -destination 'generic/platform=iOS Simulator' \
-  CODE_SIGNING_ALLOWED=NO build
-```
-
-完整教程见 [docs/ios-build-deploy.md](docs/ios-build-deploy.md)。
-
-## 本地验证
-
-先跑不依赖真机的检查：
-
-```sh
-./scripts/check-local.sh
-```
-
-只跑核心协议和告警回归检查：
+## Verify (no device required)
 
 ```sh
 swift run --scratch-path .build AstraCoreCheck
+
+xcodebuild -project Astra.xcodeproj -scheme Astra \
+  -sdk iphonesimulator -configuration Debug \
+  -destination 'generic/platform=iOS Simulator' \
+  -derivedDataPath DerivedData/ci \
+  CODE_SIGNING_ALLOWED=NO build
 ```
 
-检查本机 Xcode/iPhoneOS SDK/Simulator build 环境：
+Full local checks: `./scripts/check-local.sh`. Device install, Face ID, and a server-sent Bark tap are manual. Do not claim background alerting works from this app.
 
-```sh
-./scripts/doctor-ios.sh
-```
-
-`doctor-ios.sh` 需要完整 Xcode，而不是只安装 Command Line Tools。
-
-## 命令行构建
-
-真机 Debug build：
-
-```sh
-ASTRA_TEAM_ID=ABCDE12345 \
-./scripts/build-ios-device.sh
-```
-
-Development archive 并导出 `.ipa`：
-
-```sh
-ASTRA_TEAM_ID=ABCDE12345 \
-./scripts/archive-ios-development.sh
-```
-
-导出产物默认写到 `DerivedData/export/`。
-
-命令行构建脚本会默认读取 Xcode 工程里的当前 Bundle Identifier。只有在你明确想临时覆盖时，才需要传 `ASTRA_BUNDLE_ID`。
-
-## 长期自用建议
-
-- 固定一个 Apple Team 和 Bundle Identifier，避免 iOS 把升级当成另一个 App。
-- Lattice server 和 Bark server 尽量使用手机在蜂窝网络下也能访问的稳定 HTTPS 域名，或稳定 VPN 入口。
-- 手机端认证优先使用专门给 App 创建的低权限 Personal Access Token，权限只给 `node:read`。
-- iPhone App 适合做状态面板和辅助提醒；不能漏报的 always-on 告警仍应放在 Lattice server、Bark server、Prometheus/Alertmanager 或其他常驻服务中。
-- 每次升级 Xcode、iOS 或 Lattice API 后，先跑 `./scripts/check-local.sh`，再做一次真机安装验证。
-
-## Bark 默认值
-
-当前 Bark 默认配置来自个人自托管环境：
-
-- Server: `http://bark.roobli.org`
-- Group: `Lattice`
-- Sound: `minuet`
-
-Bark device key 不会硬编码进源码。第一次在 Settings 输入后会进入 iOS Keychain。把 secret 输入框清空并保存，会删除对应 Keychain 项。
-
-如果 Bark server 没写协议，App 会默认补 `http://`，匹配当前自托管 Bark 部署。把完整 Bark URL 粘到 device key 输入框也可以，App 会提取第一个 path segment 作为 key。
-
-## 重要限制
-
-iOS 不允许普通 App 做可靠的 24 小时后台轮询。这个客户端的轮询在 App 运行时可靠，后台刷新只依赖 `BGAppRefreshTask`，由系统决定是否唤醒、何时唤醒、给多少时间。
-
-因此：
-
-- 手机端 Bark 告警适合个人辅助提醒。
-- 严肃的 always-on 告警仍应放在 Lattice server、Bark server、Prometheus/Alertmanager 或其他常驻服务上。
-- App 会把后台刷新结果显示出来，避免造成“以为在后台监控，其实系统没给机会运行”的误解。
-
-## 参考文档
-
-- [docs/project-structure.md](docs/project-structure.md)
-- [docs/ios-build-deploy.md](docs/ios-build-deploy.md)
-- [docs/install-on-iphone.md](docs/install-on-iphone.md)
-- [docs/implementation-plan.md](docs/implementation-plan.md)
+Device build: [docs/ios-build-deploy.md](docs/ios-build-deploy.md), [docs/install-on-iphone.md](docs/install-on-iphone.md).

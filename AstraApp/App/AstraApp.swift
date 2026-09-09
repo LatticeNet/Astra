@@ -26,6 +26,9 @@ struct AstraApp: App {
             .task {
                 model.configureBackgroundRefresh()
             }
+            .onOpenURL { url in
+                model.openDeepLink(url)
+            }
             .onReceive(NotificationCenter.default.publisher(for: UIApplication.didEnterBackgroundNotification)) { _ in
                 model.saveSettings()
             }
@@ -34,6 +37,9 @@ struct AstraApp: App {
             .environmentObject(model)
             .task {
                 model.configureBackgroundRefresh()
+            }
+            .onOpenURL { url in
+                model.openDeepLink(url)
             }
         #endif
     }

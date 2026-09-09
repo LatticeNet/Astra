@@ -13,8 +13,7 @@ struct InventoryView: View {
     @State private var reminderResult: String?
 
     var body: some View {
-        NavigationStack {
-            ScrollView {
+        ScrollView {
                 VStack(spacing: 16) {
                     if !model.configured {
                         notConfiguredCard
@@ -74,7 +73,6 @@ struct InventoryView: View {
             } message: {
                 Text(reminderResult ?? "")
             }
-        }
     }
 
     private var reminderAlertBinding: Binding<Bool> {

@@ -315,8 +315,15 @@ public struct LatticeNode: Identifiable, Codable, Equatable, Hashable, Sendable 
     public var publicIPv6: String?
     public var agentVersion: String?
     public var online: Bool
+    /// Server-derived reachability: `online`, `offline`, or `never_reported`.
+    public var reachability: String
+    /// Console honesty word: `never_reported`, `online`, `degraded`, `offline`, `disabled`.
+    public var status: String
+    public var statusSince: Date?
+    public var statusReason: String
     public var disabled: Bool
     public var lastSeen: Date?
+    public var groupIDs: [String]
     public var metrics: LatticeMetrics
     public var hostFacts: LatticeHostFacts
     public var geo: LatticeGeo?
@@ -335,8 +342,13 @@ public struct LatticeNode: Identifiable, Codable, Equatable, Hashable, Sendable 
         publicIPv6: String? = nil,
         agentVersion: String? = nil,
         online: Bool = false,
+        reachability: String = "",
+        status: String = "",
+        statusSince: Date? = nil,
+        statusReason: String = "",
         disabled: Bool = false,
         lastSeen: Date? = nil,
+        groupIDs: [String] = [],
         metrics: LatticeMetrics = LatticeMetrics(),
         hostFacts: LatticeHostFacts = LatticeHostFacts(),
         geo: LatticeGeo? = nil,
@@ -354,8 +366,13 @@ public struct LatticeNode: Identifiable, Codable, Equatable, Hashable, Sendable 
         self.publicIPv6 = publicIPv6
         self.agentVersion = agentVersion
         self.online = online
+        self.reachability = reachability
+        self.status = status
+        self.statusSince = statusSince
+        self.statusReason = statusReason
         self.disabled = disabled
         self.lastSeen = lastSeen
+        self.groupIDs = groupIDs
         self.metrics = metrics
         self.hostFacts = hostFacts
         self.geo = geo
@@ -375,13 +392,33 @@ public struct LatticeNode: Identifiable, Codable, Equatable, Hashable, Sendable 
     }
 
     public var availabilityText: String {
-        if disabled {
-            return "Disabled"
+        let word = honestyWord
+        if word.isEmpty { return isOffline(timeout: 0) ? "offline" : "online" }
+        return word
+    }
+
+    /// Console honesty word. Prefers the server `status` field; falls back to
+    /// `never_reported` / `disabled` / `offline` / `online` from older payloads.
+    public var honestyWord: String {
+        if !status.isEmpty { return status }
+        if disabled { return "disabled" }
+        if lastSeen == nil { return "never_reported" }
+        if !online { return "offline" }
+        return "online"
+    }
+
+    /// Inbox Attention: anything other than a reporting, healthy node.
+    public var needsAttention: Bool {
+        switch honestyWord {
+        case "online": return false
+        default: return true
         }
-        return isOffline(timeout: 0) ? "Offline" : "Online"
     }
 
     public func isOffline(referenceDate: Date = Date(), timeout: TimeInterval) -> Bool {
+        if honestyWord == "disabled" || honestyWord == "offline" || honestyWord == "never_reported" {
+            return true
+        }
         if disabled || !online {
             return true
         }
@@ -411,8 +448,13 @@ public struct LatticeNode: Identifiable, Codable, Equatable, Hashable, Sendable 
         case publicIPv6 = "public_ipv6"
         case agentVersion = "agent_version"
         case online
+        case reachability
+        case status
+        case statusSince = "status_since"
+        case statusReason = "status_reason"
         case disabled
         case lastSeen = "last_seen"
+        case groupIDs = "group_ids"
         case metrics
         case hostFacts = "host_facts"
         case geo
@@ -433,8 +475,13 @@ public struct LatticeNode: Identifiable, Codable, Equatable, Hashable, Sendable 
         publicIPv6 = try container.decodeIfPresent(String.self, forKey: .publicIPv6)
         agentVersion = try container.decodeIfPresent(String.self, forKey: .agentVersion)
         online = try container.decodeIfPresent(Bool.self, forKey: .online) ?? false
+        reachability = try container.decodeIfPresent(String.self, forKey: .reachability) ?? ""
+        status = try container.decodeIfPresent(String.self, forKey: .status) ?? ""
+        statusSince = try DateValue.decodeIfPresent(from: container, forKey: .statusSince)
+        statusReason = try container.decodeIfPresent(String.self, forKey: .statusReason) ?? ""
         disabled = try container.decodeIfPresent(Bool.self, forKey: .disabled) ?? false
         lastSeen = try DateValue.decodeIfPresent(from: container, forKey: .lastSeen)
+        groupIDs = try container.decodeIfPresent([String].self, forKey: .groupIDs) ?? []
         metrics = try container.decodeIfPresent(LatticeMetrics.self, forKey: .metrics) ?? LatticeMetrics()
         hostFacts = try container.decodeIfPresent(LatticeHostFacts.self, forKey: .hostFacts) ?? LatticeHostFacts()
         geo = try container.decodeIfPresent(LatticeGeo.self, forKey: .geo)

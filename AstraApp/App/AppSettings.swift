@@ -330,3 +330,26 @@ enum AppSecretAccount {
     static let latticeCSRFToken = "lattice.csrfToken"
     static let barkDeviceKey = "bark.deviceKey"
 }
+
+/// Local quiet-since bookkeeping for Inbox. Not an alerter.
+enum InboxQuietStore {
+    private static let notifyKey = "astra.inbox.lastNotifyAt"
+    private static let countKey = "astra.inbox.lastHumanPendingCount"
+
+    static var lastNotifyAt: Date? {
+        let value = UserDefaults.standard.double(forKey: notifyKey)
+        return value > 0 ? Date(timeIntervalSince1970: value) : nil
+    }
+
+    static var lastHumanPendingCount: Int {
+        UserDefaults.standard.integer(forKey: countKey)
+    }
+
+    static func recordPendingCount(_ count: Int) {
+        let previous = lastHumanPendingCount
+        if count > previous {
+            UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: notifyKey)
+        }
+        UserDefaults.standard.set(count, forKey: countKey)
+    }
+}

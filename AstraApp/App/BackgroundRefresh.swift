@@ -3,11 +3,26 @@ import Foundation
 #if os(iOS)
 import BackgroundTasks
 import UIKit
+import UserNotifications
 #endif
 
 enum AstraBackgroundRefresh {
     static let identifier = "org.roobli.astra.refresh"
     static let minimumInterval: TimeInterval = 15 * 60
+}
+
+enum InboxBadge {
+    static func apply(count: Int) {
+        #if os(iOS)
+        UIApplication.shared.applicationIconBadgeNumber = count
+        #endif
+    }
+
+    static func requestAuthorization() {
+        #if os(iOS)
+        UNUserNotificationCenter.current().requestAuthorization(options: [.badge]) { _, _ in }
+        #endif
+    }
 }
 
 enum BackgroundRefreshRunner {
@@ -35,35 +50,12 @@ enum BackgroundRefreshRunner {
                 return false
             }
 
-            let nodes = try await LatticeClient(baseURL: latticeURL, credential: credential).fetchNodes()
+            let pending = try await LatticeClient(baseURL: latticeURL, credential: credential).listHumanPendingApprovals()
             try Task.checkCancellation()
-            NodeStore.save(nodes)
-            var engine = MonitorEngine(configuration: settings.monitorConfiguration, state: MonitorEngineStateStore.load())
-            let events = engine.evaluate(nodes: nodes)
-
-            if !events.isEmpty {
-                var storedEvents = EventStore.load()
-                storedEvents.insert(contentsOf: events.reversed(), at: 0)
-                EventStore.save(storedEvents)
+            InboxQuietStore.recordPendingCount(pending.count)
+            await MainActor.run {
+                InboxBadge.apply(count: pending.count)
             }
-
-            if settings.notificationsEnabled, !events.isEmpty {
-                do {
-                    try await sendBark(events: events, settings: settings)
-                } catch let failure as BarkDeliveryFailure {
-                    engine.markDeliveryFailed(events: failure.undeliveredEvents)
-                    MonitorEngineStateStore.save(engine.state)
-                    throw failure
-                } catch {
-                    engine.markDeliveryFailed(events: events)
-                    MonitorEngineStateStore.save(engine.state)
-                    throw error
-                }
-            } else if !settings.notificationsEnabled {
-                engine.markDeliveryFailed(events: events)
-            }
-            try Task.checkCancellation()
-            MonitorEngineStateStore.save(engine.state)
             BackgroundRefreshStatusStore.recordCompleted(success: true)
             return true
         } catch is CancellationError {
@@ -74,36 +66,8 @@ enum BackgroundRefreshRunner {
         }
     }
 
-    private static func sendBark(events: [MonitorEvent], settings: AppSettings) async throws {
-        guard let barkURL = normalizedBarkURL(settings.barkServerURL) else {
-            throw BarkError.invalidURL
-        }
-        let deviceKey = BarkDeviceKeyNormalizer.deviceKey(from: SecretStore.load(AppSecretAccount.barkDeviceKey))
-        guard !deviceKey.isEmpty else {
-            throw BarkError.missingDeviceKey
-        }
-        let configuration = BarkConfiguration(
-            serverURL: barkURL,
-            deviceKey: deviceKey,
-            defaultGroup: settings.barkGroup,
-            sound: settings.barkSound.isEmpty ? nil : settings.barkSound,
-            icon: URL(string: "https://day.app/assets/images/avatar.jpg"),
-            url: normalizedLatticeDashboardURL(settings.latticeBaseURL),
-            level: settings.barkLevel
-        )
-        try await BarkClient().sendAll(configuration: configuration, events: events)
-    }
-
     private static func normalizedLatticeURL(_ rawValue: String) -> URL? {
         AstraURLNormalizer.serviceURL(from: rawValue)
-    }
-
-    private static func normalizedBarkURL(_ rawValue: String) -> URL? {
-        AstraURLNormalizer.serviceURL(from: rawValue, defaultScheme: "http")
-    }
-
-    private static func normalizedLatticeDashboardURL(_ rawValue: String) -> URL? {
-        AstraURLNormalizer.latticeDashboardURL(from: rawValue)
     }
 }
 
@@ -190,6 +154,7 @@ final class AstraAppDelegate: NSObject, UIApplicationDelegate {
         _ application: UIApplication,
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
     ) -> Bool {
+        InboxBadge.requestAuthorization()
         AstraBackgroundRefreshCoordinator.shared.registerLaunchHandler()
         return true
     }

@@ -533,6 +533,10 @@ struct NodeGeoSetRequest: Encodable {
     }
 }
 
+struct TaskIDRequest: Encodable {
+    var id: String
+}
+
 struct NodeGeoResolveRequest: Encodable {
     var nodeID: String?
     var all: Bool
@@ -777,5 +781,36 @@ public extension LatticeClient {
         )
         let envelope = (try? JSONDecoder().decode(ResultsEnvelope.self, from: data)) ?? ResultsEnvelope(results: [])
         return envelope.results
+    }
+
+    /// `GET /api/sshguard/status?node_id=` (read posture; knock reveal stays web).
+    func fetchSSHGuardStatus(nodeID: String) async throws -> SSHGuardNodeStatus {
+        let data = try await performData(
+            path: "/api/sshguard/status",
+            query: [URLQueryItem(name: "node_id", value: nodeID)]
+        )
+        let response = try JSONDecoder().decode(SSHGuardStatusResponse.self, from: data)
+        if let node = response.node { return node }
+        if let node = response.nodes.first(where: { $0.nodeID == nodeID }) { return node }
+        throw LatticeAPIError.invalidResponse
+    }
+
+    /// `GET /api/nodes/capabilities?node_id=` effective admission per capability.
+    func fetchNodeCapabilities(nodeID: String) async throws -> [NodeCapabilityEffective] {
+        try await perform(
+            NodeCapabilitiesResponse.self,
+            path: "/api/nodes/capabilities",
+            query: [URLQueryItem(name: "node_id", value: nodeID)]
+        ).effective
+    }
+
+    @discardableResult
+    func cancelTask(id: String) async throws -> LatticeTask {
+        try await perform(
+            LatticeTask.self,
+            path: "/api/tasks/cancel",
+            method: "POST",
+            body: TaskIDRequest(id: id)
+        )
     }
 }

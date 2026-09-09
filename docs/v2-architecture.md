@@ -1,74 +1,50 @@
-# Lattice iOS Client v2 — Architecture & Progress
+# Lattice iOS companion architecture
 
-Goal: turn the read-only personal monitor into a polished, broad **Lattice control-plane companion** for iPhone, covering as much of the server API as makes sense on a phone, with a first-class SwiftUI design.
+Astra is the phone approval and attention device for the Lattice control plane. It is the same product as the Vue console, on a different device. The Xcode project stays `Astra`; the display name stays `Lattice`. iOS deployment target stays 16.0.
 
 ## Layering
 
-- `Sources/AstraCore/` — pure, testable logic compiled into BOTH the app target
-  (via Xcode) and the `AstraCoreCheck` SwiftPM target (via `swift run`). No UIKit/SwiftUI.
-  - `AstraCore.swift` — original client (nodes/login/TOTP), MonitorEngine, Bark, formatters.
-  - `LatticeModels.swift` — Codable domain models matching the server's view structs.
-  - `LatticeAPI.swift` — full typed `LatticeClient` extension for every operator endpoint.
-  - `LatticeAnalytics.swift` — FleetSummary, MetricsHistory, InventorySummary, MonitorStats, formatters.
-- `AstraApp/App/` — SwiftUI app (iOS 16+). Only compiled by Xcode (cannot build headless here).
+- `Sources/AstraCore/` — no SwiftUI. Compiled into the app target and `AstraCoreCheck`.
+  - `AstraCore.swift` — transport, login/TOTP, nodes, URL normalizers. `MonitorEngine` and `BarkClient` remain as library tests only; the app does not use them as an alerter.
+  - `LatticeModels.swift` — control-plane views, including SSH Guard posture and capability admission.
+  - `LatticeAPI.swift` — typed `LatticeClient` endpoints, including SSH Guard status, capabilities, and task cancel.
+  - `LatticeNetwork.swift` — approvals (list without plan, get-by-id, `plan_sha256`, reject, dismiss, waiting).
+  - `LatticeDeepLink.swift` — `lattice://approvals|nodes|monitors/{id}` and console path helpers.
+  - `LatticeAnalytics.swift` — fleet, inventory, monitor summaries.
+- `AstraApp/App/` — SwiftUI. Inbox / Fleet / More, hash-bound Review sheet, Face ID intent confirm.
+
+## Approval contract
+
+- List: `GET /api/network/approvals` omits `plan` unless `include=plan`. Every row has `plan_sha256`.
+- Get: `GET /api/network/approvals?id=` returns `{"approval":...}` with the plan body.
+- Approve: `POST /api/network/approvals/approve` `{approval_id, queue_apply, plan_sha256}` of the reviewed body.
+- Reject: `POST /api/network/approvals/reject` `{approval_id}`.
+- Dismiss: `POST /api/network/approvals/dismiss` `{approval_id, note}`.
+- Waiting is on listing and get-by-id. After approve, reload by id.
+- Inbox is human-pending only (skip `singbox-linemeta` with actor `lattice-server` or `system`).
+- If get-by-id cannot be decoded, show companion-behind and disable approve.
+
+## App shell
+
+1. Inbox: Plans + Attention + quiet-since. Review sheet loads by id, shows the proof line, hashes the on-screen plan, Face ID for approve/reject.
+2. Fleet: honesty words, compact map, node glance (facts, SSH Guard read, capabilities, waiting, Open on web). No enroll QR as a primary job; no disable/rotate on glance.
+3. More: audit, tasks, inventory, monitors, logs, network read, notify channels, account, settings, About, Open console.
+
+Deep links: custom URL scheme `lattice://`. Universal Links wait for a signed build.
+
+## Alerting
+
+Server notify is the alerter. The app does not send Bark. `BGAppRefresh` refreshes the Inbox badge only.
 
 ## Verification
 
-`swift run --scratch-path .build AstraCoreCheck` builds AstraCore and runs the regression
-suite (decoding, request building, auth/CSRF, analytics). This is the CI-able anchor since the
-full iOS app needs Xcode + a device. UI is verified by inspection + an iOS-API review pass.
+```sh
+swift run --scratch-path .build AstraCoreCheck
+xcodebuild -project Astra.xcodeproj -scheme Astra \
+  -sdk iphonesimulator -configuration Debug \
+  -destination 'generic/platform=iOS Simulator' \
+  -derivedDataPath DerivedData/ci \
+  CODE_SIGNING_ALLOWED=NO build
+```
 
-## Server API coverage (operator surface)
-
-Implemented in AstraCore (`LatticeClient`):
-
-- Identity: `GET /api/me`, `GET /api/version`
-- Nodes: `GET /api/nodes`, disable/enable, rotate-token, enroll-token, geo get/set/resolve
-- Tokens: list / create / revoke
-- Machine inventory: list / create / update / delete / renew / run-reminders
-- Monitors: list / create / delete / results
-- Notify: channels list/delete, rules list/delete, test
-- Audit: query (paged) + chain verify
-- Tasks: list tasks + task-results
-- Logs: sources, query (paged), stats
-- Network & security (read-only + gated approve): netpolicy list, netpolicy graph,
-  nft baseline inputs, tunnels, approvals; approve sends `plan_sha256` (SHA-256 of
-  the reviewed plan, computed via `PlanHasher`/CryptoKit) so a changed plan is rejected.
-
-Deliberately deferred (operator-heavy, poor phone fit) — read-only or later:
-dns/ddns/geo-routing, proxy/subscription, storage/kv/workers/static, plugins,
-OIDC provider admin, 2FA enroll/disable. Network *authoring* (create policy, plan
-nft/wireguard, create tunnels) also stays web-only; the phone only reads + approves.
-
-## Key server contract notes
-
-- No success envelope; values encoded directly. Lists are bare arrays except where wrapped
-  (`{"rules":[]}`, `{"sources":[]}`, `{"stats":[]}`, `{"results":[]}`, `{"fired":[]}`, audit-with-params `{events,total,limit,offset}`).
-- POST bodies are strict (`DisallowUnknownFields`); request payload structs match server structs exactly.
-- Error envelope `{"error":{code,message,request_id}}`; auth via bearer OR `lattice_session` cookie + `X-Lattice-CSRF`.
-- Approval views expose `stale`/`stale_code`; stale approvals remain inspectable but mobile must not offer approve actions. Re-plan stays on the Web dashboard.
-- Secret-free views: machines expose `has_console_url`/`has_detail_url` (not URLs); tasks expose `script_sha256`/`script_size_bytes`; notify channels expose `config_keys`.
-
-## UI structure (v2)
-
-TabView: Overview · Nodes · Monitors · Inventory · More
-- Overview: fleet health ring, stat grid, mini fleet map, cost summary, critical nodes, recent activity.
-- Nodes: searchable list → NodeDetail (live metric charts, host facts, network, geo, actions, enroll QR).
-- Monitors: uptime/latency list → results chart; create/delete.
-- Inventory: machines, monthly cost, renewals due → detail/renew/edit.
-- More: Activity (audit + local events + chain verify), Account (identity/scopes/tokens/version), Logs, Tasks, Settings.
-
-## Status
-
-- [x] Core models + API client + analytics + tests (`AstraCoreCheck` green)
-- [x] Design system + 5-tab app shell
-- [x] Feature screens (Overview, Nodes+detail+enroll/QR, Monitors, Inventory, Activity, Account, Notifications, Logs, Tasks, Settings, About)
-- [x] pbxproj registration of all new files (3 core + 13 app)
-- [x] Full iOS app compiles: `xcodebuild ... -sdk iphonesimulator` → **BUILD SUCCEEDED**
-- [x] Docs/README refresh
-
-## Verified
-
-- `swift run --scratch-path .build AstraCoreCheck` → "AstraCoreCheck passed" (9 test groups incl. new API-client + analytics tests).
-- `xcodebuild -project Astra.xcodeproj -scheme Astra -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO build` → BUILD SUCCEEDED (arm64 + x86_64, Swift 6 strict concurrency).
-- Device install + live API + Bark + background refresh still require manual on-device verification (signing/permissions).
+Device login, Face ID cancel, and a Bark tap that opens `lattice://approvals/{id}` stay manual. Do not claim background alerting from this app.

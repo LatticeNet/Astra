@@ -1,103 +1,46 @@
 import SwiftUI
 
-/// Activity surface pushed inside MoreHub's NavigationStack. Switches between the
-/// server-side authorization **Audit** trail and the locally-recorded monitor
-/// **Alerts** feed. Deliberately *not* wrapped in its own NavigationStack.
+/// Server authorization audit trail. Local MonitorEngine alerts are retired;
+/// always-on alerting is the Lattice notify channel.
 struct ActivityView: View {
     @EnvironmentObject private var model: DashboardModel
 
-    private enum Mode: String, CaseIterable, Identifiable {
-        case audit = "Audit"
-        case alerts = "Alerts"
-        var id: String { rawValue }
-    }
-
-    @State private var mode: Mode = .audit
-
     var body: some View {
         List {
-            Section {
-                Picker("View", selection: $mode) {
-                    ForEach(Mode.allCases) { mode in
-                        Text(mode.rawValue).tag(mode)
-                    }
+            if model.isLoading("audit") || model.error(for: "audit") != nil {
+                Section {
+                    InlineStatusView(isLoading: model.isLoading("audit"), error: model.error(for: "audit"))
                 }
-                .pickerStyle(.segmented)
-                .listRowInsets(EdgeInsets(top: 6, leading: 0, bottom: 6, trailing: 0))
-                .listRowBackground(Color.clear)
             }
 
-            switch mode {
-            case .audit:
-                auditContent
-            case .alerts:
-                alertsContent
+            if model.auditEvents.isEmpty {
+                if !model.isLoading("audit") {
+                    Section {
+                        AstraEmptyStateView(
+                            title: "No audit events",
+                            systemImage: "checklist",
+                            message: model.configured
+                                ? "Authorization decisions made against your Lattice control plane will appear here."
+                                : "Connect to Lattice in More → Settings to load the audit trail."
+                        )
+                    }
+                }
+            } else {
+                Section {
+                    ForEach(model.auditEvents) { event in
+                        AuditEventRow(event: event)
+                    }
+                } header: {
+                    Text("\(model.auditEvents.count) decisions")
+                }
             }
         }
         .listStyle(.insetGrouped)
-        .navigationTitle("Activity")
+        .navigationTitle("Audit")
         .task { if model.configured { await model.loadAudit() } }
         .refreshable { await model.loadAudit() }
     }
-
-    // MARK: - Audit
-
-    @ViewBuilder
-    private var auditContent: some View {
-        if model.isLoading("audit") || model.error(for: "audit") != nil {
-            Section {
-                InlineStatusView(isLoading: model.isLoading("audit"), error: model.error(for: "audit"))
-            }
-        }
-
-        if model.auditEvents.isEmpty {
-            if !model.isLoading("audit") {
-                Section {
-                    AstraEmptyStateView(
-                        title: "No audit events",
-                        systemImage: "checklist",
-                        message: model.configured
-                            ? "Authorization decisions made against your Lattice control plane will appear here."
-                            : "Connect to Lattice in More → Settings to load the audit trail."
-                    )
-                }
-            }
-        } else {
-            Section {
-                ForEach(model.auditEvents) { event in
-                    AuditEventRow(event: event)
-                }
-            } header: {
-                Text("\(model.auditEvents.count) decisions")
-            }
-        }
-    }
-
-    // MARK: - Alerts
-
-    @ViewBuilder
-    private var alertsContent: some View {
-        if model.events.isEmpty {
-            Section {
-                AstraEmptyStateView(
-                    title: "No alerts yet",
-                    systemImage: "bell.slash",
-                    message: "Threshold breaches and recoveries detected while monitoring will show up here."
-                )
-            }
-        } else {
-            Section {
-                ForEach(model.events, id: \.timelineID) { event in
-                    EventRow(event: event)
-                }
-            } header: {
-                Text("\(model.events.count) alerts")
-            }
-        }
-    }
 }
-
-// MARK: - Audit event row
 
 struct AuditEventRow: View {
     var event: AuditEvent

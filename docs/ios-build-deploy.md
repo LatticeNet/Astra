@@ -14,7 +14,7 @@ iOS 客户端需要能访问 Lattice control plane。
   - `POST /api/login/totp`
   - `GET /api/nodes`
 - 你有一种认证方式：
-  - Personal Access Token，权限包含 `node:read`。
+  - Personal Access Token with `network:apply`, `node:read`, `audit:read`, and `task:read`.
   - 或可登录的 username/password。
 - 如果使用 HTTPS，证书必须被 iOS 信任。
 - 如果使用局域网 HTTP，例如 `http://192.168.1.20:8088`，需要确保 iPhone 和 Mac 在同一网络，且服务没有被防火墙挡住。
@@ -233,9 +233,9 @@ ASTRA_TEAM_ID=ABCDE12345 \
 
 - 固定 Apple Team 和 Bundle Identifier，避免每次重装都像新 App。
 - 如果要脱离 Mac 长期安装，优先使用 Apple Developer Program 的签名能力；免费个人签名适合短期测试，不适合长期可用。
-- Lattice 和 Bark 尽量使用稳定 HTTPS 域名，或稳定 VPN 入口，避免手机离开家用 Wi-Fi 后不可访问。
-- App 内优先保存低权限 `node:read` PAT；用户名密码 session 更适合临时登录，不适合作为长期机器凭据。
-- iOS 后台刷新是 best-effort。不能漏报的告警应放在 Lattice server、Bark server、Prometheus/Alertmanager 或其他常驻服务中。
+- Lattice should use a stable HTTPS name or VPN entry so the phone can reach it off home Wi-Fi.
+- Prefer a dedicated PAT with `network:apply`, `node:read`, `audit:read`, and `task:read`. Do not grant `notify:send`. Username/password session is a fallback.
+- iOS background refresh is best-effort and only updates the Inbox badge. Always-on alerting stays on the Lattice server notify channel (Bark on the server, or another resident alerter).
 - 每次升级 Xcode、iOS 或 Lattice API 后，先跑 `./scripts/check-local.sh`，再做一次真机 Run。
 
 ## 9. 首次打开 App
@@ -256,12 +256,12 @@ https://lattice.example.com/api
 https://lattice.example.com/api/nodes
 ```
 
-App 会归一化为正确 API base，并为 Bark tap-through 生成 dashboard URL。
+App 会归一化为正确 API base。Dashboard 点击 URL 由服务端 notify / Bark 通道携带，不由本 App 发送。
 
 ### 认证方式 A: PAT
 
 1. 在 Lattice control plane 创建 PAT。
-2. 权限至少包含 `node:read`。
+2. 权限至少包含 `network:apply`, `node:read`, `audit:read`, `task:read`。不要授予 `notify:send`。
 3. 在 Settings 的 Personal access token 输入框粘贴。
 4. 点 `Save and refresh`。
 5. 点 `Test Lattice connection`。
@@ -286,49 +286,19 @@ PAT 会存入 Keychain。
 
 把对应 secret 输入框清空，再点 `Save and refresh`，会删除 Keychain item。
 
-## 10. 配置 Bark
+## 10. Alerting is not configured in this app
 
-默认：
+This app does not send Bark. Configure Bark (or another channel) on the Lattice server notify surface. A tap URL should be `lattice://approvals/{id}` (or the console path until a signed Universal Link exists).
 
-```text
-Server: http://bark.roobli.org
-Group: Lattice
-Sound: minuet
-Level: Time Sensitive
-```
+## 11. Polling and background badge
 
-填入 Bark device key。
+Settings can adjust:
 
-如果粘贴完整 Bark URL：
+- Poll interval (foreground fleet refresh).
+- Offline timeout (fallback honesty).
+- Background Inbox badge refresh (the system decides if it runs).
 
-```text
-https://api.day.app/YOUR_KEY/body
-http://bark.example:7001/YOUR_KEY/
-```
-
-App 会自动提取 `YOUR_KEY`。
-
-点：
-
-```text
-Send test notification
-```
-
-手机收到测试通知后，再开启轮询。
-
-## 11. 轮询和阈值
-
-Settings 中可以调整：
-
-- Poll interval。
-- Offline timeout。
-- Notification cooldown。
-- CPU threshold。
-- Memory threshold。
-- Disk threshold。
-- Background refresh 开关。
-
-设置位于 `More → Settings`。Overview 页显示 Fleet 概览，Nodes 页显示节点状态，本地健康事件历史在 `More → Activity`。
+Settings live under More. Inbox is the home tab. Fleet lists nodes with honesty words. Audit is under More, not a local MonitorEngine alert feed.
 
 ## 12. 后台刷新现实情况
 
@@ -403,21 +373,15 @@ Settings -> General -> VPN & Device Management
 
 1. iPhone Safari 能不能打开 Lattice server URL。
 2. URL 是否带正确协议，HTTP/HTTPS 是否匹配。
-3. PAT 是否有 `node:read`。
+3. PAT 是否有 `network:apply`, `node:read`, `audit:read`, `task:read`。
 4. session 是否过期，重新登录。
 5. HTTPS 证书是否被 iOS 信任。
 6. 反向代理是否把 `/api/nodes` 转发到 Lattice server。
 
-### 收不到 Bark 通知
+### 收不到计划推送
 
-检查：
-
-1. Bark device key 是否正确。
-2. Bark server URL 是否正确。
-3. 点 `Send test notification` 是否成功。
-4. iPhone 系统通知权限是否允许。
-5. Bark server 是否返回 `code: 200`。
+This app does not send Bark. Check the Lattice server notify channel, that the event is not auto-approved linemeta, and that the tap URL is `lattice://approvals/{id}`.
 
 ### 后台没有按固定频率刷新
 
-这是 iOS 限制，不是 App bug。`BGAppRefreshTask` 只能 best-effort。需要可靠告警时，把告警放到常驻服务端。
+This is an iOS limit. `BGAppRefreshTask` is best-effort and only refreshes the Inbox badge. Put always-on alerting on the Lattice server.

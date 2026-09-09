@@ -1,241 +1,274 @@
 import SwiftUI
-import Charts
 
-/// Rich detail for a single node. Bound to the node id so it always reflects the
-/// latest poll snapshot from the model rather than a stale captured value.
+/// Glance for a single node: honesty, last report, SSH Guard posture, capability
+/// admission, waiting tasks. Host mutation stays on the web console.
 struct NodeDetailView: View {
     @EnvironmentObject private var model: DashboardModel
     var nodeID: String
 
-    @State private var showRotateConfirm = false
-    @State private var tokenResult: NodeTokenResponse?
-    @State private var working = false
+    @State private var cancellingTaskID: String?
 
     private var node: LatticeNode? { model.node(withID: nodeID) }
+    private var glanceKey: String { "glance.\(nodeID)" }
 
     var body: some View {
-        ScrollView {
+        List {
             if let node {
-                VStack(spacing: 16) {
-                    header(node)
-                    liveCharts(node)
-                    quickFacts(node)
-                    networkCard(node)
-                    hostFactsCard(node)
-                    if let geo = node.geo { geoCard(geo) }
-                    actionsCard(node)
+                headerSection(node)
+                factsSection(node)
+                sshGuardSection
+                capabilitiesSection
+                tasksSection(node)
+                if let error = model.error(for: glanceKey) {
+                    Section {
+                        Label(error, systemImage: "exclamationmark.triangle.fill")
+                            .font(.footnote)
+                            .foregroundStyle(Theme.warning)
+                    }
                 }
-                .padding(16)
+                webSection
             } else {
-                AstraEmptyStateView(title: "Node unavailable", systemImage: "questionmark.folder", message: "This node is no longer in the latest snapshot.")
-                    .padding(.top, 60)
+                Section {
+                    AstraEmptyStateView(
+                        title: "Node unavailable",
+                        systemImage: "questionmark.folder",
+                        message: "This node is no longer in the latest snapshot."
+                    )
+                    .listRowBackground(Color.clear)
+                }
             }
         }
+        .listStyle(.insetGrouped)
         .navigationTitle(node?.displayName ?? nodeID)
         .navigationBarTitleDisplayMode(.inline)
-        .refreshable { await model.refresh() }
-        .sheet(item: $tokenResult) { result in
-            TokenRevealSheet(title: "New node token", token: result.token, command: result.command)
+        .refreshable {
+            await model.refresh()
+            await model.loadNodeGlance(nodeID: nodeID)
         }
-        .confirmationDialog("Rotate this node's token?", isPresented: $showRotateConfirm, titleVisibility: .visible) {
-            Button("Rotate token", role: .destructive) {
-                Task {
-                    working = true
-                    tokenResult = await model.rotateNodeToken(nodeID: nodeID)
-                    working = false
-                }
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("The existing agent token stops working immediately. You must update the agent with the new token.")
+        .task {
+            await model.loadNodeGlance(nodeID: nodeID)
         }
     }
 
-    // MARK: - Sections
-
-    private func header(_ node: LatticeNode) -> some View {
-        let offline = node.isOffline(timeout: model.settings.offlineTimeout)
-        return VStack(alignment: .leading, spacing: 12) {
+    private func headerSection(_ node: LatticeNode) -> some View {
+        let word = node.honestyWord
+        return Section {
             HStack {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(node.displayName).font(.title2.weight(.bold))
+                    Text(node.displayName).font(.headline)
                     Text(node.id).font(.caption.monospaced()).foregroundStyle(.secondary)
                 }
                 Spacer()
                 StatusPill(
-                    text: node.disabled ? "Disabled" : (offline ? "Offline" : "Online"),
-                    systemImage: node.disabled ? "nosign" : (offline ? "xmark.circle.fill" : "checkmark.circle.fill"),
-                    color: node.disabled ? Theme.disabled : (offline ? Theme.offline : Theme.online)
+                    text: word,
+                    systemImage: model.honestyImage(word),
+                    color: Theme.honestyColor(word)
                 )
             }
+            if !node.statusReason.isEmpty {
+                Text(node.statusReason)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
             HStack(spacing: 18) {
-                miniStat("CPU", PercentFormatter.percent(node.metrics.cpuPercent), Theme.usageColor(fraction: node.metrics.cpuPercent / 100))
-                miniStat("Mem", PercentFormatter.fraction(node.memoryUsedFraction), Theme.usageColor(fraction: node.memoryUsedFraction ?? 0))
-                miniStat("Disk", PercentFormatter.fraction(node.diskUsedFraction), Theme.usageColor(fraction: node.diskUsedFraction ?? 0))
-                if node.metrics.uptimeSeconds > 0 {
-                    miniStat("Up", UptimeFormatter.string(seconds: node.metrics.uptimeSeconds), Theme.accent)
-                }
+                miniStat("CPU", PercentFormatter.percent(node.metrics.cpuPercent))
+                miniStat("Mem", PercentFormatter.fraction(node.memoryUsedFraction))
+                miniStat("Disk", PercentFormatter.fraction(node.diskUsedFraction))
             }
         }
-        .latticeCard(padding: 18)
     }
 
-    private func miniStat(_ title: String, _ value: String, _ color: Color) -> some View {
+    private func miniStat(_ title: String, _ value: String) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(title).font(.caption2).foregroundStyle(.secondary)
-            Text(value).font(.system(.callout, design: .rounded).weight(.semibold)).foregroundStyle(color)
+            Text(value).font(.system(.callout, design: .rounded).weight(.semibold))
         }
     }
 
-    private func liveCharts(_ node: LatticeNode) -> some View {
-        let samples = model.samples(forNode: node.id)
-        return VStack(alignment: .leading, spacing: 14) {
-            SectionHeaderView("Live trends", systemImage: "chart.xyaxis.line", accessory: samples.count >= 2 ? "\(samples.count) pts" : nil)
-            chartRow("CPU", color: Theme.warning) { Sparkline(samples: samples, keyPath: \.cpu.normalizedToHundred, color: Theme.warning) }
-            chartRow("Memory", color: Theme.secondary) { Sparkline(samples: samples, keyPath: \.memory, color: Theme.secondary) }
-            chartRow("Disk", color: Theme.violet) { Sparkline(samples: samples, keyPath: \.disk, color: Theme.violet) }
-        }
-        .latticeCard()
-    }
-
-    private func chartRow<Content: View>(_ title: String, color: Color, @ViewBuilder content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(title).font(.caption).foregroundStyle(.secondary)
-            content()
-        }
-    }
-
-    private func quickFacts(_ node: LatticeNode) -> some View {
-        VStack(spacing: 0) {
-            DetailRow(label: "Load (1/5/15m)", value: loadAverageText(node.metrics))
-            Divider()
-            DetailRow(label: "Memory", value: "\(ByteFormatter.bytes(node.metrics.memoryUsed)) / \(ByteFormatter.bytes(memoryTotal(node)))")
-            Divider()
-            DetailRow(label: "Disk", value: "\(ByteFormatter.bytes(node.metrics.diskUsed)) / \(ByteFormatter.bytes(node.metrics.diskTotal))")
-            Divider()
-            DetailRow(label: "Net ↓ / ↑", value: networkText(node.metrics))
+    private func factsSection(_ node: LatticeNode) -> some View {
+        Section {
             if let lastSeen = node.lastSeen {
-                Divider()
-                DetailRow(label: "Last seen", value: RelativeDateFormatter.string(from: lastSeen))
+                DetailRow(label: "Last report", value: RelativeDateFormatter.string(from: lastSeen))
+            } else {
+                DetailRow(label: "Last report", value: "never")
             }
-        }
-        .latticeCard()
-    }
-
-    private func loadAverageText(_ metrics: LatticeMetrics) -> String {
-        String(format: "%.2f / %.2f / %.2f", metrics.load1, metrics.load5, metrics.load15)
-    }
-
-    private func networkText(_ metrics: LatticeMetrics) -> String {
-        if metrics.netRxSpeed > 0 || metrics.netTxSpeed > 0 {
-            return "\(ByteFormatter.speed(metrics.netRxSpeed)) / \(ByteFormatter.speed(metrics.netTxSpeed))"
-        }
-        return "\(ByteFormatter.bytes(metrics.netRxBytes)) / \(ByteFormatter.bytes(metrics.netTxBytes))"
-    }
-
-    private func networkCard(_ node: LatticeNode) -> some View {
-        VStack(spacing: 0) {
-            SectionHeaderView("Network", systemImage: "network").padding(.bottom, 4)
-            group(rows: [
-                node.publicIP.map { ("Public IP", $0) },
-                node.publicIPv6.map { ("Public IPv6", $0) },
-                node.wireGuardIP.map { ("WireGuard IP", $0) },
-                node.wireGuardEndpoint.map { ("WG endpoint", $0) },
-                node.wireGuardPort.map { ("WG port", String($0)) },
-                node.agentVersion.map { ("Agent", $0) },
-                node.role.map { ("Role", $0) }
-            ])
-        }
-        .latticeCard()
-    }
-
-    private func hostFactsCard(_ node: LatticeNode) -> some View {
-        let facts = node.hostFacts
-        return VStack(spacing: 0) {
-            SectionHeaderView("Host", systemImage: "cpu").padding(.bottom, 4)
-            group(rows: [
-                facts.hostname.map { ("Hostname", $0) },
-                facts.os.map { ("OS", $0) },
-                facts.platform.map { p in ("Platform", "\(p) \(facts.platformVersion ?? "")".trimmingCharacters(in: .whitespaces)) },
-                facts.kernelVersion.map { ("Kernel", $0) },
-                facts.arch.map { ("Arch", $0) },
-                facts.cpuModel.map { ("CPU", "\($0) (\(facts.cpuCores) cores)") },
-                facts.memoryTotal > 0 ? ("Memory", ByteFormatter.bytes(facts.memoryTotal)) : nil,
-                facts.virtualization.map { ("Virtualization", $0) }
-            ])
-        }
-        .latticeCard()
-    }
-
-    private func geoCard(_ geo: LatticeGeo) -> some View {
-        VStack(spacing: 0) {
-            SectionHeaderView("Location", systemImage: "mappin.and.ellipse").padding(.bottom, 4)
-            group(rows: [
-                geo.city.map { ("City", $0) },
-                geo.region.map { ("Region", $0) },
-                geo.country.map { ("Country", $0) },
-                (geo.lat != nil && geo.lon != nil) ? ("Coordinates", String(format: "%.3f, %.3f", geo.lat ?? 0, geo.lon ?? 0)) : nil
-            ])
-        }
-        .latticeCard()
-    }
-
-    private func actionsCard(_ node: LatticeNode) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            SectionHeaderView("Actions", systemImage: "wrench.and.screwdriver.fill")
-            Toggle(isOn: Binding(
-                get: { !node.disabled },
-                set: { enabled in
-                    Task { await model.setNodeDisabled(nodeID: node.id, disabled: !enabled) }
-                }
-            )) {
-                Label("Enabled in Lattice", systemImage: "power")
+            if let since = node.statusSince {
+                DetailRow(label: "Status since", value: RelativeDateFormatter.string(from: since))
             }
-            .tint(Theme.online)
-            .disabled(working)
-
-            Button {
-                showRotateConfirm = true
-            } label: {
-                Label("Rotate agent token", systemImage: "arrow.triangle.2.circlepath")
-                    .frame(maxWidth: .infinity)
+            DetailRow(label: "Agent", value: node.agentVersion ?? "unknown", monospaced: true)
+            if let role = node.role, !role.isEmpty {
+                DetailRow(label: "Role", value: role)
             }
-            .buttonStyle(.bordered)
-            .tint(Theme.warning)
-            .disabled(working)
-
-            if let url = model.dashboardURL {
-                Link(destination: url) {
-                    Label("Open in Lattice dashboard", systemImage: "safari")
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.bordered)
+            if let ip = node.publicIP, !ip.isEmpty {
+                DetailRow(label: "Public IP", value: ip, monospaced: true, copyable: true)
             }
+            if let ip = node.wireGuardIP, !ip.isEmpty {
+                DetailRow(label: "WireGuard IP", value: ip, monospaced: true, copyable: true)
+            }
+            DetailRow(label: "Load (1/5/15m)", value: String(format: "%.2f / %.2f / %.2f", node.metrics.load1, node.metrics.load5, node.metrics.load15))
+            if let hostname = node.hostFacts.hostname, !hostname.isEmpty {
+                DetailRow(label: "Hostname", value: hostname, monospaced: true)
+            }
+            if let platform = node.hostFacts.platform ?? node.hostFacts.os {
+                DetailRow(label: "Platform", value: "\(platform) \(node.hostFacts.platformVersion ?? "")".trimmingCharacters(in: .whitespaces))
+            }
+        } header: {
+            Text("Facts")
         }
-        .latticeCard()
-    }
-
-    // MARK: - Helpers
-
-    private func memoryTotal(_ node: LatticeNode) -> UInt64 {
-        node.metrics.memoryTotal > 0 ? node.metrics.memoryTotal : node.hostFacts.memoryTotal
     }
 
     @ViewBuilder
-    private func group(rows: [(String, String)?]) -> some View {
-        let visible = rows.compactMap { $0 }
-        if visible.isEmpty {
-            Text("No data").font(.footnote).foregroundStyle(.tertiary)
-        } else {
-            ForEach(Array(visible.enumerated()), id: \.offset) { index, row in
-                if index > 0 { Divider() }
-                DetailRow(label: row.0, value: row.1, monospaced: true, copyable: true)
+    private var sshGuardSection: some View {
+        let status = model.sshGuardByNode[nodeID]
+        Section {
+            if model.isLoading(glanceKey), status == nil {
+                InlineStatusView(isLoading: true, error: nil)
+            } else if let status {
+                DetailRow(label: "Enrolled", value: status.enrolled ? "yes" : "no")
+                DetailRow(label: "Posture", value: status.posture.state.isEmpty ? "unknown" : status.posture.state)
+                DetailRow(label: "Key access", value: status.posture.keyAccess ? "yes" : "no")
+                if !status.posture.reason.isEmpty {
+                    Text(status.posture.reason)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+                if let sshd = status.sshd {
+                    DetailRow(label: "sshd ports", value: sshd.ports.isEmpty ? "-" : sshd.ports.map(String.init).joined(separator: ", "))
+                    DetailRow(label: "Password auth", value: sshd.passwordAuthentication ? "on" : "off")
+                    DetailRow(label: "Pubkey auth", value: sshd.pubkeyAuthentication ? "on" : "off")
+                    if !sshd.permitRootLogin.isEmpty {
+                        DetailRow(label: "PermitRootLogin", value: sshd.permitRootLogin)
+                    }
+                } else if !status.sshdNote.isEmpty {
+                    Text(status.sshdNote)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+                DetailRow(label: "Knock gate", value: status.knockGate ? "armed" : "off")
+                if !status.stage.isEmpty {
+                    DetailRow(label: "Stage", value: status.stage)
+                }
+                Text("Knock reveal and arm/confirm stay on the web console. Confirm is a second plan, not a duplicate of arm.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                if !status.actionableApprovalID.isEmpty {
+                    Button("Open related plan") {
+                        model.openReview(id: status.actionableApprovalID)
+                    }
+                }
+            } else {
+                Text("SSH Guard status is not available for this node.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+        } header: {
+            Text("SSH Guard")
+        }
+    }
+
+    @ViewBuilder
+    private var capabilitiesSection: some View {
+        let caps = model.capabilitiesByNode[nodeID] ?? []
+        Section {
+            if caps.isEmpty {
+                Text("No capability admission facts loaded.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(caps) { cap in
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack {
+                            Text(cap.capability)
+                                .font(.subheadline.monospaced())
+                            Spacer()
+                            StatusPill(
+                                text: cap.allowed ? "allowed" : "denied",
+                                systemImage: cap.allowed ? "checkmark.circle.fill" : "xmark.circle.fill",
+                                color: cap.allowed ? Theme.online : Theme.offline
+                            )
+                        }
+                        if !cap.reason.isEmpty {
+                            Text(cap.reason)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        Text("\(cap.source.isEmpty ? "policy" : cap.source)\(cap.enforced ? " · enforced" : "")")
+                            .font(.caption2)
+                            .foregroundStyle(.tertiary)
+                    }
+                    .padding(.vertical, 2)
+                }
+            }
+        } header: {
+            Text("Capabilities")
+        }
+    }
+
+    private func tasksSection(_ node: LatticeNode) -> some View {
+        let related = model.tasks.filter { task in
+            task.targets.contains(node.id) || (!task.leasedBy.isEmpty && task.leasedBy == node.id)
+        }
+        let waiting = model.waitingApprovals.filter { $0.nodeID == node.id }
+        return Section {
+            if related.isEmpty && waiting.isEmpty {
+                Text("No waiting tasks.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(waiting) { approval in
+                    Button {
+                        model.openReview(id: approval.id)
+                    } label: {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(approval.action.isEmpty ? approval.plugin : approval.action)
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(.primary)
+                            Text(approval.waiting?.reason ?? "waiting")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+                ForEach(related) { task in
+                    VStack(alignment: .leading, spacing: 6) {
+                        TaskRow(task: task)
+                        if isCancellable(task) {
+                            Button("Cancel task") {
+                                Task {
+                                    cancellingTaskID = task.id
+                                    _ = await model.cancelWaitingTask(id: task.id)
+                                    cancellingTaskID = nil
+                                    await model.loadNodeGlance(nodeID: nodeID)
+                                }
+                            }
+                            .disabled(cancellingTaskID != nil)
+                        }
+                    }
+                }
+            }
+        } header: {
+            Text("Waiting")
+        } footer: {
+            Text("Script reveal and rerun stay on the web console.")
+        }
+    }
+
+    private var webSection: some View {
+        Section {
+            if let url = model.consoleURL(forNode: nodeID) {
+                Link(destination: url) {
+                    Label("Open on web", systemImage: "safari")
+                }
             }
         }
     }
-}
 
-private extension Double {
-    /// MetricSample.cpu is already 0...100; the Sparkline expects 0...1.
-    var normalizedToHundred: Double { self / 100 }
+    private func isCancellable(_ task: LatticeTask) -> Bool {
+        switch task.status.lowercased() {
+        case "queued", "leased", "running", "pending":
+            return true
+        default:
+            return false
+        }
+    }
 }
