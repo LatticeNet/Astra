@@ -884,6 +884,14 @@ public struct NodeGeoInfo: Codable, Equatable, Hashable, Sendable {
         source = try container.decodeIfPresent(String.self, forKey: .source) ?? ""
         updatedAt = try DateValue.decodeIfPresent(from: container, forKey: .updatedAt)
     }
+
+    /// Finite, in-range, and not the (0, 0) empty sentinel MapKit rejects as a region.
+    public var isMapCoordinate: Bool {
+        lat.isFinite && lon.isFinite
+            && lat >= -90 && lat <= 90
+            && lon >= -180 && lon <= 180
+            && !(lat == 0 && lon == 0)
+    }
 }
 
 /// `nodeGeoView` returned by `GET /api/nodes/geo`: a node plus its map metadata.
@@ -913,9 +921,10 @@ public struct NodeGeoView: Identifiable, Codable, Equatable, Hashable, Sendable 
     public var displayName: String { name.isEmpty ? id : name }
 
     /// Whether this node has a usable map coordinate.
+    /// NaN compares unequal to 0, so a raw `lat != 0` would treat garbage as a pin.
     public var hasCoordinate: Bool {
         guard let geo else { return false }
-        return geo.lat != 0 || geo.lon != 0
+        return geo.isMapCoordinate
     }
 
     enum CodingKeys: String, CodingKey {
