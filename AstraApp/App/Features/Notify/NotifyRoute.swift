@@ -69,7 +69,7 @@ extension NotifyRoute: DemoHooks {
     }
 
     private static var demoRules: [NotifyRule] {
-        NotifyFixtures.rules.map { NotifyRule(id: $0.id, name: $0.name, eventTypes: $0.events, channelIDs: $0.channels, enabled: $0.enabled) }
+        NotifyFixtures.rules.map { NotifyRule(id: $0.id, name: $0.name, eventTypes: $0.events, channelIDs: $0.channels, enabled: $0.enabled, fallbackChannelID: $0.fallback) }
     }
 
     private static func demoChannel(_ id: String) -> NotifyChannel? {

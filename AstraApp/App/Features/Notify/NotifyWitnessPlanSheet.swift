@@ -204,7 +204,9 @@ struct NotifyWitnessPlanSheet: View {
     private func continueBar(_ status: NotifyWitnessStatus) -> some View {
         let problems = problems(status)
         let missing = store.witnessMissing
-        let note: String? = missing.map { "Needs \($0)" } ?? (network.isSatisfied ? problems.first?.sentence : "No connection")
+        // The custom-settings refusal is already spelled out above the form.
+        let first = problems.first.map { $0 == .customSettings ? "Change this witness on the web." : $0.sentence }
+        let note: String? = missing.map { "Needs \($0)" } ?? (network.isSatisfied ? first : "No connection")
         return VStack(spacing: Spacing.s) {
             if let note {
                 Text(note)
