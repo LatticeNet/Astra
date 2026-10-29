@@ -150,7 +150,7 @@ extension SharedFixtures {
         }
         if let request {
             // The server skips nodes the caller lacks sshguard:read and network:plan on.
-            let scopes = DemoTransport.scopes(for: request.identity, scenario: request.scenario)
+            let scopes = request.scopes
             rows = rows.filter {
                 let id = DemoWorld.node($0.node).id
                 return scopes.allows("sshguard:read", nodeID: id) && scopes.allows("network:plan", nodeID: id)

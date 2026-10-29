@@ -23,7 +23,7 @@ public enum SharedFixtures {
     static var identityRoutes: [DemoRoute] {
         [
             DemoRoute(pathPattern: "/api/me", body: me(identity: .pat, scenario: .normal).text, emptyBody: me(identity: .pat, scenario: .normal).text) { request, _ in
-                .json(me(identity: request.identity, scenario: request.scenario).text)
+                .json(me(identity: request.identity, scenario: request.scenario, token: request.token).text)
             },
             DemoRoute(pathPattern: "/api/version", body: version.text, emptyBody: version.text),
             DemoRoute(pathPattern: "/api/health", body: #"{"status":"ok"}"#, emptyBody: #"{"status":"ok"}"#),
@@ -33,8 +33,8 @@ public enum SharedFixtures {
 
     /// `/api/me` for a demo identity: the Operator preset on the token
     /// (Triage in Limited token) and `*` on the session.
-    static func me(identity: DemoIdentity, scenario: DemoScenario) -> DemoJSON {
-        let scopeSet = DemoTransport.scopes(for: identity, scenario: scenario)
+    static func me(identity: DemoIdentity, scenario: DemoScenario, token: DemoToken? = nil) -> DemoJSON {
+        let scopeSet = DemoTransport.scopes(for: identity, scenario: scenario, token: token)
         let scopes = scopeSet.scopes
         return .object([
             "actor_id": .string(DemoWorld.actorID),

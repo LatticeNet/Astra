@@ -223,7 +223,7 @@ extension SharedFixtures {
         }
         if request.identity == .pat {
             // The server lists only what this token may read (approvalPrimaryScopeAllows).
-            let scopes = DemoTransport.scopes(for: request.identity, scenario: request.scenario)
+            let scopes = request.scopes
             rows = rows.filter { ApprovalVisibility.canList(plugin: $0.plugin, nodeID: $0.nodeID, scopes: scopes) }
         }
         if let id = request.query["id"] {

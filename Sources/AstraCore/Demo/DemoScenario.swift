@@ -1,5 +1,33 @@
 import Foundation
 
+/// The token preset `-AstraDemoToken <name>` puts on the demo PAT, whatever
+/// the scenario, so Failing, Stale, Empty or Companion behind can be shown on
+/// screens a scope gates. It overrides the token a token scenario would set.
+/// A confined token is not offered: its fixtures key on the scenario.
+public enum DemoToken: String, Sendable, Hashable, CaseIterable {
+    case triage, `operator`, root, admin
+
+    /// Parses "triage", "operator", "root" or "admin" ("full-admin" too).
+    public init?(argument: String) {
+        switch argument.lowercased() {
+        case "triage", "limited": self = .triage
+        case "operator": self = .operator
+        case "root": self = .root
+        case "admin", "full-admin", "fulladmin": self = .admin
+        default: return nil
+        }
+    }
+
+    public var scopes: ScopeSet {
+        switch self {
+        case .triage: ScopeSet(scopes: TokenPresets.triage.scopes)
+        case .operator: ScopeSet(scopes: TokenPresets.operator.scopes)
+        case .root: ScopeSet(scopes: TokenPresets.operatorPlusRoot.scopes)
+        case .admin: ScopeSet(scopes: ["*"])
+        }
+    }
+}
+
 /// The demo scenarios of section 8.6, selected with
 /// `-AstraDemoScenario <name>[:<path prefix>]` or Settings > Demo data.
 public enum DemoScenario: Sendable, Hashable {

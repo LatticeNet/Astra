@@ -78,7 +78,7 @@ public enum NotifyFixtures {
     /// The server refuses the notify read and write surface to a token with
     /// a server allowlist (`refuseConfinedNotifyRead`, `refuseConfinedFleetWrite`).
     static func confinedRefusal(_ request: DemoRequest) -> DemoResponse? {
-        guard DemoTransport.scopes(for: request.identity, scenario: request.scenario).isConfined else { return nil }
+        guard request.scopes.isConfined else { return nil }
         return .error(status: 403, code: "capability_denied", message: "notification history is fleet-wide with no node to confine it to; it requires a token without a server allowlist restriction")
     }
 

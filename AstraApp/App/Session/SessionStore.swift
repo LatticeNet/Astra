@@ -44,6 +44,8 @@ final class SessionStore {
     private(set) var serverVersion: LatticeServerVersion?
     private(set) var isDemo = false
     private(set) var demoScenario: DemoScenario = .normal
+    /// `-AstraDemoToken`: the token preset kept across scenario changes.
+    @ObservationIgnored private var demoToken: DemoToken?
     private(set) var demoClock = DemoClock()
     private(set) var demoState = DemoState()
     /// Surfaces whose responses could not be decoded, for Diagnostics.
@@ -133,6 +135,7 @@ final class SessionStore {
     /// here: it needs Face ID and is loaded the first time a reveal needs it.
     func restore(launch: LaunchOverrides) {
         if launch.demo {
+            demoToken = launch.demoToken
             enterDemo(scenario: launch.scenario ?? .normal, clock: launch.demoNow.flatMap(DemoClock.init(pinned:)) ?? DemoClock())
             return
         }
@@ -365,7 +368,7 @@ final class SessionStore {
     }
 
     private func demoClient(_ identity: DemoIdentity, kind: ClientKind, credential: LatticeCredential) -> LatticeClient {
-        let transport = DemoTransport(identity: identity, scenario: demoScenario, clock: demoClock, state: demoState)
+        let transport = DemoTransport(identity: identity, scenario: demoScenario, token: demoToken, clock: demoClock, state: demoState)
         return LatticeClient(baseURL: DemoWorld.baseURL, credential: credential, transport: DiagnosticsTransport(
             base: transport, log: diagnostics, kind: kind, isDemo: true, onStatus: statusHandler()
         ))

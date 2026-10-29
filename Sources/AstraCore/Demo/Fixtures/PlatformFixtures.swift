@@ -387,7 +387,7 @@ public enum PlatformFixtures {
     ])
 
     static func heldScopes(_ request: DemoRequest) -> ScopeSet {
-        DemoTransport.scopes(for: request.identity, scenario: request.scenario)
+        request.scopes
     }
 
     static func shareFor(_ request: DemoRequest) -> Share? {

@@ -12,14 +12,14 @@ public enum AgentUpdatesFixtures {
     public static var routes: [DemoRoute] {
         [
             DemoRoute(pathPattern: "/api/nodes/agent-updates", body: policiesBody(scopes: nil), emptyBody: #"{"policies":[]}"#) { request, _ in
-                .json(policiesBody(scopes: DemoTransport.scopes(for: request.identity, scenario: request.scenario)))
+                .json(policiesBody(scopes: request.scopes))
             }.requiring("node:read"),
             DemoRoute(pathPattern: "/api/nodes/agent-updates/releases", body: release.text, emptyBody: release.text).requiring("node:read"),
             DemoRoute(pathPattern: "/api/nodes/agent-updates/artifacts", body: artifacts.text,
                       emptyBody: #"{"artifacts":[],"stored_bytes":0,"limit_bytes":536870912,"serving_enabled":true}"#).requiring("node:read"),
             DemoRoute(pathPattern: "/api/nodes/agent-updates/mirrors", body: mirrorsBody(scopes: nil),
                       emptyBody: #"{"mirrors":[],"revision":0,"order":[],"pending":[],"health":[]}"#) { request, _ in
-                .json(mirrorsBody(scopes: DemoTransport.scopes(for: request.identity, scenario: request.scenario)))
+                .json(mirrorsBody(scopes: request.scopes))
             }.requiring("node:read"),
         ] + planRoutes
     }

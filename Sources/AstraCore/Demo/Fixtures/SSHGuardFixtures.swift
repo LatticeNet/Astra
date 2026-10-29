@@ -197,7 +197,7 @@ public enum SSHGuardFixtures {
     /// Who may plan for a node: the route wrapper checked sshguard:admin;
     /// the handler checks both scopes on the node.
     private static func nodeScopeRefusal(_ request: DemoRequest, nodeID: String, scopes needed: [String]) -> DemoResponse? {
-        let scopes = DemoTransport.scopes(for: request.identity, scenario: request.scenario)
+        let scopes = request.scopes
         for scope in needed where !scopes.allows(scope, nodeID: nodeID) {
             return .error(status: 403, code: "forbidden", message: "missing scope \(scope) for node \(nodeID)")
         }

@@ -224,6 +224,20 @@ private func checkScenarios() async throws {
     let admin = demoClient(scenario: .fullAdmin)
     try expectEqual(try await admin.fetchIdentity().scopes, ["*"], "Full administrator reports *")
     try expect(DemoScenario(argument: "full-admin") == .fullAdmin && DemoScenario.fullAdmin.argument == "full-admin", "Full administrator round-trips its launch argument")
+
+    // -AstraDemoToken keeps the scenario's behavior and swaps only the token.
+    let emptyRoot = DemoTransport(identity: .pat, scenario: .empty, token: .root, clock: pinned)
+    let emptyTerminal = try await emptyRoot.answer(DemoRequest(identity: .pat, method: "GET", path: "/api/terminal/sessions"))
+    try expectEqual(emptyTerminal.status, 200, "Empty with the root token reads terminal sessions")
+    try expect(emptyTerminal.body.contains(#""sessions":[]"#), "and serves them empty")
+    let operatorTerminal = try await DemoTransport(identity: .pat, scenario: .empty, clock: pinned)
+        .answer(DemoRequest(identity: .pat, method: "GET", path: "/api/terminal/sessions"))
+    try expectEqual(operatorTerminal.status, 403, "Empty without the override keeps the Operator token")
+    let failingAdmin = DemoTransport(identity: .pat, scenario: .failing(prefix: nil), token: .admin, clock: pinned)
+    let failingMe = try await failingAdmin.answer(DemoRequest(identity: .pat, method: "GET", path: "/api/me"))
+    try expect(failingMe.body.contains(#""scopes":["*"]"#), "Failing with the admin token reports *")
+    try expectEqual(try await failingAdmin.answer(DemoRequest(identity: .pat, method: "GET", path: "/api/incidents")).status, 503, "and still fails its routes")
+    try expect(DemoToken(argument: "full-admin") == .admin && DemoToken(argument: "confined") == nil, "the token argument parses presets and refuses confined")
     try expectEqual(try await limited.listHumanPendingApprovals().count, 0, "Triage lists no approvals")
     try expectEqual(try await limited.fetchSSHGuardStatus().count, 0, "Triage reads no SSH Guard rows")
     do {

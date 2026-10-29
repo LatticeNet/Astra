@@ -58,13 +58,13 @@ extension SharedFixtures {
             }.requiring("audit:read"),
             DemoRoute(pathPattern: "/api/notify/deliveries", body: deliveriesBody(deliveries), emptyBody: deliveriesBody([])) { request, _ in
                 // refuseConfinedNotifyRead: the outbox is fleet-wide.
-                if DemoTransport.scopes(for: request.identity, scenario: request.scenario).isConfined {
+                if request.scopes.isConfined {
                     return .error(status: 403, code: "capability_denied", message: "notification history is fleet-wide with no node to confine it to; it requires a token without a server allowlist restriction")
                 }
                 return deliveriesAnswer(request)
             }.requiring("notify:admin"),
             DemoRoute(pathPattern: "/api/expiring", body: expiringBody(within: 30), emptyBody: #"{"generated_at":"{{now}}","within_days":30,"items":[],"totals":[],"hidden_kinds":[]}"#) { request, _ in
-                let scopes = DemoTransport.scopes(for: request.identity, scenario: request.scenario)
+                let scopes = request.scopes
                 return .json(expiringBody(within: intQuery(request, "within") ?? 30, scopes: scopes))
             },
         ]
@@ -163,7 +163,7 @@ extension SharedFixtures {
     }
 
     static func tasksAnswer(_ request: DemoRequest, state: DemoState) async -> DemoResponse {
-        let scopes = DemoTransport.scopes(for: request.identity, scenario: request.scenario)
+        let scopes = request.scopes
         guard scopes.allows("task:read") || scopes.allows("task:run") else {
             return .error(status: 403, code: "forbidden", message: "missing scope task:read")
         }

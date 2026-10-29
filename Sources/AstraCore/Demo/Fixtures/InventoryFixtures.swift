@@ -133,7 +133,7 @@ public enum InventoryFixtures {
     // MARK: Machines
 
     static func visibleNodeIDs(_ request: DemoRequest) -> Set<String>? {
-        let scopes = DemoTransport.scopes(for: request.identity, scenario: request.scenario)
+        let scopes = request.scopes
         return scopes.isConfined ? Set(scopes.serverAllowlist) : nil
     }
 
@@ -308,7 +308,7 @@ public enum InventoryFixtures {
     // MARK: Upcoming
 
     static func expiringAnswer(_ request: DemoRequest, _ state: DemoState) async -> String {
-        let scopes = DemoTransport.scopes(for: request.identity, scenario: request.scenario)
+        let scopes = request.scopes
         let unrestricted = !scopes.isConfined
         let readable: [String: Bool] = [
             "machine_renewal": scopes.allows("inventory:read"),

@@ -17,6 +17,13 @@ public struct DemoRequest: Sendable {
     /// The scenario the transport serves, so a route can answer its Quiet
     /// or Limited token variant without a second route.
     public var scenario: DemoScenario = .normal
+    /// The `-AstraDemoToken` override, if any.
+    public var token: DemoToken?
+
+    /// The scopes `/api/me` reports for this request's caller.
+    public var scopes: ScopeSet {
+        DemoTransport.scopes(for: identity, scenario: scenario, token: token)
+    }
 
     public init(identity: DemoIdentity, method: String, path: String, query: [String: String] = [:], body: Data? = nil) {
         self.identity = identity

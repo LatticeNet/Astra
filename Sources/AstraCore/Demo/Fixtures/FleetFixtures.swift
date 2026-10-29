@@ -736,7 +736,7 @@ public enum FleetFixtures {
     /// `GET /api/nodes/capabilities` without `node_id`: every explicit record
     /// on a node the caller may read, and the known capabilities.
     static func recordsBody(_ request: DemoRequest, records: [String: String], gateState: [String: Bool]) -> String {
-        let scopes = DemoTransport.scopes(for: request.identity, scenario: request.scenario)
+        let scopes = request.scopes
         let rows: [DemoJSON] = records.keys.sorted().compactMap { key in
             guard let dot = key.lastIndex(of: ".") else { return nil }
             let nodeID = String(key[..<dot])

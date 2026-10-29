@@ -16,6 +16,8 @@ struct LaunchOverrides: Sendable {
     var auth: DeviceAuthOutcome?
     var autoConfirm = false
     var scenario: DemoScenario?
+    /// `-AstraDemoToken triage|operator|root|admin`: the token's preset in any scenario.
+    var demoToken: DemoToken?
     var demoNow: String?
     var landscape = false
     var colorFilter: ColorFilter?
@@ -38,6 +40,7 @@ struct LaunchOverrides: Sendable {
         }
         autoConfirm = defaults.bool(forKey: "AstraAutoConfirm")
         scenario = defaults.string(forKey: "AstraDemoScenario").flatMap(DemoScenario.init(argument:))
+        demoToken = defaults.string(forKey: "AstraDemoToken").flatMap(DemoToken.init(argument:))
         demoNow = defaults.string(forKey: "AstraDemoNow")
         landscape = defaults.string(forKey: "AstraOrientation") == "landscape"
         colorFilter = defaults.string(forKey: "AstraColorFilter").flatMap(ColorFilter.init(rawValue:))

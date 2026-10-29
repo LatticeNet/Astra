@@ -1647,6 +1647,7 @@ Agents cannot tap, swipe or rotate a simulator, and the project has no UI test t
 | `-AstraAuth succeed\|cancel` | Stub authenticator for D, T3, T4 and unlock |
 | `-AstraAutoConfirm YES` | After `-AstraPresent`, runs the primary action once (with `-AstraAuth succeed`) so after-states can be captured; for a T2 write it confirms the first dialog of the launch about a second after it appears |
 | `-AstraDemoScenario <name>[:<path prefix>]` | Scenario of 8.6 |
+| `-AstraDemoToken triage\|operator\|root\|admin` | Puts that preset on the demo token in any scenario, so Failing, Stale, Empty, Offline or Companion behind can be shown on screens a scope gates; it overrides a token scenario's preset |
 | `-AstraDemoNow <RFC3339>` | Pins the demo clock |
 | `-AstraOrientation landscape` | Calls `UIWindowScene.requestGeometryUpdate(.iOS(interfaceOrientations: .landscapeRight))` |
 | `-AstraColorFilter grayscale\|deuteranopia` | Applies a `.colorMatrix` to the root view |

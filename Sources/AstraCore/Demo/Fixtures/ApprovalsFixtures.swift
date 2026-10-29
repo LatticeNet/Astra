@@ -155,7 +155,7 @@ public enum ApprovalsFixtures {
             rows = rows.filter { $0.status != "pending" }
         }
         if request.identity == .pat {
-            let scopes = DemoTransport.scopes(for: request.identity, scenario: request.scenario)
+            let scopes = request.scopes
             rows = rows.filter { ApprovalVisibility.canList(plugin: $0.plugin, nodeID: $0.nodeID, scopes: scopes) }
         }
         return rows
@@ -171,7 +171,7 @@ public enum ApprovalsFixtures {
             return .error(status: 404, code: "not_found", message: "approval not found")
         }
         if request.identity == .pat {
-            let scopes = DemoTransport.scopes(for: request.identity, scenario: request.scenario)
+            let scopes = request.scopes
             // The server answers 404 only for a missing id; a token that
             // cannot decide this plugin gets 403 (requireApprovalDecisionScopes).
             let view = Approval(id: base.id, nodeID: base.nodeID, plugin: base.plugin, action: base.action)

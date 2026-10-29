@@ -942,7 +942,7 @@ public enum NetworkingFixtures {
             }.requiring("netguard:read"),
             DemoRoute(pathPattern: "/api/netguard/node-group-bindings", body: nodeGroupBindingsBody(), emptyBody: #"{"bindings":[],"node_groups":[]}"#) { request, _ in
                 if let refused = refusedWhenConfined(request) { return refused }
-                let scopes = DemoTransport.scopes(for: request.identity, scenario: request.scenario)
+                let scopes = request.scopes
                 guard scopes.allows("group:read") else { return .error(status: 403, code: "forbidden", message: "missing scope group:read") }
                 return .json(nodeGroupBindingsBody())
             }.requiring("netguard:read"),
