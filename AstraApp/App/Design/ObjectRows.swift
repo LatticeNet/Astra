@@ -17,16 +17,18 @@ struct IncidentRow: View {
     @Environment(\.locale) private var locale
 
     var body: some View {
-        let now = Date()
-        let state = incident.displayState(now: now)
-        let style = StatusStyle.incident(state, snoozedUntil: incident.snoozedUntil.map { TimeDisplay.clock($0, mode: mode, locale: locale) })
-        let actions = IncidentActions.of(incident, now: now, canAdmin: canAdmin)
-        StatusRow(
-            style: style,
-            title: incident.displayTitle,
-            detail: detail(now: now),
-            accessibilityPhrase: "\(incident.displayTitle), \(style.word)"
-        )
+        let actions = IncidentActions.of(incident, now: Date(), canAdmin: canAdmin)
+        // The age keeps moving between polls (section 4.2).
+        TimelineView(.periodic(from: .now, by: 30)) { context in
+            let state = incident.displayState(now: context.date)
+            let style = StatusStyle.incident(state, snoozedUntil: incident.snoozedUntil.map { TimeDisplay.clock($0, mode: mode, locale: locale) })
+            StatusRow(
+                style: style,
+                title: incident.displayTitle,
+                detail: detail(now: context.date),
+                accessibilityPhrase: "\(incident.displayTitle), \(style.word)"
+            )
+        }
         .swipeActions(edge: .leading, allowsFullSwipe: true) {
             if actions.acknowledge {
                 Button("Acknowledge: stops repeat alerts", systemImage: "person.crop.circle.badge.checkmark") {
@@ -231,30 +233,36 @@ struct PathRow: View {
 /// of showing zeros (section 4.2).
 struct NodeRow: View {
     let node: LatticeNode
+    /// The provider, shown after the place when the list is not already grouped by it.
+    var provider: String?
 
     var body: some View {
         let honesty = node.honesty
         let style = StatusStyle.node(honesty)
-        StatusRow(
-            style: style,
-            title: node.displayName,
-            detail: detail,
-            reason: honesty == .degraded && !node.statusReason.isEmpty ? node.statusReason : nil,
-            trailing: honesty == .online ? String(format: "%.0f%%", node.metrics.cpuPercent) : nil,
-            accessibilityPhrase: phrase(honesty)
-        )
+        // "seen 25m" keeps moving between polls.
+        TimelineView(.periodic(from: .now, by: 30)) { context in
+            StatusRow(
+                style: style,
+                title: node.displayName,
+                detail: detail(now: context.date),
+                reason: honesty == .degraded && !node.statusReason.isEmpty ? node.statusReason : nil,
+                trailing: honesty == .online ? String(format: "%.0f%%", node.metrics.cpuPercent) : nil,
+                accessibilityPhrase: phrase(honesty, now: context.date)
+            )
+        }
     }
 
-    private var detail: String {
+    private func detail(now: Date) -> String {
         var parts: [String] = []
         if let region = node.geo?.city ?? node.geo?.region, !region.isEmpty { parts.append(region) }
+        if let provider, !provider.isEmpty { parts.append(provider) }
         if let agent = node.agentVersion, !agent.isEmpty { parts.append("agent \(agent)") }
-        if let seen = node.lastSeen { parts.append("seen \(RelativeDateFormatter.shortDuration(Date().timeIntervalSince(seen)))") }
+        if let seen = node.lastSeen { parts.append("seen \(RelativeDateFormatter.shortDuration(now.timeIntervalSince(seen)))") }
         return parts.joined(separator: ", ")
     }
 
-    private func phrase(_ honesty: NodeHonesty) -> String {
-        let age = node.lastSeen.map { RelativeDateFormatter.shortDuration(Date().timeIntervalSince($0)) }
+    private func phrase(_ honesty: NodeHonesty, now: Date) -> String {
+        let age = node.lastSeen.map { RelativeDateFormatter.shortDuration(now.timeIntervalSince($0)) }
         switch honesty {
         case .online: return "\(node.displayName), online" + (age.map { ", seen \($0) ago" } ?? "")
         case .degraded: return "\(node.displayName), degraded"

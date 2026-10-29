@@ -21,6 +21,11 @@ struct NodesScreen: View {
 
     private var groupBy: FleetNodeGroupBy { FleetNodeGroupBy(rawValue: groupByRaw) ?? .status }
 
+    /// The row names the provider unless the sections already do.
+    private func rowProvider(_ record: FleetNodeRecord) -> String? {
+        groupBy == .provider ? nil : record.facts.provider
+    }
+
     var body: some View {
         FleetListState(state: store.nodes, noun: "nodes", retry: { Task { await store.refresh() } }) { records in
             content(records)
@@ -108,7 +113,7 @@ struct NodesScreen: View {
                     Section {
                         ForEach(section.records) { record in
                             NavigationLink(value: AppRoute.fleet(.node(id: record.id))) {
-                                NodeRow(node: record.node)
+                                NodeRow(node: record.node, provider: rowProvider(record))
                             }
                             .tag(record.id)
                             .fleetNodeSwipe(record.node, canAdmin: canAdmin, runner: runner)
