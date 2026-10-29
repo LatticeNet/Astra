@@ -510,6 +510,16 @@ func checkLatticeAnalytics() throws {
     try expectEqual(UptimeFormatter.string(seconds: 90_061), "1d 1h", "uptime formats days+hours")
     try expectEqual(RelativeDateFormatter.shortDuration(3_600), "1h", "relative duration hours")
     try expectEqual(RelativeDateFormatter.string(from: now.addingTimeInterval(-120), now: now), "2m ago", "relative date ago")
+
+    let nanGeo = NodeGeoView(id: "nan", geo: NodeGeoInfo(lat: .nan, lon: 10))
+    try expect(!nanGeo.hasCoordinate, "NaN is not a map coordinate")
+    let worldwide = try expectUnwrapped(
+        FleetMapRegion.fitting(latitudes: [37.77, 35.68], longitudes: [-122.4, 139.7]),
+        "worldwide pair fits"
+    )
+    try expect(worldwide.longitudeDelta <= 360, "worldwide longitude span stays inside MapKit's 360 cap")
+    try expect(worldwide.latitudeDelta <= 180, "latitude span stays inside MapKit's 180 cap")
+    try expect(FleetMapRegion.fitting(latitudes: [.nan], longitudes: [1]) == nil, "NaN pair is rejected")
 }
 
 func checkLatticeNetwork() async throws {

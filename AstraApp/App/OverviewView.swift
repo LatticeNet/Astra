@@ -196,7 +196,7 @@ struct FleetMapCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             SectionHeaderView("Fleet map", systemImage: "globe.americas.fill", accessory: "\(nodes.count) located")
-            Map(coordinateRegion: $region, annotationItems: nodes) { node in
+            Map(coordinateRegion: $region, annotationItems: nodes.filter(\.hasCoordinate)) { node in
                 MapAnnotation(coordinate: CLLocationCoordinate2D(latitude: node.geo?.lat ?? 0, longitude: node.geo?.lon ?? 0)) {
                     ZStack {
                         Circle()
@@ -214,25 +214,23 @@ struct FleetMapCard: View {
         }
         .latticeCard()
         .onAppear { recenter() }
+        .onChange(of: nodes) { _ in recenter() }
     }
 
     private func recenter() {
-        let coords = nodes.compactMap { node -> CLLocationCoordinate2D? in
-            guard let geo = node.geo, geo.lat != 0 || geo.lon != 0 else { return nil }
-            return CLLocationCoordinate2D(latitude: geo.lat, longitude: geo.lon)
+        let lats = nodes.compactMap { node -> Double? in
+            guard let geo = node.geo, geo.isMapCoordinate else { return nil }
+            return geo.lat
         }
-        guard !coords.isEmpty else { return }
-        let lats = coords.map(\.latitude)
-        let lons = coords.map(\.longitude)
-        let center = CLLocationCoordinate2D(
-            latitude: (lats.min()! + lats.max()!) / 2,
-            longitude: (lons.min()! + lons.max()!) / 2
+        let lons = nodes.compactMap { node -> Double? in
+            guard let geo = node.geo, geo.isMapCoordinate else { return nil }
+            return geo.lon
+        }
+        guard let fitted = FleetMapRegion.fitting(latitudes: lats, longitudes: lons) else { return }
+        region = MKCoordinateRegion(
+            center: CLLocationCoordinate2D(latitude: fitted.centerLatitude, longitude: fitted.centerLongitude),
+            span: MKCoordinateSpan(latitudeDelta: fitted.latitudeDelta, longitudeDelta: fitted.longitudeDelta)
         )
-        let span = MKCoordinateSpan(
-            latitudeDelta: max(20, (lats.max()! - lats.min()!) * 1.6),
-            longitudeDelta: max(20, (lons.max()! - lons.min()!) * 1.6)
-        )
-        region = MKCoordinateRegion(center: center, span: span)
     }
 }
 
