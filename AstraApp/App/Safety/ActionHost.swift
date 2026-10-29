@@ -47,7 +47,7 @@ private struct ActionHostModifier: ViewModifier {
                 runner.register(host)
             }
             .confirmationDialog(
-                dialog?.intent.title ?? "",
+                dialog.map { "\($0.intent.title)?" } ?? "",
                 isPresented: dialogBinding,
                 titleVisibility: .visible,
                 presenting: dialog

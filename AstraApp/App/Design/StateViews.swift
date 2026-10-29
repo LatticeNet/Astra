@@ -30,16 +30,17 @@ struct LoadingRows: View {
     var count = 3
 
     var body: some View {
-        Group {
-            ForEach(0..<count, id: \.self) { _ in
-                StatusRow(style: StatusStyle(word: "", symbol: "circle.fill", tone: .quiet),
-                          title: "Placeholder object name", detail: "Placeholder detail line", trailing: "00")
-                    .redacted(reason: .placeholder)
-                    .accessibilityHidden(true)
+        ForEach(0..<count, id: \.self) { index in
+            let row = StatusRow(style: StatusStyle(word: "", symbol: "circle.fill", tone: .quiet),
+                                title: "Placeholder object name", detail: "Placeholder detail line", trailing: "00")
+                .redacted(reason: .placeholder)
+            if index == 0 {
+                // The first placeholder speaks for the section; the rest are silent.
+                row.accessibilityElement(children: .ignore).accessibilityLabel(label)
+            } else {
+                row.accessibilityHidden(true)
             }
         }
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(label)
     }
 }
 

@@ -1,3 +1,4 @@
+import BackgroundTasks
 import Foundation
 import UserNotifications
 
@@ -295,14 +296,16 @@ final class SessionStore {
             UserDefaults.standard.removeObject(forKey: Key.username)
         }
         try? await UNUserNotificationCenter.current().setBadgeCount(0)
+        BGTaskScheduler.shared.cancel(taskRequestWithIdentifier: BackgroundRefresh.identifier)
         resetState()
         network.use(SystemPathSource())
     }
 
-    /// Leaves demo mode without touching the Keychain.
+    /// Leaves demo mode without touching the Keychain. A server and token
+    /// stored before demo mode come back; without them the welcome flow shows.
     func leaveDemo() {
         resetState()
-        network.use(SystemPathSource())
+        restore(launch: LaunchOverrides())
     }
 
     private func resetState() {
