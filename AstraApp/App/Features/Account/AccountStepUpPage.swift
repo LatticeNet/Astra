@@ -23,6 +23,9 @@ struct AccountStepUpPage: View {
 
     private var passkey: AccessPasskey? { store.passkey(id: passkeyID) }
 
+    /// A held grant that outlasts the confirmation and Face ID still ahead.
+    private var heldGrant: StepUpGrant? { AccessPasskeyDeletePlan.reusableGrant(stepUp.grant, now: Date()) }
+
     var body: some View {
         Group {
             if let passkey, store.hasSession {
@@ -55,7 +58,7 @@ struct AccountStepUpPage: View {
                 Text("Delete passkey \(passkey.displayName)")
                     .textRole(.detailHeader)
                     .accessibilityAddTraits(.isHeader)
-                if stepUp.holdsUsableGrant {
+                if heldGrant != nil {
                     AccountNoticeRow(text: "Code accepted. Continue to confirm the delete.", symbol: "checkmark.shield", tone: .ok)
                 } else {
                     TextField("6-digit code", text: $code)
@@ -93,12 +96,12 @@ struct AccountStepUpPage: View {
         .listStyle(.insetGrouped)
         .onAppear {
             updateWait()
-            codeFocused = !stepUp.holdsUsableGrant
+            codeFocused = heldGrant == nil
         }
         .task {
             // `-AstraAutoConfirm YES` (demo only) enters a demo code once, as
             // the RevealFlow does, so the rest of the flow can be captured.
-            guard LaunchOverrides.current.autoConfirm, session.isDemo, !stepUp.holdsUsableGrant, code.isEmpty else { return }
+            guard LaunchOverrides.current.autoConfirm, session.isDemo, heldGrant == nil, code.isEmpty else { return }
             try? await Task.sleep(for: .milliseconds(600))
             code = "246810"
         }
@@ -108,13 +111,13 @@ struct AccountStepUpPage: View {
             } label: {
                 HStack(spacing: Spacing.s) {
                     if isSubmitting { ProgressView().tint(.white) }
-                    Text(stepUp.holdsUsableGrant ? "Continue" : "Submit").fontWeight(.semibold)
+                    Text(heldGrant != nil ? "Continue" : "Submit").fontWeight(.semibold)
                 }
                 .frame(maxWidth: .infinity, minHeight: Spacing.minimumTarget - 8)
             }
             .buttonStyle(.borderedProminent)
             .tint(Color.accentFill)
-            .disabled(isSubmitting || runner.isBusy || (!stepUp.holdsUsableGrant && code.count != 6))
+            .disabled(isSubmitting || runner.isBusy || (heldGrant == nil && code.count != 6))
             .padding(.horizontal, Spacing.l)
             .padding(.vertical, Spacing.s)
             .dynamicTypeSize(...DynamicTypeSize.accessibility1)
@@ -132,10 +135,13 @@ struct AccountStepUpPage: View {
         isSubmitting = true
         message = nil
         let grant: StepUpGrant
-        if stepUp.holdsUsableGrant, let held = try? await stepUp.grant(for: .passkeyChange) {
+        if let held = heldGrant {
             grant = held
         } else {
             guard code.count == 6 else {
+                // The grant this page showed as accepted ran too short.
+                message = "The earlier code is about to expire. Enter a new one."
+                codeFocused = true
                 isSubmitting = false
                 return
             }

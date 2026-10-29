@@ -328,17 +328,32 @@ public enum AccessPasskeyDeleteStep: String, Sendable, Hashable {
 }
 
 public enum AccessPasskeyDeletePlan {
+    /// The confirmation and Face ID sit between choosing the steps and the
+    /// send, and the server's grant lives 60 s, so a held grant is reused
+    /// only with this much left. Section 6.4's 5 s margin fits a reveal,
+    /// which sends at once.
+    public static let heldGrantMargin: TimeInterval = 40
+
+    /// The held grant when it can outlast the confirmation, else nil.
+    public static func reusableGrant(_ grant: StepUpGrant?, now: Date) -> StepUpGrant? {
+        guard let grant, grant.isUsable(now: now, margin: heldGrantMargin) else { return nil }
+        return grant
+    }
+
     /// With two-factor on the server needs a step-up grant; the code step
-    /// runs first unless a grant with more than 5 s left is held. An unknown
-    /// two-factor state asks for the code, which is never wrong to send.
+    /// runs first unless a reusable grant is held. With the two-factor state
+    /// unknown the code is not asked up front: step-up answers 403 for an
+    /// account without TOTP, and the server deletes without a grant then.
+    /// A `step_up_required` refusal brings the code step back once.
     public static func steps(totpEnabled: Bool?, grantUsable: Bool) -> [AccessPasskeyDeleteStep] {
-        let needsCode = (totpEnabled ?? true) && !grantUsable
+        let needsCode = totpEnabled == true && !grantUsable
         return (needsCode ? [.code] : []) + [.confirm, .authenticate, .send]
     }
 
-    /// Whether the delete request carries a grant at all.
+    /// Whether the delete request carries a held grant. Only an account
+    /// known to have two-factor off sends none.
     public static func sendsGrant(totpEnabled: Bool?) -> Bool {
-        totpEnabled ?? true
+        totpEnabled != false
     }
 }
 

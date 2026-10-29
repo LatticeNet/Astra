@@ -276,8 +276,14 @@ private func checkAccessPasskeys() throws {
     try expectEqual(AccessPasskeyDeletePlan.steps(totpEnabled: true, grantUsable: false), [.code, .confirm, .authenticate, .send], "two-factor without a grant asks for the code")
     try expectEqual(AccessPasskeyDeletePlan.steps(totpEnabled: true, grantUsable: true), [.confirm, .authenticate, .send], "a held grant skips the code")
     try expectEqual(AccessPasskeyDeletePlan.steps(totpEnabled: false, grantUsable: false), [.confirm, .authenticate, .send], "no two-factor, no code")
-    try expectEqual(AccessPasskeyDeletePlan.steps(totpEnabled: nil, grantUsable: false), [.code, .confirm, .authenticate, .send], "unknown two-factor asks for the code")
-    try expect(AccessPasskeyDeletePlan.sendsGrant(totpEnabled: nil) && !AccessPasskeyDeletePlan.sendsGrant(totpEnabled: false), "grant only with two-factor")
+    try expectEqual(AccessPasskeyDeletePlan.steps(totpEnabled: nil, grantUsable: false), [.confirm, .authenticate, .send], "unknown two-factor waits for the server to ask for a code")
+    try expect(AccessPasskeyDeletePlan.sendsGrant(totpEnabled: nil) && !AccessPasskeyDeletePlan.sendsGrant(totpEnabled: false), "a held grant is sent unless two-factor is known off")
+    let issued = Date(timeIntervalSince1970: 1_800_000_000)
+    let grant = StepUpGrant(grant: "g", expiresAt: issued.addingTimeInterval(60))
+    try expect(AccessPasskeyDeletePlan.reusableGrant(grant, now: issued) != nil, "a fresh grant outlasts the confirmation")
+    try expect(AccessPasskeyDeletePlan.reusableGrant(grant, now: issued.addingTimeInterval(30)) == nil, "a grant with 30 s left would expire during the confirmation")
+    try expect(grant.isUsable(now: issued.addingTimeInterval(30)), "the same grant is still usable for a reveal")
+    try expect(AccessPasskeyDeletePlan.reusableGrant(nil, now: issued) == nil, "no grant held")
 }
 
 // MARK: Intents

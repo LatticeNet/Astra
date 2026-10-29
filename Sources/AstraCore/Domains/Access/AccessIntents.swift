@@ -93,14 +93,14 @@ public enum AccessIntents {
     }
 
     /// T4 on the signed-in session. With two-factor on, `grant` is the
-    /// step-up grant the code step just obtained; the server checks it again
-    /// at send time, so a grant that expired while the operator read the
-    /// confirmation is refused, and the refusal says to start again.
+    /// step-up grant the code step obtained; the server checks it again at
+    /// send time, so a grant that expired while the operator read the
+    /// confirmation is refused, and the screen returns to the code step.
     public static func deletePasskey(_ passkey: AccessPasskey, grant: StepUpGrant?) -> WriteIntent {
         let object = object(passkey)
         var consequence = "\(object.name) will no longer be able to sign in to this account. This cannot be undone."
         if grant != nil {
-            consequence += " Your authenticator code was checked; it stays valid for about a minute."
+            consequence += " Your authenticator code was checked."
         }
         return WriteIntent(
             tier: .t4, client: .session, verb: "Delete passkey", object: object, scopes: [],
@@ -121,6 +121,6 @@ public enum AccessIntents {
     }
 
     public static func stepUpExpired(_ object: ObjectRef) -> String {
-        "Not deleted: the server asked for a fresh authenticator code. Delete \(object.name) again and enter a new code."
+        "Not deleted: the server asked for a fresh authenticator code. Enter a new code to delete \(object.name)."
     }
 }

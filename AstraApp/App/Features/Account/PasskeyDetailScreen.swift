@@ -112,9 +112,9 @@ struct PasskeyDetailScreen: View {
             Section {
                 AccountActionButton(
                     title: "Delete passkey", systemImage: "trash",
-                    note: totp == false
-                        ? "It can no longer sign in to this account. Face ID confirms it."
-                        : "It can no longer sign in to this account. Your authenticator code, then Face ID, confirm it.",
+                    note: totp == true
+                        ? "It can no longer sign in to this account. Your authenticator code, then Face ID, confirm it."
+                        : "It can no longer sign in to this account. Face ID confirms it.",
                     blocker: nil, role: .destructive
                 ) { startDelete(passkey) }
             } header: {
@@ -133,23 +133,36 @@ struct PasskeyDetailScreen: View {
         Task { await runner.run(AccessIntents.renamePasskey(passkey, to: newName)) }
     }
 
-    /// Two-factor on and no grant held: the code step first, as a page on
-    /// this sheet's stack. Otherwise straight to the confirmation.
+    /// Two-factor on and no grant that outlasts the confirmation: the code
+    /// step first, as a page on this sheet's stack. Otherwise straight to the
+    /// confirmation. A `step_up_required` refusal clears the grant and
+    /// returns to the code step once (section 6.4).
     private func startDelete(_ passkey: AccessPasskey) {
-        let steps = AccessPasskeyDeletePlan.steps(totpEnabled: store.sessionIdentity?.totpEnabled, grantUsable: stepUp.holdsUsableGrant)
-        if steps.first == .code {
-            appState.settingsPath.append(.account(.passkeyDeleteCode(id: passkey.id)))
-            return
-        }
+        guard !runner.isBusy else { return }
         Task {
-            let grant = AccessPasskeyDeletePlan.sendsGrant(totpEnabled: store.sessionIdentity?.totpEnabled) ? try? await stepUp.grant(for: .passkeyChange) : nil
+            if store.sessionIdentity == nil { await store.refreshIdentity() }
+            let totp = store.sessionIdentity?.totpEnabled
+            let held = AccessPasskeyDeletePlan.reusableGrant(stepUp.grant, now: Date())
+            if AccessPasskeyDeletePlan.steps(totpEnabled: totp, grantUsable: held != nil).first == .code {
+                pushCodeStep(passkey)
+                return
+            }
+            let grant = AccessPasskeyDeletePlan.sendsGrant(totpEnabled: totp) ? held : nil
             let outcome = await runner.run(AccessIntents.deletePasskey(passkey, grant: grant))
             switch outcome {
-            case .done: dismiss()
-            case .refused(.stepUpRequired, _): stepUp.invalidate()
-            default: break
+            case .done:
+                dismiss()
+            case .refused(.stepUpRequired, _):
+                stepUp.invalidate()
+                pushCodeStep(passkey)
+            default:
+                break
             }
         }
+    }
+
+    private func pushCodeStep(_ passkey: AccessPasskey) {
+        appState.settingsPath.append(.account(.passkeyDeleteCode(id: passkey.id)))
     }
 
     private var notFound: some View {
