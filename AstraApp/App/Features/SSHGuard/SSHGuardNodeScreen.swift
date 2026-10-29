@@ -86,6 +86,7 @@ struct SSHGuardNodeScreen: View {
     @Environment(ChangeLog.self) private var changes
     @Environment(Router.self) private var router
     @Environment(ActionRunner.self) private var runner
+    @Environment(NetworkMonitor.self) private var network
     @Environment(\.timeZoneMode) private var mode
     @Environment(\.locale) private var locale
 
@@ -141,6 +142,8 @@ struct SSHGuardNodeScreen: View {
                     Button("Open on web") { router.openOnWeb(.sshGuardNode(nodeID: nodeID)) }
                 }
             }
+        case .idle where !network.isSatisfied:
+            SSHGuardOfflineState(noun: "SSH Guard")
         default:
             ResourceView(state: model.status, noun: "SSH Guard", retry: retry) { status in
                 list(status)

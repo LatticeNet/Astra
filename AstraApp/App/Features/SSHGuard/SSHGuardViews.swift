@@ -213,3 +213,19 @@ struct SSHGuardDemoScroll: ViewModifier {
         }
     }
 }
+
+/// First load while there is no network path: nothing from the server is
+/// kept on the phone, so say so instead of showing placeholders forever.
+struct SSHGuardOfflineState: View {
+    let noun: String
+
+    var body: some View {
+        WholeScreenState {
+            ContentUnavailableView {
+                Label("Offline", systemImage: "wifi.slash")
+            } description: {
+                Text("\(noun) loads when the connection returns. Nothing from the server is stored on this iPhone.")
+            }
+        }
+    }
+}

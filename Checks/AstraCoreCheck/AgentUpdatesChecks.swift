@@ -76,7 +76,7 @@ private func checkAgentUpdatesDecoding() throws {
      "health":[{"mirror":"r2","fetches":4,"chunk_failures":1}]}
     """#))
     try expectEqual(mirrors.mirrors.first?.displayName, "r2", "mirror falls back to its id")
-    try expectEqual(mirrors.order.first?.sentence(mirrorNames: ["r2": "Object store"]), "Object store, control plane, upstream", "order sentence")
+    try expectEqual(mirrors.order.first?.sentence(mirrorNames: ["r2": "Object store"]), "Object store, control plane, release host", "order sentence")
     try expectEqual(mirrors.health.first?.chunkFailures, 1, "chunk failures")
 
     try expectEqual(AgentUpdatesArtifactName.platform("lattice-agent-linux-amd64"), "linux/amd64", "release file platform")

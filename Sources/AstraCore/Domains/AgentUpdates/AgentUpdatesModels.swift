@@ -200,12 +200,12 @@ public struct AgentUpdatesFetchSource: Sendable, Hashable {
         if let s = attempt.seconds, let total = seconds { seconds = total + s } else { seconds = nil }
     }
 
-    /// "control plane", "control plane (gzip)", "upstream" or "mirror r2".
+    /// "control plane", "control plane (gzip)", "release host" or "mirror r2".
     public var label: String {
         switch kind {
         case "cp": "control plane"
         case "cp.gz": "control plane (gzip)"
-        case "up": "upstream"
+        case "up": "release host"
         default: kind.hasPrefix("m.") && kind.count > 2 ? "mirror \(kind.dropFirst(2))" : kind
         }
     }
@@ -398,10 +398,11 @@ public struct AgentUpdatesMirrorOrder: Decodable, Equatable, Hashable, Sendable,
         sources = try c.decodeIfPresent([String].self, forKey: .sources) ?? []
     }
 
-    /// "r2, control plane, upstream" with mirror names where known.
+    /// "r2, control plane, release host" with mirror names where known.
     public func sentence(mirrorNames: [String: String]) -> String {
         sources.map { label in
             if label == "control-plane" { return "control plane" }
+            if label == "upstream" { return "release host" }
             if label.hasPrefix("mirror:") {
                 let id = String(label.dropFirst("mirror:".count))
                 return mirrorNames[id] ?? id

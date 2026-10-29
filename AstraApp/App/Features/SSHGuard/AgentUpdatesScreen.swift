@@ -24,7 +24,9 @@ struct AgentUpdatesScreen: View {
     @Environment(ChangeLog.self) private var changes
     @Environment(Router.self) private var router
     @Environment(ActionRunner.self) private var runner
+    @Environment(NetworkMonitor.self) private var network
     @Environment(\.verticalSizeClass) private var verticalSizeClass
+    @Environment(\.dynamicTypeSize) private var typeSize
     @Environment(\.locale) private var locale
 
     @State private var selected = SSHGuardAgentView.nodes
@@ -47,7 +49,7 @@ struct AgentUpdatesScreen: View {
             }
             .toolbar {
                 if verticalSizeClass == .compact, store.missingGate == nil {
-                    ToolbarItem(placement: .topBarTrailing) { picker.frame(maxWidth: 320) }
+                    ToolbarItem(placement: .topBarTrailing) { toolbarPicker.frame(maxWidth: 320) }
                 }
                 if selected == .nodes, store.missingGate == nil {
                     ToolbarItem(placement: .topBarTrailing) { planAllButton }
@@ -66,6 +68,17 @@ struct AgentUpdatesScreen: View {
             options: SSHGuardAgentView.allCases.map { ($0, $0.title) },
             selection: $selected,
             containerWidth: width
+        )
+    }
+
+    /// The bar caps its text size, so at accessibility sizes the segments
+    /// would truncate to a letter each; a menu names the view instead.
+    private var toolbarPicker: some View {
+        AdaptiveSegmentedPicker(
+            title: "Agent updates view",
+            options: SSHGuardAgentView.allCases.map { ($0, $0.title) },
+            selection: $selected,
+            containerWidth: typeSize.isAccessibilitySize ? 0 : width
         )
     }
 
@@ -89,6 +102,8 @@ struct AgentUpdatesScreen: View {
     private var content: some View {
         if let missing = store.missingGate {
             ScopeDeniedScreen(scope: missing.joined(separator: " and "))
+        } else if store.nodes.value == nil, store.release.value == nil, !network.isSatisfied {
+            SSHGuardOfflineState(noun: "Agent Updates")
         } else {
             switch selected {
             case .nodes: nodesView
@@ -216,12 +231,11 @@ struct AgentUpdatesScreen: View {
     private func nodeRow(_ row: AgentUpdatesNodeRow) -> some View {
         let style = SSHGuardAgentWords.style(row.standing)
         let target = row.policy?.resolvedTarget(latest: store.latest) ?? store.latest
-        let planned = row.policy?.lastPlannedAt.map { "planned \(TimeDisplay.relative($0, now: .now, locale: locale))" }
-        let detail = [row.running.isEmpty ? "not reported" : "runs \(row.running)", target.map { "target \($0)" }, row.policyState.word, planned]
+        let detail = [row.running.isEmpty ? "not reported" : "runs \(row.running)", target.map { "target \($0)" }, row.policyState.word]
             .compactMap { $0 }.joined(separator: ", ")
+        let history = SSHGuardAgentWords.history(row, locale: locale)
         NavigationLink(value: AppRoute.fleet(.node(id: row.nodeID))) {
-            StatusRow(style: style, title: row.name, detail: detail, reason: SSHGuardAgentWords.reason(row),
-                      accessibilityPhrase: "\(row.name), \(style.word), \(detail)")
+            SSHGuardAgentNodeRow(style: style, title: row.name, detail: detail, reason: SSHGuardAgentWords.reason(row), history: history)
         }
         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
             if row.standing == .behind, row.policy != nil, store.planBlockReason() == nil {
@@ -488,6 +502,31 @@ struct AgentUpdatesScreen: View {
     }
 }
 
+/// A Nodes row: standing, versions and policy, then when it was last
+/// planned and how its last download went, as a quiet stamp line.
+struct SSHGuardAgentNodeRow: View {
+    let style: StatusStyle
+    let title: String
+    let detail: String
+    let reason: String?
+    let history: String?
+
+    @Environment(\.dynamicTypeSize) private var typeSize
+    @ScaledMetric(relativeTo: .title3) private var glyphWidth: CGFloat = 28
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Spacing.xxs) {
+            StatusRow(style: style, title: title, detail: detail, reason: reason)
+            if let history {
+                Text(history)
+                    .textRole(.stamp)
+                    .padding(.leading, typeSize.isAccessibilitySize ? 0 : glyphWidth + Spacing.m)
+            }
+        }
+        .accessibilityElement(children: .combine)
+    }
+}
+
 /// One mirror registry entry with its health.
 struct SSHGuardMirrorRow: View {
     let mirror: AgentUpdatesMirror
@@ -525,6 +564,28 @@ enum SSHGuardAgentWords {
         case .ahead: "Ahead of the latest stable"
         case .current: "Current"
         }
+    }
+
+    /// "Planned 2 hr. ago, last download from the control plane".
+    static func history(_ row: AgentUpdatesNodeRow, locale: Locale) -> String? {
+        var parts: [String] = []
+        if let planned = row.policy?.lastPlannedAt {
+            parts.append("Planned \(TimeDisplay.relative(planned, now: .now, locale: locale))")
+        }
+        if let fetch = row.policy?.lastFetch {
+            switch fetch.outcome {
+            case .installed:
+                let source = fetch.sources.first { $0.finished }?.label ?? fetch.sources.first?.label
+                parts.append(source.map { "last download from the \($0)" } ?? "last download installed")
+            case .kept:
+                parts.append("last run kept the running binary")
+            case .failed:
+                break
+            }
+        }
+        guard !parts.isEmpty else { return nil }
+        let text = parts.joined(separator: ", ")
+        return text.prefix(1).uppercased() + text.dropFirst()
     }
 
     /// The policy's last error, or a failed last download, in the server's words.

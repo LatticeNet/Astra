@@ -6,7 +6,7 @@ final class SSHGuardDigestBox: Sendable {
     private let value = Mutex<String?>(nil)
 
     func set(_ digest: String) { value.withLock { $0 = digest } }
-    func take() -> String? { value.withLock { $0 } }
+    func current() -> String? { value.withLock { $0 } }
 }
 
 /// What the arm sheet reads before it can show a form: the node's status,
@@ -106,7 +106,7 @@ final class SSHGuardArmModel {
 
     /// Picks up the digest the reveal step captured, if it ran.
     func collectDigest() {
-        if let value = digestBox.take(), !value.isEmpty { digest = value }
+        if let value = digestBox.current(), !value.isEmpty { digest = value }
     }
 
     var rotationRequest: SSHGuardPlanRequest? {
@@ -302,21 +302,6 @@ struct SSHGuardArmSheet: View {
         let eligibility = model.eligibility
         return Form {
             nodeSection
-            if let knock = model.knock {
-                Section {
-                    StatusRow(style: StatusStyle(word: SSHGuardKnockWords.word(knock.knowledge), symbol: SSHGuardKnockWords.symbol(knock.knowledge), tone: .quiet),
-                              title: "Current sequence", detail: knock.portCount.map { "\($0) ports, opens for \(knock.openFor.isEmpty ? "12h" : knock.openFor)" })
-                    if let port = model.rotationPort {
-                        DetailRow(label: "SSH port", value: port == 0 || port == 22 ? "Keeps the current port" : String(port), copyable: false)
-                    }
-                    DetailRow(label: "Fallback", value: fallbackWords, copyable: false)
-                    DetailRow(label: "Confirm within", value: SSHGuardIntents.windowWords(SSHGuardRotation.rotationConfirmWindowSec), copyable: false)
-                } header: {
-                    Text("What the rotation keeps").accessibilityAddTraits(.isHeader)
-                } footer: {
-                    Text(knock.note)
-                }
-            }
             switch eligibility {
             case .digest:
                 Section {
@@ -365,6 +350,21 @@ struct SSHGuardArmSheet: View {
                         .frame(minHeight: Spacing.minimumTarget)
                 } header: {
                     Text("Cannot rotate").accessibilityAddTraits(.isHeader)
+                }
+            }
+            if let knock = model.knock {
+                Section {
+                    StatusRow(style: StatusStyle(word: SSHGuardKnockWords.word(knock.knowledge), symbol: SSHGuardKnockWords.symbol(knock.knowledge), tone: .quiet),
+                              title: "Current sequence", detail: knock.portCount.map { "\($0) ports, opens for \(knock.openFor.isEmpty ? "12h" : knock.openFor)" })
+                    if let port = model.rotationPort {
+                        DetailRow(label: "SSH port", value: port == 0 || port == 22 ? "Keeps the current port" : String(port), copyable: false)
+                    }
+                    DetailRow(label: "Fallback", value: fallbackWords, copyable: false)
+                    DetailRow(label: "Confirm within", value: SSHGuardIntents.windowWords(SSHGuardRotation.rotationConfirmWindowSec), copyable: false)
+                } header: {
+                    Text("What the rotation keeps").accessibilityAddTraits(.isHeader)
+                } footer: {
+                    Text(knock.note)
                 }
             }
         }

@@ -8,6 +8,7 @@ struct AgentReleaseScreen: View {
     @Environment(AgentUpdatesStore.self) private var store
     @Environment(ChangeLog.self) private var changes
     @Environment(Router.self) private var router
+    @Environment(NetworkMonitor.self) private var network
     @Environment(\.locale) private var locale
     @Environment(\.timeZoneMode) private var mode
 
@@ -77,7 +78,11 @@ struct AgentReleaseScreen: View {
                     }
                 }
             default:
-                List { LoadingRows(label: "Loading the release", count: 4) }
+                if network.isSatisfied {
+                    List { LoadingRows(label: "Loading the release", count: 4) }
+                } else {
+                    SSHGuardOfflineState(noun: "The release")
+                }
             }
         } else if !isLatest, candidate == nil, stored.isEmpty {
             WholeScreenState {

@@ -11,6 +11,7 @@ struct SSHGuardBoardScreen: View {
     @Environment(ChangeLog.self) private var changes
     @Environment(Router.self) private var router
     @Environment(ActionRunner.self) private var runner
+    @Environment(NetworkMonitor.self) private var network
     @Environment(\.accessibilityVoiceOverEnabled) private var voiceOver
 
     @State private var postureFilter = SSHGuardPostureFilter.all.title
@@ -49,6 +50,7 @@ struct SSHGuardBoardScreen: View {
             }
             .onAppear(perform: applyLinkFilters)
             .onChange(of: store.status.loadedAt) { offer(force: false) }
+            .onChange(of: nodes.loadedAt) { offer(force: false) }
             .onChange(of: postureFilter) { offer(force: true) }
             .onChange(of: coverageFilter) { offer(force: true) }
             .onChange(of: query) { offer(force: true) }
@@ -85,7 +87,9 @@ struct SSHGuardBoardScreen: View {
                 }
             }
         default:
-            if store.status.value == nil {
+            if store.status.value == nil, !network.isSatisfied {
+                SSHGuardOfflineState(noun: "SSH Guard")
+            } else if store.status.value == nil {
                 List { LoadingRows(label: "Loading SSH Guard", count: 6) }
             } else {
                 list
