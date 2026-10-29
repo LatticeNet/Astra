@@ -29,7 +29,7 @@ Agents cannot tap, swipe or rotate a simulator, and they cannot run VoiceOver, V
 - Nodes: Select enters edit mode; picking rows enables "Disable n" and "Enable n" in the bottom bar; Disable opens one ConfirmSheet listing every node, Face ID, then per-node outcomes; Enable asks once in a dialog that names the count.
 - Nodes: the Group menu (None, Status, Region, Provider, Group, Tag) regroups the list; a query such as `status:offline region:tokyo` or `sort:-cpu` filters, and a misspelt field (`stauts:offline`) shows a sentence under the header instead of an empty list.
 - Nodes: long press a row shows the glance preview and Open, Copy link, Copy ID, Copy IP, Open terminal on web, Open on web and Disable; with a Triage token Disable stays in the menu, disabled, with "Needs node:admin".
-- Node detail: the Overview, Activity and Settings control stays pinned under the bar while scrolling; at AX5 it becomes a menu; in landscape it moves into the navigation bar.
+- Node detail: the Overview, Activity and Settings control stays pinned under the bar while scrolling; at AX5 it becomes a menu; in landscape it moves into the navigation bar beside the More button and the node name stays as the title.
 - Node detail Overview: swipe an open incident to Acknowledge (the label says "stops repeat alerts") and Snooze opens one dialog naming the incident; History chart scrubs only after a long press, and vertical scrolling and the edge swipe back still work over the chart.
 - Node detail Settings: Edit identity opens the sheet at full height with the keyboard; Save asks in a dialog naming the node and the changed fields; a server refusal shows in the sheet and is announced.
 - Node detail Settings: Agent debug toggles through a dialog and flips back when the dialog is cancelled; Rotate token runs Face ID, then shows the token once with Copy only (no Share), masked until Show, and it clears after 60 seconds or when the app goes to the background.
@@ -41,4 +41,4 @@ Agents cannot tap, swipe or rotate a simulator, and they cannot run VoiceOver, V
 - Map: each cluster is a button labelled like "Tokyo, 4 nodes, 1 offline"; tapping shows the member callout above the tab bar and its close button dismisses it; the tab bar stays reachable; with Latency on, degraded arcs are dashed and down arcs dotted, also in Grayscale, and the List view reads the problem paths.
 - No location: Locate all asks once with the count; per-row Resolve is a swipe listed once in the actions rotor.
 - Capability gate: Turn on runs a ConfirmSheet that lists the nodes it would refuse, then Face ID; with a token that has a node allowlist the button stays off with "Needs a token without a node allowlist".
-- Voice Control "Show names": the Group menu, Select, Map options, Map or List and More buttons all have names.
+- Voice Control "Show names": the Group menu, Select, Map options, Map or List (in landscape the single Show list or Show map button) and More buttons all have names.

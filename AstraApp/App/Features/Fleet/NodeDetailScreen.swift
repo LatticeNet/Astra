@@ -214,7 +214,9 @@ struct NodeDetailScreen: View {
         }
         .toolbar {
             if verticalSizeClass == .compact, model.record.value != nil {
-                ToolbarItem(placement: .principal) { picker.frame(maxWidth: 420) }
+                // Trailing, not principal: a principal item replaces the title,
+                // and landscape would lose which node this is.
+                ToolbarItem(placement: .topBarTrailing) { picker.frame(maxWidth: 320) }
             }
             ToolbarItem(placement: .topBarTrailing) { menu(model) }
         }
