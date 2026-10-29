@@ -365,10 +365,17 @@ struct FilterStateRow: View {
     let text: String
     let showAll: () -> Void
 
+    @Environment(\.dynamicTypeSize) private var typeSize
+
     var body: some View {
-        HStack(alignment: .firstTextBaseline) {
+        // Side by side at accessibility sizes, the button squeezes the
+        // sentence into hyphenated fragments; stack them instead.
+        let layout = typeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: Spacing.s))
+            : AnyLayout(HStackLayout(alignment: .firstTextBaseline))
+        layout {
             Text(text).foregroundStyle(.secondary)
-            Spacer(minLength: Spacing.s)
+                .frame(maxWidth: .infinity, alignment: .leading)
             Button("Show all", action: showAll)
         }
         .frame(minHeight: Spacing.minimumTarget)
