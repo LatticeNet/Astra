@@ -84,7 +84,10 @@ struct ActivityRoot: View {
 
 /// One visible scope pattern for all three tabs (section 1): the adaptive
 /// segmented control in a top safe-area bar, moved to the principal toolbar
-/// slot in a compact vertical size class.
+/// slot in a compact vertical size class. The title is inline: over a List,
+/// iOS 26 draws a large title under the picker bar's scroll edge effect, so
+/// it read blurred on every size, and `.inlineLarge` pushed the screens'
+/// leading items into overflow. The tab and the picker already name the screen.
 private struct ScopedRoot<Value: Hashable, Content: View>: View {
     let title: String
     let pickerTitle: String
@@ -93,19 +96,15 @@ private struct ScopedRoot<Value: Hashable, Content: View>: View {
     @ViewBuilder let content: () -> Content
 
     @Environment(\.verticalSizeClass) private var verticalSizeClass
-    @Environment(\.dynamicTypeSize) private var typeSize
     @State private var width: CGFloat?
-    @State private var screenHeight: CGFloat?
 
     var body: some View {
         let picker = AdaptiveSegmentedPicker(title: pickerTitle, options: options, selection: $selection, containerWidth: width)
         content()
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
-            // Height including the bars, so it does not change with the title mode.
-            .onGeometryChange(for: CGFloat.self) { $0.size.height + $0.safeAreaInsets.top + $0.safeAreaInsets.bottom } action: { screenHeight = $0 }
             .navigationTitle(title)
-            .navigationBarTitleDisplayMode(usesInlineTitle ? .inline : .automatic)
+            .toolbarTitleDisplayMode(.inline)
             .safeAreaBar(edge: .top) {
                 if verticalSizeClass != .compact {
                     picker
@@ -119,15 +118,6 @@ private struct ScopedRoot<Value: Hashable, Content: View>: View {
                 }
             }
             .tabRootToolbar()
-    }
-
-    /// On a short screen at accessibility sizes the large title and the
-    /// picker bar do not both fit under the toolbar, and the title renders
-    /// blurred under the bar's edge effect (iPhone SE at AX5). The tab and
-    /// the picker already name the screen, so the title goes inline there.
-    private var usesInlineTitle: Bool {
-        guard typeSize.isAccessibilitySize, let screenHeight else { return false }
-        return screenHeight < 700
     }
 }
 

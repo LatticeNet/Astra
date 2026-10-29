@@ -696,7 +696,7 @@ System text styles only, no custom face. Every role scales through the accessibi
 
 | Role | Style | Use |
 |---|---|---|
-| `screenTitle` | navigation large title (system) | Tab roots and detail screens |
+| `screenTitle` | navigation large title (system) | Tab roots and detail screens; the Fleet, Monitor and Activity roots use the inline title, because iOS 26 draws a large title under their picker bar's scroll edge effect |
 | `verdict` | `.headline` | Inbox verdict sentence (first list section, header trait) |
 | `detailHeader` | `.title3.weight(.semibold)` | Object name inside a sheet or header block when no nav title shows it |
 | `rowTitle` | `.body` | Object names in rows (2 lines, 3 at accessibility sizes) |
