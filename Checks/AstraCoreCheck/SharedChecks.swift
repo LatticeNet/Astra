@@ -918,6 +918,17 @@ private func checkPathDerivation() throws {
     try expectEqual(pair.paths[0].key, pair.paths[1].key, "both cells share the pair key")
     try expectEqual(Set(pair.paths.map(\.id)).count, 2, "ids stay unique in the matrix")
     try expectEqual(pair.path(key: pair.paths[1].key)?.monitorID, "m1", "a pair key opens the first cell, as the console does")
+
+    // Go writes RFC 3339 with fractional seconds only when they are not zero.
+    func degradedAt(_ text: String) throws -> Date? {
+        try JSONDecoder().decode(PathsResponse.self, from: json(#"{"paths":[],"degraded_at":"\#(text)"}"#)).degradedAt
+    }
+    let whole = Date(timeIntervalSince1970: 1_800_000_000)
+    try expectEqual(try degradedAt("2027-01-15T08:00:00Z"), whole, "whole seconds")
+    try expectEqual(try degradedAt("2027-01-15T16:00:00+08:00"), whole, "an offset")
+    let nanos = try expectUnwrapped(try degradedAt("2027-01-15T08:00:00.123456789Z"), "nanosecond fraction")
+    try expect(abs(nanos.timeIntervalSince(whole) - 0.123456789) < 0.001, "fractional seconds keep their value")
+    try expectEqual(try degradedAt("0001-01-01T00:00:00Z"), nil, "Go's zero time is no date")
 }
 
 // MARK: - Badge, DDNS, tasks

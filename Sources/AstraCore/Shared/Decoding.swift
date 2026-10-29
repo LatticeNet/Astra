@@ -58,30 +58,23 @@ enum DateValue {
     }
 }
 
+/// RFC 3339 dates as Go writes them: fractional seconds only when they are
+/// not zero. The format styles are Sendable values built once, because
+/// building a formatter per value dominated decoding polled lists.
 enum AstraDateParser {
+    private static let fractional = Date.ISO8601FormatStyle(includingFractionalSeconds: true)
+    private static let whole = Date.ISO8601FormatStyle()
+
     static func date(from value: String) -> Date? {
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, !trimmed.hasPrefix("0001-01-01") else {
             return nil
         }
-        return fractionalDateFormatter().date(from: trimmed)
-            ?? internetDateFormatter().date(from: trimmed)
+        return (try? fractional.parse(trimmed)) ?? (try? whole.parse(trimmed))
     }
 
     static func string(from date: Date) -> String {
-        internetDateFormatter().string(from: date)
-    }
-
-    private static func internetDateFormatter() -> ISO8601DateFormatter {
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime]
-        return formatter
-    }
-
-    private static func fractionalDateFormatter() -> ISO8601DateFormatter {
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        return formatter
+        whole.format(date)
     }
 }
 
