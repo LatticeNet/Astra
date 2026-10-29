@@ -72,17 +72,18 @@ struct AccountTokenRow: View {
         var parts = [AccessTokens.detail(token)]
         let risks = AccessScopes.risks(token.scopes).map(\.scope).filter { $0 != "*" }
         if !risks.isEmpty, !token.isRevoked { parts.append("holds \(risks.joined(separator: " and "))") }
-        if isOwn { parts.insert("This iPhone", at: 0) }
         if let revoked = token.revokedAt {
             parts.append("revoked \(TimeDisplay.relative(revoked, now: Date(), locale: locale))")
         } else if let created = token.createdAt {
             parts.append("created \(TimeDisplay.relative(created, now: Date(), locale: locale))")
         }
+        // VoiceOver hears what the detail line shows, since StatusRow speaks only the phrase.
+        let spoken = ["Token \(token.displayName)", style.word] + (isOwn ? ["used by this iPhone"] : []) + parts
         return StatusRow(
             style: style,
             title: token.displayName,
-            detail: parts.joined(separator: ", "),
-            accessibilityPhrase: "Token \(token.displayName), \(style.word)\(isOwn ? ", used by this iPhone" : "")"
+            detail: ((isOwn ? ["This iPhone"] : []) + parts).joined(separator: ", "),
+            accessibilityPhrase: spoken.joined(separator: ", ")
         )
     }
 }
@@ -96,13 +97,13 @@ struct AccountUserRow: View {
         let style = StatusStyle.accountUser(user)
         var parts = [AccessUsers.role(user), user.hasPassword ? "password" : "SSO only"]
         if AccessAllowlist.isConfined(user.serverAllowlist) { parts.append(AccessAllowlist.summary(user.serverAllowlist).lowercased()) }
-        if isSelf { parts.insert("You", at: 0) }
+        let spoken = ["User \(user.displayName)", style.word] + (isSelf ? ["your account"] : []) + parts
         return StatusRow(
             style: style,
             title: user.displayName,
-            detail: parts.joined(separator: ", "),
+            detail: ((isSelf ? ["You"] : []) + parts).joined(separator: ", "),
             titleIsIdentifier: user.displayName.contains("@"),
-            accessibilityPhrase: "User \(user.displayName), \(style.word)\(isSelf ? ", your account" : "")"
+            accessibilityPhrase: spoken.joined(separator: ", ")
         )
     }
 }
@@ -119,7 +120,7 @@ struct AccountProviderRow: View {
             title: provider.title,
             detail: host,
             reason: style.tone.isProblem ? AccessSSO.notices(provider).first : nil,
-            accessibilityPhrase: "Provider \(provider.title), \(style.word)"
+            accessibilityPhrase: "Provider \(provider.title), \(style.word), \(host)"
         )
     }
 }
