@@ -154,7 +154,6 @@ struct MachineDetailScreen: View {
                     Task { await deleteProfile(machine) }
                 } label: {
                     Label("Delete machine profile", systemImage: "trash")
-                        .foregroundStyle(missing == nil ? Color.statusFailText : Color.secondary)
                         .frame(minHeight: Spacing.minimumTarget)
                 }
                 .disabled(missing != nil)
@@ -298,7 +297,6 @@ struct MachineDetailScreen: View {
                     }
                     Section {
                         Button("Copy link", systemImage: "link") { InventoryCopy.copy(InventoryCopy.machineLink(machine.id)) }
-                        Button("Open on web", systemImage: "safari") { router.openOnWeb(.machine(id: machine.id)) }
                         Button("Edit on web", systemImage: "square.and.pencil") { router.openOnWeb(.machine(id: machine.id)) }
                     }
                     Section {
