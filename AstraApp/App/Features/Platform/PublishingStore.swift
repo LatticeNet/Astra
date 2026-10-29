@@ -48,7 +48,7 @@ final class PublishingStore {
     /// Share reads and writes refuse a node-confined token (`requireGlobalProxyScope`).
     var shareMissing: String? {
         if let missing = missing(ScopeRequirement(Self.shareScope)) { return missing }
-        return isConfined ? "a token without a node allowlist" : nil
+        return isConfined ? ScopeRequirement.unconfinedPhrase : nil
     }
 
     /// The reveal runs on the session, so only the session's scopes gate it;

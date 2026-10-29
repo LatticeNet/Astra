@@ -72,7 +72,9 @@ struct ScopeDeniedScreen: View {
             ContentUnavailableView {
                 Label(AccessState.denied(scope: scope).text, systemImage: "lock")
             } description: {
-                Text("Ask for a token that includes \(scope), or check what this one covers.")
+                Text(scope == ScopeRequirement.unconfinedPhrase
+                     ? "The server answers this only to \(scope). Ask for one, or check what this one covers."
+                     : "Ask for a token that includes \(scope), or check what this one covers.")
             } actions: {
                 Button("Token scopes") { router.openSettings([.page(.scopes)]) }
                     .buttonStyle(.bordered)

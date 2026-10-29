@@ -154,6 +154,7 @@ enum AccessState: Sendable, Hashable {
         case .updating: "Updating"
         case .stale(let time): time.map { "Stale. As of \($0)" } ?? "Not loaded yet"
         case .offline(let time): time.map { "Offline. Showing data from \($0)" } ?? "Offline. Nothing loaded yet"
+        case .denied(let scope) where scope == ScopeRequirement.unconfinedPhrase: "Hidden from a token with a node allowlist"
         case .denied(let scope): "Hidden: this token lacks \(scope)"
         case .partial(let plugins): "Hidden from this token: \(plugins)"
         case .companionBehind(let surface): "This app is behind the server. \(surface) could not be read."

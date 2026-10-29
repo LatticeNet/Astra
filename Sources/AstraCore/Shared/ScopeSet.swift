@@ -98,6 +98,11 @@ public struct ScopeRequirement: Sendable, Hashable {
 
     public static let none = ScopeRequirement(groups: [])
 
+    /// What a screen names instead of a scope when the server refuses a
+    /// token with a node allowlist (section 6.12: "Needs a token without a
+    /// node allowlist"). Denied states recognise it and word the line for it.
+    public static let unconfinedPhrase = "a token without a node allowlist"
+
     /// Both requirements at once.
     public func and(_ other: ScopeRequirement) -> ScopeRequirement {
         ScopeRequirement(groups: groups + other.groups, unconfined: unconfined || other.unconfined)

@@ -31,7 +31,7 @@ struct GateDetailScreen: View {
     }
 
     private func content(_ gate: FleetCapabilityImpact) -> some View {
-        let reason: String? = store.missing("node:admin") ?? (store.isConfined ? "a token without a node allowlist" : nil)
+        let reason: String? = store.missing("node:admin") ?? (store.isConfined ? ScopeRequirement.unconfinedPhrase : nil)
         return List {
             FleetRefreshError(state: model.state, noun: "the gate") { Task { await model.refresh(session: session) } }
             Section {
