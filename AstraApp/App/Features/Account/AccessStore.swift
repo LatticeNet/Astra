@@ -19,6 +19,10 @@ final class AccessStore {
     private(set) var tokens: ResourceState<[LatticeToken]> = .idle
     private(set) var providers: ResourceState<[AccessSSOProvider]> = .idle
     private(set) var passkeys: ResourceState<[AccessPasskey]> = .idle
+    /// `/api/me` on the session, for the two-factor state. Kept here rather
+    /// than read from SessionStore so a failed re-read keeps the last value
+    /// and the screen can say it is stale.
+    private(set) var identity: ResourceState<LatticeIdentity> = .idle
 
     static let usersRequirement = ScopeRequirement(AccessIntents.userScope)
     static let tokensRequirement = ScopeRequirement(AccessIntents.tokenScope)
@@ -44,8 +48,9 @@ final class AccessStore {
     /// Passkeys and two-factor state are read on the signed-in session only.
     var hasSession: Bool { session.revealClient != nil && !session.sessionExpired }
 
-    /// The identity of the session, for the two-factor state.
-    var sessionIdentity: LatticeIdentity? { session.sessionIdentity }
+    /// The identity of the session, for the two-factor state: the last one
+    /// this store read, else the one the session loaded at sign-in.
+    var sessionIdentity: LatticeIdentity? { identity.value ?? session.sessionIdentity }
 
     /// Whether `token` is the one this iPhone's primary client carries.
     func isOwn(_ token: LatticeToken) -> Bool {
@@ -113,6 +118,36 @@ final class AccessStore {
         }
     }
 
+    /// Re-reads `/api/me` on the session client. A failure keeps the last
+    /// identity, so the two-factor state shows as stale, never blank.
+    @discardableResult
+    func refreshIdentity() async -> Bool {
+        resetIfCredentialChanged()
+        guard let client = session.revealClient, !session.sessionExpired else {
+            identity = .idle
+            return true
+        }
+        let before = identity
+        identity = before.reloading
+        do {
+            identity = .loaded(try await client.fetchIdentity(), at: Date())
+            return true
+        } catch {
+            if Self.isCancellation(error) {
+                identity = before
+                return true
+            }
+            let apiError = LatticeAPIError(error)
+            if case .invalidResponse = apiError {
+                session.markCompanionBehind("Two-factor state")
+                identity = .companionBehind(surface: "Two-factor state")
+                return false
+            }
+            identity = .failed(apiError, last: before.value ?? session.sessionIdentity, lastAt: before.loadedAt)
+            return false
+        }
+    }
+
     // MARK: Loading
 
     private func load<Value: Sendable>(
@@ -156,10 +191,12 @@ final class AccessStore {
             tokens = .idle
             providers = .idle
             passkeys = .idle
+            identity = .idle
         }
         if key != sessionKey {
             sessionKey = key
             passkeys = .idle
+            identity = .idle
         }
     }
 

@@ -76,12 +76,9 @@ struct SecurityScreen: View {
             }
         }
         .listStyle(.insetGrouped)
-        .refreshable {
-            await session.refreshIdentity()
-            await store.refreshPasskeys()
-        }
+        .refreshable { await refreshAll() }
         .polling(.standard, version: changes.version([.account, .session])) {
-            await store.refreshPasskeys()
+            await refreshAll()
         }
     }
 
@@ -104,6 +101,9 @@ struct SecurityScreen: View {
     private var twoFactorSection: some View {
         Section {
             if let identity = store.sessionIdentity {
+                if case .failed(let error, _, _) = store.identity {
+                    ErrorRow(message: "Could not refresh two-factor state: \(error.localizedDescription)") { refreshIdentity() }
+                }
                 let style = StatusStyle.accountTwoFactor(enabled: identity.totpEnabled, required: identity.mfaRequired)
                 StatusRow(
                     style: style,
@@ -118,16 +118,30 @@ struct SecurityScreen: View {
                     DetailRow(label: "Server policy", value: "Two-factor required for every account", copyable: false)
                 }
                 WebLinkRow(title: identity.totpEnabled ? "Disable or reset on web" : "Set up on web", path: .settingsSecurity)
+            } else if case .companionBehind(let surface) = store.identity {
+                CompanionBehindRow(surface: surface)
             } else if !network.isSatisfied {
                 AccountNoticeRow(text: "Not read: this iPhone is offline.", symbol: "wifi.slash")
+            } else if case .failed(let error, _, _) = store.identity {
+                ErrorRow(message: "Could not load two-factor state: \(error.localizedDescription)") { refreshIdentity() }
             } else {
                 LoadingRows(label: "Loading two-factor state", count: 1)
             }
         } header: {
             Text("Two-factor").accessibilityAddTraits(.isHeader)
         } footer: {
-            Text("Enrollment shows a setup key and recovery codes once, so it stays on the web.")
+            VStack(alignment: .leading, spacing: Spacing.s) {
+                Text("Enrollment shows a setup key and recovery codes once, so it stays on the web.")
+                if store.sessionIdentity != nil, store.identity.loadedAt != nil || isFailed(store.identity) {
+                    FreshnessFooter(state: store.identity, interval: Polling.standard.interval(lowPower: false))
+                }
+            }
         }
+    }
+
+    private func isFailed<Value>(_ state: ResourceState<Value>) -> Bool {
+        if case .failed = state { return true }
+        return false
     }
 
     @ViewBuilder
@@ -179,5 +193,16 @@ struct SecurityScreen: View {
 
     private func refresh() {
         Task { await store.refreshPasskeys() }
+    }
+
+    private func refreshIdentity() {
+        Task { await store.refreshIdentity() }
+    }
+
+    @discardableResult
+    private func refreshAll() async -> Bool {
+        let identityRead = await store.refreshIdentity()
+        let passkeysRead = await store.refreshPasskeys()
+        return identityRead && passkeysRead
     }
 }
