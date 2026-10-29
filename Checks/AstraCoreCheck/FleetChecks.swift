@@ -136,6 +136,12 @@ private func checkFleetDecoding() async throws {
 // MARK: - Every demo response decodes
 
 private func checkFleetDemoReads() async throws {
+    let demo = fleetDemoClient()
+    let arcs = MapClusters.arcs(try await demo.fetchPaths(window: .oneHour), nodes: try await demo.fetchNodeGeo(), all: false)
+    let tokyoFrankfurt = arcs.filter { $0.id.contains("35.5,139.5") && $0.id.contains("50.0,8.5") }
+    try expectEqual(tokyoFrankfurt.count, 1, "paths between the same two cells share one arc: \(arcs.map(\.id))")
+    try expectEqual(tokyoFrankfurt.first?.state, .down, "the shared arc keeps the worst state")
+
     let client = fleetDemoClient()
     let records = try await client.fleetFetchNodeRecords()
     try expectEqual(records.count, DemoWorld.nodes.count, "node records cover the fleet")
@@ -659,4 +665,37 @@ private func checkFleetMapClusters() throws {
     try expectEqual(MapClusters.rounded(35.74), 35.5, "rounds to half degrees")
     try expectEqual(MapClusters.rounded(35.76), 36.0, "rounds up past the quarter")
 
+    let europe = MapClusters.clusters([
+        geo("g", "relay-ams-1", status: "online", lat: 52.37, lon: 4.90, city: "Amsterdam"),
+        geo("h", "relay-fra-2", status: "offline", lat: 50.11, lon: 8.68, city: "Frankfurt"),
+        geo("i", "edge-tyo-9", status: "online", lat: 35.68, lon: 139.69, city: "Tokyo"),
+    ])
+    let zoomedOut = MapClusters.merged(europe, latitudeGap: 6, longitudeGap: 8)
+    try expectEqual(zoomedOut.count, 2, "overlapping European pins merge at a world zoom")
+    try expectEqual(zoomedOut.first?.worst, .offline, "the merged pin carries the worst glyph")
+    try expectEqual(zoomedOut.first?.members.count, 2, "the merged pin sums its members")
+    try expectEqual(zoomedOut.first?.place, "Frankfurt and 1 more place", "merged pin place")
+    try expectEqual(MapClusters.merged(europe, latitudeGap: 0.5, longitudeGap: 0.5).count, 3, "zoomed in, pins stay apart")
+
+    let world = MapClusters.clusters([
+        geo("j", "edge-ams-1", status: "online", lat: 52.37, lon: 4.90, city: "Amsterdam"),
+        geo("k", "edge-ams-2", status: "online", lat: 52.37, lon: 4.90, city: "Amsterdam"),
+        geo("l", "edge-ams-3", status: "online", lat: 52.37, lon: 4.90, city: "Amsterdam"),
+        geo("m", "edge-tyo-1", status: "degraded", lat: 35.68, lon: 139.69, city: "Tokyo"),
+        geo("n", "relay-syd-1", status: "degraded", lat: -33.87, lon: 151.21, city: "Sydney"),
+        geo("o", "edge-sjc-1", status: "offline", lat: 37.34, lon: -121.89, city: "San Jose"),
+    ])
+    let opening = try expectUnwrapped(FleetMapFrame.opening(world), "an opening region")
+    func inside(_ lat: Double, _ lon: Double, _ latDelta: Double, _ lonDelta: Double) -> (FleetMapCluster) -> Bool {
+        { abs($0.latitude - lat) <= latDelta / 2 && abs(FleetMapFrame.wrapped($0.longitude - lon)) <= lonDelta / 2 }
+    }
+    let hidden = FleetMapFrame.hiddenProblems(world, isShown: inside(opening.centerLatitude, opening.centerLongitude, opening.latitudeDelta, opening.longitudeDelta))
+    try expect(hidden.count <= 1, "the map opens over the most problem places, not the most nodes: \(hidden.map(\.place))")
+    try expect(!hidden.contains { $0.place == "Tokyo" || $0.place == "Sydney" }, "Asia-Pacific problems open on screen")
+    let europeOnly = FleetMapFrame.hiddenProblems(world, isShown: inside(50, 8, 40, 60))
+    let view = FleetMapRegion.Result(centerLatitude: 0, centerLongitude: 170, latitudeDelta: 100, longitudeDelta: 100)
+    let fiji = FleetMapFrame.screenFraction(latitude: 0, longitude: -170, region: view)
+    try expect(abs(fiji.x - 0.7) < 0.001 && abs(fiji.y - 0.5) < 0.001, "screen fraction wraps the antimeridian: \(fiji)")
+    try expect(FleetMapFrame.screenFraction(latitude: 60, longitude: 170, region: view).y < 0, "north of the view is above the screen")
+    try expectEqual(europeOnly.map(\.place), ["San Jose", "Sydney", "Tokyo"], "problem places outside the view are named, worst first")
 }

@@ -22,6 +22,12 @@ struct MapScreen: View {
     @State private var selected: FleetMapCluster?
     @State private var position: MapCameraPosition = .automatic
     @State private var framed = false
+    /// Degrees one pin covers at the current zoom; nil until the camera settles.
+    @State private var pinGap: (latitude: Double, longitude: Double)?
+    @State private var mapSize: CGSize = .zero
+    @State private var visible: MKCoordinateRegion?
+    @ScaledMetric(relativeTo: .subheadline) private var pinWidth: CGFloat = 60
+    @ScaledMetric(relativeTo: .subheadline) private var pinHeight: CGFloat = 44
 
     var body: some View {
         FleetListState(state: store.geo, noun: "the map", retry: { Task { await refresh() } }) { nodes in
@@ -102,49 +108,111 @@ struct MapScreen: View {
     // MARK: Map
 
     private func map(_ nodes: [NodeGeoView]) -> some View {
-        let clusters = MapClusters.clusters(nodes)
+        let located = MapClusters.clusters(nodes)
+        // Pins that would overlap at this zoom merge, worst member anchoring,
+        // so a healthy pin never covers an offline one.
+        let clusters = pinGap.map { MapClusters.merged(located, latitudeGap: $0.latitude, longitudeGap: $0.longitude) } ?? located
         let arcs = latency ? (store.paths.value.map { MapClusters.arcs($0, nodes: nodes, all: allPaths) } ?? []) : []
-        return Map(position: $position) {
-            ForEach(arcs) { arc in
-                MapPolyline(coordinates: [
-                    CLLocationCoordinate2D(latitude: arc.fromLatitude, longitude: arc.fromLongitude),
-                    CLLocationCoordinate2D(latitude: arc.toLatitude, longitude: arc.toLongitude),
-                ], contourStyle: .geodesic)
-                .stroke(Self.arcColor(arc.state), style: Self.arcStroke(arc.state))
-            }
-            ForEach(clusters) { cluster in
-                Annotation(cluster.place, coordinate: CLLocationCoordinate2D(latitude: cluster.latitude, longitude: cluster.longitude), anchor: .center) {
-                    FleetClusterPin(cluster: cluster, selected: selected?.id == cluster.id) {
-                        selected = selected?.id == cluster.id ? nil : cluster
-                    }
+        return Group {
+            Map(position: $position) {
+                ForEach(arcs) { arc in
+                    MapPolyline(coordinates: [
+                        CLLocationCoordinate2D(latitude: arc.fromLatitude, longitude: arc.fromLongitude),
+                        CLLocationCoordinate2D(latitude: arc.toLatitude, longitude: arc.toLongitude),
+                    ], contourStyle: .geodesic)
+                    .stroke(Self.arcColor(arc.state), style: Self.arcStroke(arc.state))
                 }
-                .annotationTitles(.hidden)
+                ForEach(clusters) { cluster in
+                    Annotation(cluster.place, coordinate: CLLocationCoordinate2D(latitude: cluster.latitude, longitude: cluster.longitude), anchor: .center) {
+                        FleetClusterPin(cluster: cluster, selected: selected?.id == cluster.id) {
+                            selected = selected?.id == cluster.id ? nil : cluster
+                        }
+                    }
+                    .annotationTitles(.hidden)
+                }
+            }
+            .mapStyle(.standard(elevation: .flat, pointsOfInterest: .excludingAll))
+            .onGeometryChange(for: CGSize.self) { $0.size } action: { mapSize = $0 }
+            .onMapCameraChange(frequency: .onEnd) { context in
+                guard mapSize.width > 0, mapSize.height > 0 else { return }
+                visible = context.region
+                let span = context.region.span
+                pinGap = (span.latitudeDelta / mapSize.height * pinHeight, span.longitudeDelta / mapSize.width * pinWidth)
+            }
+            .task(id: located.count) {
+                // Open once over the problem places; after that the operator's pan and zoom stay.
+                guard !framed, let open = FleetMapFrame.opening(located) else { return }
+                framed = true
+                position = .region(MKCoordinateRegion(
+                    center: CLLocationCoordinate2D(latitude: open.centerLatitude, longitude: open.centerLongitude),
+                    span: MKCoordinateSpan(latitudeDelta: open.latitudeDelta, longitudeDelta: open.longitudeDelta)
+                ))
+            }
+            .mapControls { MapCompass() }
+            .overlay {
+                if located.isEmpty { emptyMap(nodes) }
+            }
+            .overlay(alignment: .bottom) {
+                if let selected {
+                    callout(selected)
+                } else {
+                    // Bottom, above the tab bar: the top of the map is where the scope picker and most pins sit.
+                    VStack(spacing: Spacing.s) {
+                        if let visible {
+                            FleetOffscreenNotice(clusters: FleetMapFrame.hiddenProblems(located) { isShown($0, in: visible) }) { cluster in
+                                position = .region(MKCoordinateRegion(
+                                    center: CLLocationCoordinate2D(latitude: cluster.latitude, longitude: cluster.longitude),
+                                    span: visible.span
+                                ))
+                            }
+                        }
+                        if latency, !located.isEmpty {
+                            FleetArcLegend(denied: deniedPaths, failure: pathsFailure) { Task { await refresh() } }
+                        }
+                    }
+                    .padding(.horizontal, Spacing.l)
+                    .padding(.bottom, Spacing.s)
+                }
+            }
+            .accessibilityHint(voiceOver ? "The List view reads every node and path." : "")
+        }
+    }
+
+    /// Whether a cluster's pin is in the clear middle of the map: the top sits
+    /// under the bars and the scope picker, the bottom under this notice and the tab bar.
+    private func isShown(_ cluster: FleetMapCluster, in region: MKCoordinateRegion) -> Bool {
+        let view = FleetMapRegion.Result(centerLatitude: region.center.latitude, centerLongitude: region.center.longitude,
+                                         latitudeDelta: region.span.latitudeDelta, longitudeDelta: region.span.longitudeDelta)
+        let point = FleetMapFrame.screenFraction(latitude: cluster.latitude, longitude: cluster.longitude, region: view)
+        return (0.03...0.97).contains(point.x) && (0.2...0.75).contains(point.y)
+    }
+
+    /// No pins to draw: say whether the fleet is empty or only unlocated.
+    private func emptyMap(_ nodes: [NodeGeoView]) -> some View {
+        Group {
+            if nodes.isEmpty {
+                ContentUnavailableView("No nodes enrolled", systemImage: "map",
+                                       description: Text("Nodes appear here once they are enrolled and report a location."))
+            } else {
+                ContentUnavailableView {
+                    Label("No node has a location", systemImage: "location.slash")
+                } description: {
+                    Text(nodes.count == 1 ? "The one node has no location yet." : "None of the \(nodes.count) nodes has a location yet.")
+                } actions: {
+                    Button("No location (\(nodes.count))") { router.push(.fleet(.unlocated)) }
+                        .buttonStyle(.bordered)
+                }
             }
         }
-        .mapStyle(.standard(elevation: .flat, pointsOfInterest: .excludingAll))
-        .task(id: clusters.count) {
-            // Frame every located node once; after that the operator's pan and zoom stay.
-            guard !framed, let fit = FleetMapRegion.fitting(latitudes: clusters.map(\.latitude), longitudes: clusters.map(\.longitude)) else { return }
-            framed = true
-            // Centre on where the nodes are, not the middle of their bounding box,
-            // so a worldwide fleet opens over its densest area on a narrow screen.
-            let weight = clusters.map { Double($0.members.count) }
-            let total = max(1, weight.reduce(0, +))
-            let latitude = zip(clusters, weight).reduce(0) { $0 + $1.0.latitude * $1.1 } / total
-            let longitude = zip(clusters, weight).reduce(0) { $0 + $1.0.longitude * $1.1 } / total
-            position = .region(MKCoordinateRegion(
-                center: CLLocationCoordinate2D(latitude: latitude, longitude: longitude),
-                span: MKCoordinateSpan(latitudeDelta: fit.latitudeDelta, longitudeDelta: fit.longitudeDelta)
-            ))
-        }
-        .mapControls { MapCompass() }
-        .overlay(alignment: .top) {
-            if latency { FleetArcLegend(denied: deniedPaths).padding(.top, Spacing.s) }
-        }
-        .overlay(alignment: .bottom) {
-            if let selected { callout(selected) }
-        }
-        .accessibilityHint(voiceOver ? "The List view reads every node and path." : "")
+        .padding(Spacing.l)
+        .background(Color(uiColor: .systemGroupedBackground))
+    }
+
+    /// The paths read failed with nothing earlier to draw: arcs cannot be trusted as "no problems".
+    private var pathsFailure: String? {
+        guard FleetLoad.failedEmpty(store.paths) else { return nil }
+        if case .failed(let error, _, _) = store.paths { return error.localizedDescription }
+        return "The server answered in a shape this app cannot read."
     }
 
     private var deniedPaths: String? {
@@ -218,9 +286,10 @@ struct MapScreen: View {
                     case .denied(let scope):
                         ScopeDeniedRow(scope: scope)
                     default:
-                        if store.paths.value == nil {
+                        FleetSectionError(state: store.paths, noun: "paths") { Task { await refresh() } }
+                        if FleetLoad.isWaiting(store.paths) {
                             LoadingRows(label: "Loading paths", count: 2)
-                        } else if problems.isEmpty {
+                        } else if store.paths.value != nil, problems.isEmpty {
                             Text("No degraded or down paths").foregroundStyle(.secondary).frame(minHeight: Spacing.minimumTarget, alignment: .leading)
                         }
                         ForEach(problems) { path in
@@ -278,33 +347,97 @@ struct FleetClusterPin: View {
             .overlay(Capsule().stroke(selected ? Color.accentText : Color(uiColor: .separator), lineWidth: selected ? 2 : 1))
         }
         .tint(.primary)
+        .fleetMapChrome()
         .accessibilityLabel(cluster.label)
         .accessibilityHint("Shows the nodes here")
     }
 }
 
-/// The arc legend: solid up, dashed degraded, dotted down.
+/// Problem places the map is not showing, worst first, so panning never
+/// hides an offline node: "Frankfurt offline off screen". Tapping moves there.
+struct FleetOffscreenNotice: View {
+    let clusters: [FleetMapCluster]
+    let show: (FleetMapCluster) -> Void
+
+    var body: some View {
+        if let worst = clusters.first {
+            let style = StatusStyle.node(worst.worst)
+            Button { show(worst) } label: {
+                HStack(spacing: Spacing.s) {
+                    Label {
+                        Text(sentence)
+                            .foregroundStyle(style.tone.word)
+                            .fixedSize(horizontal: false, vertical: true)
+                    } icon: {
+                        Image(systemName: style.symbol).foregroundStyle(style.tone.glyph)
+                    }
+                    Spacer(minLength: 0)
+                    Text("Show").fontWeight(.semibold).foregroundStyle(Color.accentText)
+                }
+                .font(.footnote)
+                .padding(.horizontal, Spacing.m)
+                .padding(.vertical, Spacing.s)
+                .frame(minHeight: Spacing.minimumTarget)
+                .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(Color(uiColor: .separator), lineWidth: 1))
+            }
+            .buttonStyle(.plain)
+            .fleetMapChrome()
+            .accessibilityHint("Moves the map to \(worst.place)")
+        }
+    }
+
+    private var sentence: String {
+        let first = clusters[0]
+        let word = first.worst == .neverReported ? "never reported" : first.worst.rawValue
+        let others = clusters.count - 1
+        let rest = others == 0 ? "" : (others == 1 ? " and 1 more problem place" : " and \(others) more problem places")
+        return "\(first.place) \(word)\(rest) off screen"
+    }
+}
+
+/// The arc legend: solid up, dashed degraded, dotted down. When the paths
+/// read failed it says so instead, so an empty map never reads as healthy.
+/// Map chrome: capped below the accessibility sizes, with the large content
+/// viewer, so it never grows over the pins it explains.
 struct FleetArcLegend: View {
     let denied: String?
+    var failure: String?
+    var retry: () -> Void = {}
 
     var body: some View {
         Group {
             if let denied {
                 Label("Paths need \(denied)", systemImage: "lock").font(.footnote).foregroundStyle(.secondary)
+            } else if let failure {
+                HStack(spacing: Spacing.s) {
+                    Label {
+                        Text("Paths could not load: \(failure)").foregroundStyle(Color.statusFailText)
+                    } icon: {
+                        Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(Color.statusFailFill)
+                    }
+                    .font(.footnote)
+                    Button("Retry", action: retry)
+                        .font(.footnote.weight(.semibold))
+                        .frame(minHeight: Spacing.minimumTarget)
+                }
             } else {
-                // At large text sizes the three keys stack rather than break words.
                 ViewThatFits(in: .horizontal) {
                     HStack(spacing: Spacing.m) { items }
                     VStack(alignment: .leading, spacing: Spacing.xs) { items }
                 }
             }
         }
+        .fleetMapChrome()
         .padding(.horizontal, Spacing.m)
         .padding(.vertical, Spacing.s)
         .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(Color(uiColor: .separator), lineWidth: 1))
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(denied.map { "Paths need \($0)" } ?? "Legend: solid line up, dashed degraded, dotted down")
+        .accessibilityLabel(denied.map { "Paths need \($0)" } ?? failure.map { "Paths could not load: \($0)" } ?? "Legend: solid line up, dashed degraded, dotted down")
+        .accessibilityActions {
+            if failure != nil { Button("Retry", action: retry) }
+        }
     }
 
     @ViewBuilder private var items: some View {
@@ -325,4 +458,22 @@ struct FleetArcLegend: View {
             Text(word).font(.footnote).fixedSize()
         }
     }
+}
+
+private struct FleetMapChrome: ViewModifier {
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
+
+    /// Pins, the legend and notices are map chrome: they stop growing short of
+    /// the accessibility sizes (lower still in landscape, where the map is
+    /// short) and show the large content viewer instead, so they never cover
+    /// the map they explain. The List view carries the same facts at any size.
+    func body(content: Content) -> some View {
+        content
+            .dynamicTypeSize(...(verticalSizeClass == .compact ? DynamicTypeSize.large : .xxxLarge))
+            .accessibilityShowsLargeContentViewer()
+    }
+}
+
+private extension View {
+    func fleetMapChrome() -> some View { modifier(FleetMapChrome()) }
 }
