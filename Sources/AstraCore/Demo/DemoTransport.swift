@@ -28,7 +28,7 @@ public struct DemoTransport: HTTPTransport {
 
     /// The scopes `/api/me` reports for a demo identity: the Operator preset
     /// on the token (Triage in Limited token, Operator plus root in Root
-    /// token) and `*` on the session.
+    /// token, `*` in Full administrator) and `*` on the session.
     public static func scopes(for identity: DemoIdentity, scenario: DemoScenario) -> ScopeSet {
         switch identity {
         case .session: ScopeSet(scopes: ["*"])
@@ -37,6 +37,7 @@ public struct DemoTransport: HTTPTransport {
             case .limitedToken: ScopeSet(scopes: TokenPresets.triage.scopes)
             case .confinedToken: ScopeSet(scopes: TokenPresets.operator.scopes, serverAllowlist: DemoWorld.confinedNodeIDs)
             case .rootToken: ScopeSet(scopes: TokenPresets.operatorPlusRoot.scopes)
+            case .fullAdmin: ScopeSet(scopes: ["*"])
             default: ScopeSet(scopes: TokenPresets.operator.scopes)
             }
         }

@@ -220,6 +220,9 @@ private func checkScenarios() async throws {
     try expectEqual(Set(try await limited.fetchIdentity().scopes), Set(TokenPresets.triage.scopes), "Limited token reports Triage")
     let root = demoClient(scenario: .rootToken)
     try expectEqual(Set(try await root.fetchIdentity().scopes), Set(TokenPresets.operatorPlusRoot.scopes), "Root token reports Operator plus root")
+    let admin = demoClient(scenario: .fullAdmin)
+    try expectEqual(try await admin.fetchIdentity().scopes, ["*"], "Full administrator reports *")
+    try expect(DemoScenario(argument: "full-admin") == .fullAdmin && DemoScenario.fullAdmin.argument == "full-admin", "Full administrator round-trips its launch argument")
     try expectEqual(try await limited.listHumanPendingApprovals().count, 0, "Triage lists no approvals")
     try expectEqual(try await limited.fetchSSHGuardStatus().count, 0, "Triage reads no SSH Guard rows")
     do {
