@@ -123,6 +123,9 @@ private func checkSSHGuardFormAndSources() throws {
     try expectEqual(prefilled.confirmWindowSec, 1800, "prefilled window")
     try expectEqual(prefilled.mgmtSources, "203.0.113.5/32\n198.51.100.0/24", "prefilled sources")
     try expectEqual(prefilled.outOfBandFallback, false, "sources, not the fallback")
+    try expectEqual(prefilled.keepLegacyPort, true, "prefilled keep_legacy_port")
+    let closed = SSHGuardRotation.Form.prefilled(nodeID: "n-a", lastArm: lastArm, lastArmPlan: plan.replacingOccurrences(of: "keep_legacy_port: true", with: "keep_legacy_port: false"))
+    try expectEqual(closed.keepLegacyPort, false, "a re-arm keeps port 22 closed when the last arm closed it")
     let terminal = SSHGuardRotation.Form.prefilled(nodeID: "n-a", lastArm: lastArm, lastArmPlan: "stage: arm\nknock: true\n\n## Management sources (reach SSH without knocking, no expiry)\n\n- (none)\n")
     try expectEqual(terminal.outOfBandFallback, true, "a knock arm with no source stood on the terminal")
     try expectEqual(SSHGuardRotation.Form.prefilled(nodeID: "n-a", lastArm: nil, lastArmPlan: nil), .defaults(nodeID: "n-a"), "no last arm: defaults")
@@ -256,6 +259,13 @@ private func checkSSHGuardWriteFlows() async throws {
     try expectEqual(try sgCanonical(await acceptMock.lastBody),
                     #"{"accept_findings":true,"enable_knock":true,"keep_legacy_port":true,"mgmt_sources":["203.0.113.5"],"node_id":"n-a"}"#,
                     "accepted arm body")
+
+    let overridden = #"{"approval":{"id":"approval_arm2","plan_sha256":"aa","status":"pending"},"findings":[{"code":"overridden_by_guard","severity":"block","message":"open tcp/22 in netguard first"},{"code":"single_way_in","severity":"warn","message":"one IP"}]}"#
+    let (overrideClient, _) = sgMock(["\(sgBase)/api/sshguard/plan": (200, json(overridden))])
+    let third = await WriteFlow(intent: intent, client: overrideClient, authenticator: SSHGuardAuthStub(outcome: .cancelled))
+        .commit(choices: ConfirmChoices(accepted: [SSHGuardIntents.acceptFindingsID]))
+    guard case .finished(.filed(_, _, let overrideNotes)) = third else { throw CheckFailure.failed("accepted arm files, got \(third)") }
+    try expectEqual(overrideNotes, ["Filed the arm plan for edge-a", "Accepted: open tcp/22 in netguard first", "one IP"], "the result restates what was accepted")
 
     let (confirmClient, confirmMock) = sgMock(["\(sgBase)/api/sshguard/confirm": (200, json(#"{"approval":{"id":"approval_cfm","plan_sha256":"bb","status":"pending"}}"#))])
     let timed = SSHGuardIntents.confirm(node, deadlineText: "08:25")

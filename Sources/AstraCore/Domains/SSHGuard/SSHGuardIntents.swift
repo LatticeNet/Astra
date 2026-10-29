@@ -106,7 +106,8 @@ public enum SSHGuardIntents {
 
     static func file(_ request: SSHGuardPlanRequest, node: ObjectRef, client: LatticeClient) async throws -> WriteOutcome {
         let answer = try await client.sshGuardPlan(request)
-        let warnings = answer.findings.filter { !$0.isBlocking }.map(\.message)
+        // The result restates what the operator overrode, not only the warnings.
+        let warnings = answer.findings.map { $0.isBlocking ? "Accepted: \($0.message)" : $0.message }
         let filed = request.isRotation ? "Filed the rotation plan for \(node.name)" : "Filed the arm plan for \(node.name)"
         return .filed(approvalIDs: answer.filedApprovalIDs, refused: [], notes: [filed] + warnings)
     }

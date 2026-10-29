@@ -283,7 +283,8 @@ public enum SSHGuardFixtures {
                                     plan: planText, planSHA256: PlanHasher.sha256Hex(planText), createdAt: "", updatedAt: "")
         return .json(DemoJSON.object([
             ("approval", SharedFixtures.approvalJSON(approval, includePlan: true)),
-            ("findings", .array(findings.filter { $0.severity != "block" }.map(\.json))),
+            // Every finding, the accepted blocking ones included, as the server answers.
+            ("findings", .array(findings.map(\.json))),
         ]).text)
     }
 

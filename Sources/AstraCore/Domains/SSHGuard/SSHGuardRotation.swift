@@ -119,6 +119,9 @@ public enum SSHGuardRotation {
             if let port = planPort(lastArmPlan), port != SSHGuardRotation.legacyPort {
                 form.sshPort = port
             }
+            if let keep = parseKeepLegacyPort(lastArmPlan) {
+                form.keepLegacyPort = keep
+            }
             if let sources = parseArmMgmtSources(lastArmPlan) {
                 if sources.isEmpty, form.enableKnock {
                     // A knock arm with no source could only have stood on the terminal.
@@ -190,6 +193,16 @@ public enum SSHGuardRotation {
         case "true": return true
         case "false": return false
         default: return nil
+        }
+    }
+
+    /// The `keep_legacy_port: true|false` header line, so a re-arm does not
+    /// reopen port 22 on a node whose last arm closed it.
+    public static func parseKeepLegacyPort(_ plan: String?) -> Bool? {
+        switch headerValue("keep_legacy_port", in: plan) {
+        case "true": true
+        case "false": false
+        default: nil
         }
     }
 
