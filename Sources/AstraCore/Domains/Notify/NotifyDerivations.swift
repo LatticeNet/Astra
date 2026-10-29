@@ -8,6 +8,16 @@ import Foundation
 
 // MARK: Channel kinds
 
+/// A clock time for a moment today in the display zone, else a date and
+/// time, so yesterday's 17:20 never reads as later today.
+public enum NotifyClock {
+    public static func when(_ date: Date, mode: TimeZoneMode, locale: Locale, now: Date = Date()) -> String {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = mode.timeZone
+        return calendar.isDate(date, inSameDayAs: now) ? TimeDisplay.clock(date, mode: mode, locale: locale) : TimeDisplay.dateTime(date, mode: mode, locale: locale)
+    }
+}
+
 public enum NotifyKind {
     /// The four kinds the server builds (`buildChannel`).
     public static let all = ["telegram", "bark", "discord", "webhook"]
@@ -116,13 +126,13 @@ public enum NotifySent {
         delivery.repeats < 1 ? nil : delivery.repeats + 1
     }
 
-    /// The sender: "From the server", "From plugin x", and so on.
+    /// The sender: "The server", "Plugin x", and so on.
     public static func origin(_ delivery: NotifyDelivery) -> String {
         switch delivery.source {
-        case "plugin": delivery.sourceID.isEmpty ? "From a plugin" : "From plugin \(delivery.sourceID)"
-        case "webhook": delivery.sourceID.isEmpty ? "From an inbound webhook" : "From inbound webhook \(delivery.sourceID)"
-        case "operator": "Test from the console"
-        case "server", "": "From the server"
+        case "plugin": delivery.sourceID.isEmpty ? "A plugin" : "Plugin \(delivery.sourceID)"
+        case "webhook": delivery.sourceID.isEmpty ? "An inbound webhook" : "Inbound webhook \(delivery.sourceID)"
+        case "operator": "A test from the console"
+        case "server", "": "The server"
         default: "From \(delivery.source)"
         }
     }
@@ -220,7 +230,7 @@ public enum NotifySentOutcomeFilter: String, CaseIterable, Sendable, Hashable {
         switch self {
         case .all: "All outcomes"
         case .failed: "Failed"
-        case .planned: "In progress"
+        case .planned: "Queued or retrying"
         case .suppressed: "Held"
         case .noRoute: "Not routed"
         case .sent: "Sent"
@@ -296,6 +306,17 @@ public struct NotifyChannelHealthLine: Equatable, Sendable {
     public enum State: String, Sendable {
         /// A server older than the outbox, which sends no health.
         case unreported, unknown, ok, degraded, failing
+
+        /// The section 4.2 word a channel row shows for this state.
+        public var word: String {
+            switch self {
+            case .unreported: "health not reported"
+            case .unknown: "no sends yet"
+            case .ok: "delivering"
+            case .degraded: "last send failed"
+            case .failing: "failing"
+            }
+        }
     }
 
     public var state: State
@@ -616,7 +637,7 @@ public struct NotifyWitnessLine: Equatable, Sendable {
     public func sentence(mode: TimeZoneMode, locale: Locale, now: Date) -> String {
         func clock(_ date: Date?) -> String {
             guard let date else { return "at an unknown time" }
-            return now.timeIntervalSince(date) < 20 * 3_600 ? TimeDisplay.clock(date, mode: mode, locale: locale) : TimeDisplay.dateTime(date, mode: mode, locale: locale)
+            return NotifyClock.when(date, mode: mode, locale: locale, now: now)
         }
         func ago(_ date: Date?) -> String {
             guard let date else { return "at an unknown time" }

@@ -264,7 +264,7 @@ private func checkNotifySentLog() throws {
         throw CheckFailure.failed("a misspelt field is an error, not an empty list")
     }
 
-    try expectEqual(NotifySent.origin(try notifyDelivery(#"{"id":"d","source":"webhook","source_id":"wh_ups"}"#)), "From inbound webhook wh_ups", "webhook origin")
+    try expectEqual(NotifySent.origin(try notifyDelivery(#"{"id":"d","source":"webhook","source_id":"wh_ups"}"#)), "Inbound webhook wh_ups", "webhook origin")
     try expectEqual(NotifySent.severityWord(try notifyDelivery(#"{"id":"d","severity":"critical","recovery":true}"#)), "Recovered", "a recovery reads recovered whatever its severity")
 }
 

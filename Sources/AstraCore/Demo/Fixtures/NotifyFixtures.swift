@@ -405,7 +405,7 @@ public enum NotifyFixtures {
         let delivery: DemoJSON = .object([
             "id": .string("nd_test_\(channel.id)"), "event_id": "evt_test", "event_type": "notify.test", "source": "operator",
             "channel_id": .string(channel.id), "channel_name": .string(channel.name), "channel_kind": .string(channel.kind),
-            "role": "test", "outcome": failing ? "failed" : "sent", "reason": failing ? "upstream status 503 after 1 attempts" : nil,
+            "role": "test", "outcome": failing ? "failed" : "sent", "reason": failing ? "upstream status 503" : nil,
             "attempts": [attempt], "title": "Lattice test",
             "body": .string("Test message for the \(channel.kind) channel \"\(channel.name)\", sent from Notifications. If you can read this, the channel works."),
             "created_at": .time(), "settled_at": .time(),
@@ -493,10 +493,8 @@ public enum NotifyFixtures {
         guard let hook = webhooks.first(where: { $0.id == id }), !(await state.contains(id, in: deletedWebhooksSet)) else {
             return .error(status: 404, code: "not_found", message: "webhook not found")
         }
-        let routed = !hook.enabled ? false : rules.contains { $0.enabled && $0.events.contains(hook.event) }
-        if !hook.enabled {
-            return .json(webhookAttempt("whd_test", hook: id, outcome: "rejected", at: "", channels: 0, delivered: 0, reason: "webhook disabled", test: true, fields: 0).text)
-        }
+        // Like the server, a test fires whether or not the webhook is enabled.
+        let routed = rules.contains { $0.enabled && $0.events.contains(hook.event) }
         let channelCount = rules.filter { $0.enabled && $0.events.contains(hook.event) }.flatMap(\.channels).count
         return .json(webhookAttempt("whd_test", hook: id, outcome: routed ? "accepted" : "no_route", at: "", channels: routed ? channelCount : 0, delivered: 0,
                                     reason: routed ? nil : "no enabled rule and channel matched the event", test: true, fields: 0).text)
@@ -609,8 +607,8 @@ public enum NotifyFixtures {
             ("deliveries", .array(rows)),
             ("stored", .number(Double(allDeliveries.count))),
             ("durable", true),
-            ("max", 2_000),
-            ("floor", 200),
+            ("max", 1_000),
+            ("floor", 50),
         ]).text
     }
 

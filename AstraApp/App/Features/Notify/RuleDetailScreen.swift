@@ -79,7 +79,7 @@ struct RuleDetailScreen: View {
                 ForEach(rule.channelIDs, id: \.self) { channelID in
                     if let channel = store.channel(id: channelID) {
                         NavigationLink(value: AppRoute.notify(.channel(id: channel.id))) {
-                            NotifyChannelRow(channel: channel, fallback: nil)
+                            NotifyChannelRow(channel: channel, fallback: store.channel(id: channel.fallbackChannelID))
                         }
                     } else {
                         DetailRow(label: "Missing channel", value: channelID, monospaced: true)

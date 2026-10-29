@@ -18,12 +18,13 @@ extension StatusStyle {
 
     static func notifyChannel(_ channel: NotifyChannel) -> StatusStyle {
         guard channel.enabled else { return StatusStyle(word: "off", symbol: "minus.circle", tone: .quiet) }
-        switch NotifyChannelHealthLine.of(channel.health).state {
-        case .unreported: return StatusStyle(word: "health not reported", symbol: "questionmark.circle", tone: .quiet)
-        case .unknown: return StatusStyle(word: "no sends yet", symbol: "circle.dashed", tone: .quiet)
-        case .ok: return StatusStyle(word: "delivering", symbol: "checkmark.circle.fill", tone: .ok)
-        case .degraded: return StatusStyle(word: "last send failed", symbol: "exclamationmark.triangle.fill", tone: .warn)
-        case .failing: return StatusStyle(word: "failing", symbol: "xmark.octagon.fill", tone: .fail)
+        let state = NotifyChannelHealthLine.of(channel.health).state
+        return switch state {
+        case .unreported: StatusStyle(word: state.word, symbol: "questionmark.circle", tone: .quiet)
+        case .unknown: StatusStyle(word: state.word, symbol: "circle.dashed", tone: .quiet)
+        case .ok: StatusStyle(word: state.word, symbol: "checkmark.circle.fill", tone: .ok)
+        case .degraded: StatusStyle(word: state.word, symbol: "exclamationmark.triangle.fill", tone: .warn)
+        case .failing: StatusStyle(word: state.word, symbol: "xmark.octagon.fill", tone: .fail)
         }
     }
 
@@ -76,7 +77,7 @@ extension StatusStyle {
 enum NotifyTime {
     /// A clock time for today's events, a date and time for older ones.
     static func when(_ date: Date, mode: TimeZoneMode, locale: Locale, now: Date = Date()) -> String {
-        abs(now.timeIntervalSince(date)) < 20 * 3_600 ? TimeDisplay.clock(date, mode: mode, locale: locale) : TimeDisplay.dateTime(date, mode: mode, locale: locale)
+        NotifyClock.when(date, mode: mode, locale: locale, now: now)
     }
 }
 

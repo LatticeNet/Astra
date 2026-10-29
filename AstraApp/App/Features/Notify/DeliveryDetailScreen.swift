@@ -194,7 +194,13 @@ struct DeliveryDetailScreen: View {
                 DetailRow(label: "Rule", value: store.rules.value == nil ? name : "\(name), since deleted", copyable: false)
             }
             DetailRow(label: "Role", value: roleText(delivery), copyable: false)
-            DetailRow(label: "From", value: NotifySent.origin(delivery), copyable: false)
+            if delivery.source == "webhook", let hook = store.webhook(id: delivery.sourceID) {
+                NavigationLink(value: AppRoute.notify(.webhook(id: hook.id))) {
+                    DetailRow(label: "From", value: "Inbound webhook \(hook.displayName)", copyable: false)
+                }
+            } else {
+                DetailRow(label: "From", value: NotifySent.origin(delivery), copyable: false)
+            }
             if let held = delivery.heldUntil {
                 DetailRow(label: "Held until", value: TimeDisplay.dateTime(held, mode: mode, locale: locale), secondary: TimeDisplay.otherZone(held, mode: mode, locale: locale), copyable: false)
             }

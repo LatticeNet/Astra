@@ -32,7 +32,8 @@ public enum NotifyIntents {
             verify: { client in
                 let channels = try await client.listNotifyChannels()
                 guard let fresh = channels.first(where: { $0.id == channel.id }) else { return "\(object.name) is no longer listed." }
-                return "\(object.name) now reads \(NotifyChannelHealthLine.of(fresh.health).state.rawValue)."
+                guard fresh.enabled else { return "\(object.name) is off." }
+                return "\(object.name) now reads \(NotifyChannelHealthLine.of(fresh.health).state.word)."
             },
             idempotent: false, changes: [.notify],
             perform: { client, _ in

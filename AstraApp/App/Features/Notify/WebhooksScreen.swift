@@ -112,7 +112,8 @@ struct WebhooksScreen: View {
             NotifyWebhookRow(hook: hook, channels: channels, rules: rules)
         }
         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-            if store.adminMissing == nil, hook.enabled {
+            // The server fires a test even for a disabled webhook, as the console offers it.
+            if store.adminMissing == nil {
                 Button("Send test", systemImage: "paperplane") {
                     Task { await runner.run(NotifyIntents.testWebhook(hook)) }
                 }
@@ -122,10 +123,8 @@ struct WebhooksScreen: View {
         .contextMenu {
             NotifyObjectMenu(route: .notify(.webhook(id: hook.id)), link: .webhook(id: hook.id), web: .webhook(id: hook.id), objectID: hook.id)
             Divider()
-            if hook.enabled {
-                NotifyGatedButton(title: "Send test", systemImage: "paperplane", missing: store.adminMissing) {
-                    Task { await runner.run(NotifyIntents.testWebhook(hook)) }
-                }
+            NotifyGatedButton(title: "Send test", systemImage: "paperplane", missing: store.adminMissing) {
+                Task { await runner.run(NotifyIntents.testWebhook(hook)) }
             }
             NotifyGatedButton(title: "Delete webhook", systemImage: "trash", missing: store.adminMissing, role: .destructive) {
                 Task { await runner.run(NotifyIntents.deleteWebhook(hook)) }
@@ -156,6 +155,7 @@ struct NotifyWebhookRow: View {
         let style = StatusStyle.notifyWebhook(hook, reachesNobody: nobody)
         let called = hook.lastUsedAt.map { "called \(RelativeDateFormatter.string(from: $0))" } ?? "never called"
         let reason: String? = nobody ? (routing == .noChannel ? "No notification channel is enabled." : "No enabled rule routes \(hook.eventType).") : nil
+        let detail = style.word == "never called" ? hook.eventType : "\(hook.eventType), \(called)"
         return StatusRow(
             style: style,
             title: hook.displayName,

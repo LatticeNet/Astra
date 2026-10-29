@@ -78,7 +78,7 @@ struct WebhookDetailScreen: View {
 
             Section {
                 DetailRow(label: "Event type", value: hook.eventType, monospaced: true)
-                DetailRow(label: "Enabled", value: hook.enabled ? "On" : "Off: refuses calls, keeps its secret and history", copyable: false)
+                DetailRow(label: "Enabled", value: hook.enabled ? "On" : "Off: refuses outside calls, keeps its secret and history", copyable: false)
                 DetailRow(label: "Endpoint", value: hook.path, monospaced: true)
                 if !hook.titleTemplate.isEmpty {
                     DetailRow(label: "Title template", value: hook.titleTemplate, monospaced: true)
@@ -108,7 +108,7 @@ struct WebhookDetailScreen: View {
                     Label {
                         VStack(alignment: .leading, spacing: Spacing.xxs) {
                             Text("Send test")
-                            Text(missing.map { "Needs \($0)" } ?? (hook.enabled ? "Raises \(hook.eventType) through the same path a caller uses." : "The webhook is off, so the server refuses the call."))
+                            Text(missing.map { "Needs \($0)" } ?? (hook.enabled ? "Raises \(hook.eventType) through the same path a caller uses." : "The webhook is off: outside callers are refused, but a test still raises \(hook.eventType) through the rules."))
                                 .textRole(.footnote)
                         }
                     } icon: {
