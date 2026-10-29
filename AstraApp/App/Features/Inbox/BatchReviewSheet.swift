@@ -415,7 +415,7 @@ final class InboxBatchModel {
         state = .loading
         do {
             if ids.isEmpty {
-                let page = try await client.approvalsListPage(query: ApprovalQuery(status: "pending", limit: 100), includePlan: true)
+                let (page, _) = try await client.approvalsPendingPage(cache: ApprovalsPlanCache())
                 let events = ApprovalEvents.group(page.approvals.filter(\.isHumanPending))
                 let event = events.first { $0.key == groupKey } ?? events.first { $0.plugin == groupKey && $0.approvals.count > 1 }
                 ids = event?.approvals.map(\.id) ?? []

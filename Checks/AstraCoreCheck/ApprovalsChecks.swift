@@ -11,6 +11,7 @@ public func checkApprovals() async throws {
     try await checkDecisionFlowCancel()
     try await checkDecisionFlowOutcomes()
     try await checkBatchDecisions()
+    try await checkPendingPlanHydration()
     try await checkApprovalsDemoRoutes()
 }
 
@@ -629,6 +630,33 @@ private func checkBatchDecisions() async throws {
     let loaded = await LatticeClient(baseURL: checkBase, transport: fetchTransport).approvalsFetchAll(ids: ["b0", "b1"])
     if case .success(let first)? = loaded["b0"] { try expectEqual(first.id, "b0", "batch load by id") } else { throw CheckFailure.failed("b0 loads") }
     if case .failure(.notFound)? = loaded["b1"] {} else { throw CheckFailure.failed("b1 fails with notFound") }
+}
+
+// MARK: Pending listing
+
+/// The pending page carries no bodies; agent-update bodies come from one
+/// narrow read, and only while a row's body is not cached for its hash.
+private func checkPendingPlanHydration() async throws {
+    let agentPlan = "plugin: agentupdate\ncurrent_version: 0.3.9\ntarget_version: 0.3.10\nnode_name: edge-a"
+    let agentHash = PlanHasher.sha256Hex(agentPlan)
+    let rows = #"[{"id":"au1","node_id":"node-a","plugin":"agentupdate","action":"update-agent","plan_sha256":"\#(agentHash)","status":"pending"},{"id":"np1","node_id":"node-b","plugin":"nftpolicy","action":"apply-ruleset","plan_sha256":"abc","status":"pending"}]"#
+    let bodies = #"[{"id":"au1","node_id":"node-a","plugin":"agentupdate","action":"update-agent","plan":"\#(agentPlan.replacingOccurrences(of: "\n", with: "\\n"))","plan_sha256":"\#(agentHash)","status":"pending"}]"#
+    let list = "GET /api/network/approvals?status=pending&limit=100&offset=0"
+    let narrow = "GET /api/network/approvals?status=pending&include=plan&plugin=agentupdate&limit=100&offset=0"
+    let page = #"{"approvals":\#(rows),"total":2,"limit":100,"offset":0}"#
+    let transport = ScriptedTransport([
+        list: [.json(200, page), .json(200, page)],
+        narrow: [.json(200, #"{"approvals":\#(bodies),"total":1,"limit":100,"offset":0}"#)],
+    ])
+    let client = LatticeClient(baseURL: checkBase, transport: transport)
+    let (first, cache) = try await client.approvalsPendingPage(cache: ApprovalsPlanCache())
+    try expectEqual(await transport.requests, [list, narrow], "the first read fetches agent-update bodies once, narrowly")
+    try expectEqual(first.approvals.first { $0.id == "au1" }?.plan, agentPlan, "the agent-update row carries its body")
+    try check(first.approvals.first { $0.id == "np1" }?.hasPlanBody == false, "other rows stay without bodies")
+    try expectEqual(ApprovalEvents.group(first.approvals).first { $0.plugin == "agentupdate" }?.transition?.target, "0.3.10", "grouping reads the hydrated body")
+    let (second, _) = try await client.approvalsPendingPage(cache: cache)
+    try expectEqual(await transport.requests, [list, narrow, list], "a cached body is not fetched again")
+    try expectEqual(second.approvals.first { $0.id == "au1" }?.plan, agentPlan, "the cached body is filled in")
 }
 
 // MARK: Demo routes

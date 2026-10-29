@@ -3,7 +3,7 @@ import UIKit
 import UserNotifications
 
 /// The pending approvals Inbox reads: one page of human-pending rows (with
-/// plan text, for grouping only) and the server's total.
+/// agent-update plan text only, for grouping) and the server's total.
 struct InboxApprovalsPage: Sendable {
     var approvals: [Approval]
     var total: Int
@@ -89,6 +89,10 @@ final class InboxStore {
     /// A dialog, swipe or menu is up.
     @ObservationIgnored var interactionInProgress = false
     @ObservationIgnored private var generation = -1
+    /// Until the first refresh of a session finishes, each section shows as
+    /// soon as it lands; the stable-list hold applies to later polls only.
+    @ObservationIgnored private var firstRefreshDone = false
+    @ObservationIgnored private var planCache = ApprovalsPlanCache()
     @ObservationIgnored private var applyLater: Task<Void, Never>?
     /// The screen's time zone mode and locale, for times inside rows.
     @ObservationIgnored var timeZoneMode: TimeZoneMode = .local
@@ -155,7 +159,8 @@ final class InboxStore {
         async let extrasOK = loadExtras(client)
         let results = await [approvalsOK, incidentsOK, nodesOK, tasksOK, expiringOK, sshGuardOK, ddnsOK, stuckOK, changesOK, extrasOK]
         updateBadge()
-        rebuild(force: force)
+        rebuild(force: force || !firstRefreshDone)
+        firstRefreshDone = true
         return !results.contains(false)
     }
 
@@ -178,15 +183,22 @@ final class InboxStore {
         displayed = InboxContent()
         held = nil
         heldChanges = 0
+        firstRefreshDone = false
+        planCache = ApprovalsPlanCache()
     }
 
     /// Loads one section into its state, keeping earlier data on failure.
+    /// A 403 after `/api/me` said the scope was held names the section's own
+    /// requirement (`deniedScope` when it has none) and re-reads `/api/me`
+    /// (section 6.7), so the row never says "lacks" with no scope.
     private func load<Value: Sendable>(
         _ keyPath: ReferenceWritableKeyPath<InboxStore, ResourceState<Value>>,
         surface: String,
         requirement: ScopeRequirement?,
+        deniedScope: String? = nil,
         fetch: () async throws -> Value
     ) async -> Bool {
+        defer { sectionLanded() }
         if let requirement, let scope = missing(requirement) {
             self[keyPath: keyPath] = .denied(scope: scope)
             return true
@@ -199,18 +211,27 @@ final class InboxStore {
             let apiError = LatticeAPIError(error)
             if case .forbidden = apiError { session.noteForbidden() }
             if apiError == .invalidResponse { session.markCompanionBehind(surface) }
-            self[keyPath: keyPath] = self[keyPath: keyPath].failing(apiError, surface: surface, missingScope: requirement.flatMap(missing))
+            let scope = requirement.flatMap(missing) ?? requirement?.summary ?? deniedScope
+            self[keyPath: keyPath] = self[keyPath: keyPath].failing(apiError, surface: surface, missingScope: scope)
             return false
         }
+    }
+
+    /// During a session's first refresh, puts each section on screen as it lands.
+    private func sectionLanded() {
+        guard !firstRefreshDone else { return }
+        rebuild(force: true)
     }
 
     private func loadApprovals(_ client: LatticeClient) async -> Bool {
         if approvalsDenied {
             approvals = .denied(scope: "network:plan")
+            sectionLanded()
             return true
         }
-        return await load(\.approvals, surface: "Approvals", requirement: nil) {
-            let page = try await client.approvalsListPage(query: ApprovalQuery(status: "pending", limit: 100), includePlan: true)
+        return await load(\.approvals, surface: "Approvals", requirement: nil, deniedScope: "network:plan") {
+            let (page, cache) = try await client.approvalsPendingPage(cache: planCache)
+            planCache = cache
             return InboxApprovalsPage(approvals: page.approvals.filter(\.isHumanPending), total: page.total, limit: page.limit)
         }
     }
@@ -261,9 +282,10 @@ final class InboxStore {
     private func loadStuck(_ client: LatticeClient) async -> Bool {
         if approvalsDenied {
             stuck = .denied(scope: "network:plan")
+            sectionLanded()
             return true
         }
-        return await load(\.stuck, surface: "Approvals", requirement: nil) {
+        return await load(\.stuck, surface: "Approvals", requirement: nil, deniedScope: "network:plan") {
             let page = try await client.listApprovals(query: ApprovalQuery(status: "approved", limit: 100))
             return page.approvals.filter { $0.waiting?.blocked == true }
         }
@@ -447,7 +469,9 @@ final class InboxStore {
             coverage[.approvals] = .partial(hiddenPlugins: hiddenPlugins, at: at)
         }
         let pending = approvals.value?.approvals ?? []
-        let decidable = pending.filter { !$0.isStale && $0.planHashMatchesServer && ApprovalsDecisionGate.missingScopes($0, scopes: scopes).isEmpty }
+        // Listing rows carry bodies only for agent updates; Review checks
+        // every other body against its hash when it opens.
+        let decidable = pending.filter { !$0.isStale && (!$0.hasPlanBody || $0.planHashMatchesServer) && ApprovalsDecisionGate.missingScopes($0, scopes: scopes).isEmpty }
         let nodeList = nodes.value ?? []
         return InboxSnapshot(
             coverage: coverage,
@@ -503,5 +527,64 @@ final class InboxStore {
             return false
         }
         return failed(approvals) || failed(incidents) || failed(nodes) || failed(tasks) || failed(expiring) || failed(sshGuard) || failed(ddns)
+    }
+}
+
+/// One section's load state, reduced to what a screen says about it.
+struct InboxSectionStatus: Identifiable {
+    let noun: String
+    /// Idle, or loading with nothing loaded before.
+    let waiting: Bool
+    /// Why the last load failed, when it did.
+    let failure: String?
+    /// Something has loaded at least once.
+    let everLoaded: Bool
+
+    var id: String { noun }
+
+    init<Value>(_ state: ResourceState<Value>, noun: String) {
+        self.noun = noun
+        switch state {
+        case .idle, .loading(nil, _):
+            waiting = true
+            failure = nil
+        case .failed(let error, _, _):
+            waiting = false
+            failure = error.localizedDescription
+        case .companionBehind:
+            waiting = false
+            failure = "This app is behind the server"
+        default:
+            waiting = false
+            failure = nil
+        }
+        everLoaded = state.value != nil
+    }
+
+    /// "Could not load nodes: ..." or "Could not refresh nodes: ...".
+    var failureSentence: String? {
+        failure.map { "Could not \(everLoaded ? "refresh" : "load") \(noun): \($0)" }
+    }
+}
+
+extension InboxStore {
+    /// The sections the Attention rows are built from.
+    var attentionStatuses: [InboxSectionStatus] {
+        [
+            InboxSectionStatus(sshGuard, noun: "SSH Guard"),
+            InboxSectionStatus(nodes, noun: "nodes"),
+            InboxSectionStatus(tasks, noun: "tasks"),
+            InboxSectionStatus(stuck, noun: "stuck approvals"),
+            InboxSectionStatus(ddns, noun: "DDNS"),
+            InboxSectionStatus(expiring, noun: "renewals"),
+            InboxSectionStatus(recentChanges, noun: "recent changes"),
+        ]
+    }
+
+    /// Attention rows the token cannot read, named so a short list never
+    /// reads as healthy by omission.
+    var attentionDenied: [String] {
+        if case .denied = sshGuard { return [missingSentence(Self.sshGuardRequirement)] }
+        return []
     }
 }

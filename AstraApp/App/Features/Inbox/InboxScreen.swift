@@ -72,7 +72,7 @@ struct InboxScreen: View {
                     statusRows
                 }
                 if filter.shows(.attention) {
-                    InboxAttentionSection(items: store.displayed.attention, denied: attentionDenied)
+                    InboxAttentionSection(items: store.displayed.attention, denied: store.attentionDenied)
                     dueSection
                 }
                 if isQuietAndEmpty {
@@ -248,8 +248,8 @@ struct InboxScreen: View {
         default:
             if !rows.isEmpty || failure(store.incidents) != nil {
                 Section {
-                    if let failure = failure(store.incidents) {
-                        ErrorRow(message: "Could not refresh incidents: \(failure)") { Task { await store.refresh(force: true) } }
+                    if let failure = InboxSectionStatus(store.incidents, noun: "incidents").failureSentence {
+                        ErrorRow(message: failure) { Task { await store.refresh(force: true) } }
                     }
                     ForEach(rows) { incident in
                         incidentRow(incident)
@@ -320,8 +320,8 @@ struct InboxScreen: View {
         default:
             if !events.isEmpty || failure(store.approvals) != nil || !store.hiddenPlugins.isEmpty {
                 Section {
-                    if let failure = failure(store.approvals) {
-                        ErrorRow(message: "Could not refresh approvals: \(failure)") { Task { await store.refresh(force: true) } }
+                    if let failure = InboxSectionStatus(store.approvals, noun: "approvals").failureSentence {
+                        ErrorRow(message: failure) { Task { await store.refresh(force: true) } }
                     }
                     ForEach(events) { event in
                         InboxEventRow(event: event, nodeName: { nodeDirectory.name(for: $0) })
@@ -355,14 +355,6 @@ struct InboxScreen: View {
     }
 
     // MARK: Attention and due soon
-
-    private var attentionDenied: [String] {
-        var denied: [String] = []
-        if case .denied = store.sshGuard {
-            denied.append(store.missingSentence(InboxStore.sshGuardRequirement))
-        }
-        return denied
-    }
 
     @ViewBuilder
     private var dueSection: some View {
@@ -402,7 +394,9 @@ struct InboxScreen: View {
             EmptyView()
         } footer: {
             VStack(alignment: .leading, spacing: Spacing.xs) {
-                FreshnessFooter(loadedAt: store.oldestLoadedAt, isUpdating: store.isRefreshing && store.oldestLoadedAt != nil, lastAttemptFailed: store.anyFailed, interval: interval)
+                // Before anything has loaded the footer says "Updating", not
+                // "Stale. As of never".
+                FreshnessFooter(loadedAt: store.oldestLoadedAt, isUpdating: store.isRefreshing || (store.oldestLoadedAt == nil && !store.anyFailed), lastAttemptFailed: store.anyFailed, interval: interval)
                 if let source = store.badgeSourceAt ?? appState.badgeSourceAt, let badge = store.badge {
                     Text("Badge \(badge) from \(TimeDisplay.clock(source, mode: mode, locale: locale))")
                         .textRole(.stamp)
