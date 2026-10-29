@@ -65,6 +65,27 @@ public struct SSHGuardBoardRow: Identifiable, Sendable, Hashable {
     }
 
     public var sshdPorts: [Int] { status.sshd?.ports ?? [] }
+
+    /// The stage records a past attempt on a node that is secured anyway
+    /// (`stage_is_history`), so it is shown as history, not as the state.
+    public var stageIsHistory: Bool { status.stageIsHistory }
+
+    /// The window passed on this phone's clock and the server has not yet
+    /// said whether the node reverted or the hardening is in force.
+    public var awaitingRevertReport: Bool {
+        stage == .reverted && SSHGuardBoardStage(serverValue: status.stage) != .reverted
+    }
+
+    /// Read against the clock at the moment of asking, so a row built before
+    /// the deadline cannot file a confirm after it.
+    public func revertWindowPassed(now: Date) -> Bool {
+        SSHGuardBoard.revertWindowPassed(status, now: now)
+    }
+
+    /// The soonest revert deadline still ahead, when the rows must be derived again.
+    public static func nextDeadline(_ statuses: [SSHGuardNodeStatus], after now: Date) -> Date? {
+        statuses.compactMap(SSHGuardBoard.revertDeadline).filter { $0 > now }.min()
+    }
 }
 
 /// The board's sections, in the order an operator works them.

@@ -15,6 +15,7 @@ struct SSHGuardBoardScreen: View {
     @Environment(\.accessibilityVoiceOverEnabled) private var voiceOver
     @Environment(\.timeZoneMode) private var mode
     @Environment(\.locale) private var locale
+    @Environment(BannerCenter.self) private var banner
 
     @State private var postureFilter = SSHGuardPostureFilter.all.title
     @State private var coverageFilter = SSHGuardCoverageFilter.all.title
@@ -57,6 +58,13 @@ struct SSHGuardBoardScreen: View {
             .onChange(of: coverageFilter) { offer(force: true) }
             .onChange(of: query) { offer(force: true) }
             .onChange(of: armTarget == nil) { _, closed in stable.setBusy(!closed) }
+            // Rows are derived at a moment; at a revert deadline they are derived again,
+            // so Confirm is not offered for a timer that already fired.
+            .task(id: SSHGuardBoardRow.nextDeadline(store.status.value ?? [], after: Date())) {
+                guard let deadline = SSHGuardBoardRow.nextDeadline(store.status.value ?? [], after: Date()) else { return }
+                try? await Task.sleep(for: .seconds(deadline.timeIntervalSinceNow + 0.5))
+                if !Task.isCancelled { offer(force: false) }
+            }
             .polling(.standard, version: changes.version([.sshguard, .approvals, .nodes])) {
                 await nodes.refreshIfOlder(than: 60)
                 return await store.refresh()
@@ -236,6 +244,11 @@ struct SSHGuardBoardScreen: View {
     }
 
     private func confirm(_ row: SSHGuardBoardRow) {
+        if row.revertWindowPassed(now: Date()) {
+            banner.show(BannerMessage(text: "\(row.name)'s revert window passed. Nothing was filed; its next report says whether it reverted.", tone: .warn))
+            offer(force: false)
+            return
+        }
         switch SSHGuardConfirmTarget.of(row.status) {
         case .review(let approvalID):
             router.present(.review(.single(approvalID)))

@@ -82,6 +82,9 @@ struct SSHGuardNodeScreen: View {
     @State private var armTarget: SSHGuardArmTarget?
     @State private var excluding = false
     @State private var excludeReason = ""
+    /// Bumped at the revert deadline so the screen is derived again.
+    @State private var clockTick = 0
+    @Environment(BannerCenter.self) private var banner
     @Environment(SessionStore.self) private var session
     @Environment(SSHGuardStore.self) private var store
     @Environment(NodeDirectory.self) private var nodes
@@ -130,9 +133,15 @@ struct SSHGuardNodeScreen: View {
                 await nodes.refreshIfOlder(than: 60)
                 return await model.refresh(session: session)
             }
+            .task(id: model.status.value.flatMap(SSHGuardBoard.revertDeadline)) {
+                guard let deadline = model.status.value.flatMap(SSHGuardBoard.revertDeadline), deadline > .now else { return }
+                try? await Task.sleep(for: .seconds(deadline.timeIntervalSinceNow + 0.5))
+                if !Task.isCancelled { clockTick += 1 }
+            }
     }
 
     private var subtitle: String {
+        _ = clockTick
         guard let row = row(now: .now) else { return "" }
         return row.isReverting ? "Confirm needed" : StatusStyle.posture(row.posture).word.capitalizedFirst
     }
@@ -204,8 +213,11 @@ struct SSHGuardNodeScreen: View {
         return Section {
             StatusRow(style: posture, title: "Posture", detail: nil, reason: row.status.posture.reason.isEmpty ? nil : row.status.posture.reason.capitalizedFirst,
                       accessibilityPhrase: "Posture, \(posture.word)")
-            StatusRow(style: coverage, title: "Coverage", detail: SSHGuardNodeWords.stage(row.stage),
-                      accessibilityPhrase: "Coverage, \(coverage.word), \(SSHGuardNodeWords.stage(row.stage))")
+            let stage = SSHGuardNodeWords.stage(row)
+            let word = SSHGuardRowWords.coverage(row, word: coverage.word)
+            StatusRow(style: row.stageIsHistory ? StatusStyle(word: word, symbol: "clock.arrow.circlepath", tone: .quiet) : StatusStyle(word: word, symbol: coverage.symbol, tone: coverage.tone),
+                      title: "Coverage", detail: stage,
+                      accessibilityPhrase: "Coverage, \(word), \(stage)")
         }
     }
 
@@ -461,6 +473,11 @@ struct SSHGuardNodeScreen: View {
     }
 
     private func confirm(_ row: SSHGuardBoardRow) {
+        if row.revertWindowPassed(now: Date()) {
+            banner.show(BannerMessage(text: "The revert window passed. Nothing was filed; the node's next report says whether it reverted.", tone: .warn))
+            clockTick += 1
+            return
+        }
         switch SSHGuardConfirmTarget.of(row.status) {
         case .review(let approvalID):
             router.present(.review(.single(approvalID)))
@@ -504,6 +521,12 @@ struct SSHGuardActionLabel: View {
 }
 
 enum SSHGuardNodeWords {
+    static func stage(_ row: SSHGuardBoardRow) -> String {
+        if row.stageIsHistory { return "a past attempt; the node is secured anyway" }
+        if row.awaitingRevertReport { return "revert window passed, waiting for the node's next report" }
+        return stage(row.stage)
+    }
+
     static func stage(_ stage: SSHGuardBoardStage) -> String {
         switch stage {
         case .idle: "no plan yet"

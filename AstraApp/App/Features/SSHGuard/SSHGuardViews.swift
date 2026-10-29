@@ -39,14 +39,15 @@ struct SSHGuardBoardRowView: View {
         let postureStyle = StatusStyle.posture(row.posture)
         let style = row.isReverting ? coverageStyle : postureStyle
         let knock = SSHGuardKnockWords.word(row.knock)
-        let detail = row.isReverting ? "\(postureStyle.word), \(knock)" : "\(coverageStyle.word), \(knock)"
+        let coverageWord = SSHGuardRowWords.coverage(row, word: coverageStyle.word)
+        let detail = row.isReverting ? "\(postureStyle.word), \(knock)" : "\(coverageWord), \(knock)"
         VStack(alignment: .leading, spacing: Spacing.xxs) {
             StatusRow(
                 style: style,
                 title: row.name,
                 detail: detail,
                 reason: reason,
-                accessibilityPhrase: "\(row.name), \(postureStyle.word), \(coverageStyle.word), \(knock)"
+                accessibilityPhrase: "\(row.name), \(postureStyle.word), \(row.isReverting ? coverageStyle.word : coverageWord), \(knock)"
             )
             if let deadline = row.deadline, deadline > .now {
                 SSHGuardCountdown(deadline: deadline)
@@ -56,9 +57,11 @@ struct SSHGuardBoardRowView: View {
         .accessibilityElement(children: .combine)
     }
 
-    /// The failure in the server's words, for a node whose last arm did not survive.
+    /// The failure in the server's words, for a node whose last arm did not
+    /// survive. A past attempt on a secured node is history, not a failure.
     private var reason: String? {
-        guard row.coverage == .failed else { return nil }
+        guard row.coverage == .failed, !row.stageIsHistory else { return nil }
+        if row.awaitingRevertReport { return SSHGuardCountdown.passed }
         if row.stage == .reverted { return "The revert window closed without a confirm; the node undid the hardening." }
         let text = row.status.lastArm?.reason.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let last = text.split(whereSeparator: \.isNewline).map { $0.trimmingCharacters(in: .whitespaces) }.last { !$0.isEmpty }
@@ -66,20 +69,42 @@ struct SSHGuardBoardRowView: View {
     }
 }
 
+/// Coverage words that need more than the bucket: history on a secured
+/// node, and a window that passed before the server reported the revert.
+enum SSHGuardRowWords {
+    static func coverage(_ row: SSHGuardBoardRow, word: String) -> String {
+        guard row.coverage == .failed else { return word }
+        if row.stageIsHistory { return row.stage == .reverted ? "last arm reverted" : "last arm failed" }
+        if row.awaitingRevertReport { return "window passed" }
+        return word
+    }
+}
+
 /// "Reverts in 3:12", counting down to the automatic revert. Never a pulse.
+/// Re-evaluated at the deadline, so it says the window passed instead of
+/// resting on 0:00 until the next poll.
 struct SSHGuardCountdown: View {
     let deadline: Date
     var prominent = false
 
     var body: some View {
-        ViewThatFits(in: .horizontal) {
-            HStack(spacing: Spacing.xs) { parts }
-            VStack(alignment: .leading, spacing: Spacing.xxs) { parts }
+        TimelineView(.explicit([deadline])) { context in
+            if context.date < deadline {
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: Spacing.xs) { parts }
+                    VStack(alignment: .leading, spacing: Spacing.xxs) { parts }
+                }
+                .accessibilityElement(children: .combine)
+                .font(prominent ? .title3.weight(.semibold) : TextRole.rowReason(Color.statusWarnText).font.weight(.semibold))
+                .foregroundStyle(Color.statusWarnText)
+            } else {
+                Text(SSHGuardCountdown.passed)
+                    .textRole(.rowReason(Color.statusWarnText))
+            }
         }
-        .accessibilityElement(children: .combine)
-        .font(prominent ? .title3.weight(.semibold) : TextRole.rowReason(Color.statusWarnText).font.weight(.semibold))
-        .foregroundStyle(Color.statusWarnText)
     }
+
+    static let passed = "Revert window passed. Waiting for the node's next report."
 
     @ViewBuilder
     private var parts: some View {
