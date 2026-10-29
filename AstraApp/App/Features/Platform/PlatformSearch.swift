@@ -56,7 +56,7 @@ enum PlatformSearch: SearchProvider {
         let now = Date()
         return LatticeQueryEngine.apply(compiled, to: shares, now: now).map { share in
             SearchResult(kind: "Shares", id: share.id, title: share.slug, detail: PlatformShares.sourceLabel(share),
-                         style: .platformShare(PlatformShareState.of(share, now: now)), target: .push(.platform(.share(id: share.id))))
+                         style: PlatformShareRow.style(share, state: PlatformShareState.of(share, now: now)), target: .push(.platform(.share(id: share.id))))
         }
     }
 }

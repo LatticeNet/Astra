@@ -59,7 +59,11 @@ struct ShareDetailScreen: View {
             }
 
             Section("Share") {
-                DetailRow(label: "State", value: StatusStyle.platformShare(state).word.platformCapitalized, copyable: false)
+                // One screen states one state: the header's word leads, and the
+                // plain lifecycle follows only when a problem overrides it.
+                let lifecycle = StatusStyle.platformShare(state).word
+                DetailRow(label: "State", value: style.word.platformCapitalized,
+                          secondary: style.word == lifecycle ? nil : "Lifecycle: \(lifecycle)", copyable: false)
                 if let expiry = share.expiresAt {
                     let (absolute, relative) = date(expiry)
                     DetailRow(label: state == .expired ? "Expired" : "Expires", value: absolute, secondary: relative, copyable: false)
