@@ -60,9 +60,13 @@ struct ActivityResource<Value: Sendable, Content: View>: View {
     let state: ResourceState<Value>
     let noun: String
     let retry: () -> Void
+    /// The object's console page: offered beside Retry when the server
+    /// fails or the app is behind it, where the web is the fallback.
+    var web: LatticeConsolePath?
     @ViewBuilder let content: (Value) -> Content
 
     @Environment(NetworkMonitor.self) private var network
+    @Environment(Router.self) private var router
 
     var body: some View {
         if !network.isSatisfied, state.value == nil, !isTerminal {
@@ -71,6 +75,28 @@ struct ActivityResource<Value: Sendable, Content: View>: View {
                     Label("Offline", systemImage: "wifi.slash")
                 } description: {
                     Text("No connection, and no \(noun) were loaded before it dropped. They load when the connection returns.")
+                }
+            }
+        } else if let web, case .companionBehind(let surface) = state {
+            WholeScreenState {
+                ContentUnavailableView {
+                    Label("This app is behind the server", systemImage: "exclamationmark.triangle")
+                } description: {
+                    Text("\(surface) could not be read. The console can still show it.")
+                } actions: {
+                    Button("Open on web") { router.openOnWeb(web) }.buttonStyle(.bordered)
+                    Button("Reload", action: retry)
+                }
+            }
+        } else if let web, case .failed(let error, nil, _) = state {
+            WholeScreenState {
+                ContentUnavailableView {
+                    Label("Could not load \(noun)", systemImage: "exclamationmark.triangle")
+                } description: {
+                    Text(error.localizedDescription)
+                } actions: {
+                    Button("Retry", action: retry).buttonStyle(.bordered)
+                    Button("Open on web") { router.openOnWeb(web) }
                 }
             }
         } else {

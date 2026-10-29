@@ -44,7 +44,7 @@ struct TaskRunScreen: View {
                 }
             }
         } else {
-            ActivityResource(state: model.task, noun: "the run", retry: reload) { task in
+            ActivityResource(state: model.task, noun: "the run", retry: reload, web: .task(id: id)) { task in
                 detail(task)
             }
         }
@@ -217,49 +217,57 @@ struct TaskRunScreen: View {
 
     // MARK: Toolbar
 
+    /// Copy link and Open on web stay in every state, since the id comes
+    /// from the route; the writes join once the run has loaded.
     @ToolbarContentBuilder
     private var toolbar: some ToolbarContent {
-        if let task = model.task.value {
-            if TasksModel.isCancellable(task.status) {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("Cancel task", systemImage: "stop.circle") {
-                        Task { await runner.run(TasksIntents.cancel(task)) }
-                    }
-                    .disabled(!store.canRun)
-                    .accessibilityHint(store.canRun ? "Asks before it stops pending work" : "Needs task:run")
+        if let task = model.task.value, TasksModel.isCancellable(task.status), store.canRun {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button("Cancel task", systemImage: "stop.circle") {
+                    Task { await runner.run(TasksIntents.cancel(task)) }
                 }
+                .accessibilityHint("Asks before it stops pending work")
             }
-            ToolbarItem(placement: .topBarTrailing) { menu(task) }
         }
+        ToolbarItem(placement: .topBarTrailing) { menu(model.task.value) }
     }
 
-    private func menu(_ task: LatticeTask) -> some View {
-        let needs = store.canRun ? nil : "Needs task:run"
-        let failed = TasksModel.failedNodes(TasksModel.nodeRows(for: task, results: model.results.value ?? [], now: Date()))
-        return Menu {
-            ActivityMenuButton(title: "Rerun", symbol: "arrow.clockwise", needs: needs) {
-                Task { await runner.run(TasksIntents.rerun(task, nodeNames: names(task.targets))) }
-            }
-            if !failed.isEmpty {
-                ActivityMenuButton(title: failed.count == 1 ? "Rerun the failed node" : "Rerun \(failed.count) failed nodes", symbol: "arrow.clockwise.circle", needs: needs) {
-                    let refs = failed.map { ObjectRef(kind: "node", id: $0, name: nodes.name(for: $0)) }
-                    Task { await runner.run(TasksIntents.rerunFailed(task, nodes: refs)) }
-                }
-            }
-            ActivityMenuButton(title: "Reveal script", symbol: "eye", needs: revealNeeds) {
-                Task { await runner.reveal(TasksIntents.revealScript(task)) }
-            }
-            Divider()
-            ActivityMenuButton(title: "Delete task", symbol: "trash", role: .destructive, needs: needs) {
-                Task {
-                    if case .done = await runner.run(TasksIntents.delete(task)) { dismiss() }
-                }
-            }
-            Divider()
-            ActivityObjectMenu(link: .task(id: task.id), web: .task(id: task.id), objectID: task.id)
+    private func menu(_ task: LatticeTask?) -> some View {
+        Menu {
+            if let task { writes(task) }
+            ActivityObjectMenu(link: .task(id: id), web: .task(id: id), objectID: id)
         } label: {
             Label("More", systemImage: "ellipsis.circle")
         }
+    }
+
+    @ViewBuilder
+    private func writes(_ task: LatticeTask) -> some View {
+        let needs = store.canRun ? nil : "Needs task:run"
+        let failed = TasksModel.failedNodes(TasksModel.nodeRows(for: task, results: model.results.value ?? [], now: Date()))
+        // A token without task:run sees why Cancel is off here, not a grey glyph in the bar.
+        if TasksModel.isCancellable(task.status), !store.canRun {
+            ActivityMenuButton(title: "Cancel task", symbol: "stop.circle", needs: needs) {}
+        }
+        ActivityMenuButton(title: "Rerun", symbol: "arrow.clockwise", needs: needs) {
+            Task { await runner.run(TasksIntents.rerun(task, nodeNames: names(task.targets))) }
+        }
+        if !failed.isEmpty {
+            ActivityMenuButton(title: failed.count == 1 ? "Rerun the failed node" : "Rerun \(failed.count) failed nodes", symbol: "arrow.clockwise.circle", needs: needs) {
+                let refs = failed.map { ObjectRef(kind: "node", id: $0, name: nodes.name(for: $0)) }
+                Task { await runner.run(TasksIntents.rerunFailed(task, nodes: refs)) }
+            }
+        }
+        ActivityMenuButton(title: "Reveal script", symbol: "eye", needs: revealNeeds) {
+            Task { await runner.reveal(TasksIntents.revealScript(task)) }
+        }
+        Divider()
+        ActivityMenuButton(title: "Delete task", symbol: "trash", role: .destructive, needs: needs) {
+            Task {
+                if case .done = await runner.run(TasksIntents.delete(task)) { dismiss() }
+            }
+        }
+        Divider()
     }
 
     /// The reveal runs on the session: it needs task:read there, and without

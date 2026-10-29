@@ -14,12 +14,14 @@ struct TaskNodeOutputScreen: View {
     @Environment(ChangeLog.self) private var changes
     @Environment(NodeDirectory.self) private var nodes
     @Environment(Router.self) private var router
+    @Environment(AppState.self) private var appState
+    @Environment(\.dismiss) private var dismiss
 
     @State private var model = ActivityNodeOutputModel()
     @State private var text = ActivityTextController()
 
     var body: some View {
-        ActivityResource(state: model.output, noun: "the output", retry: reload) { output in
+        ActivityResource(state: model.output, noun: "the output", retry: reload, web: .taskNode(taskID: taskID, nodeID: nodeID)) { output in
             content(output)
         }
         .navigationTitle(nodes.name(for: nodeID))
@@ -49,7 +51,7 @@ struct TaskNodeOutputScreen: View {
                 } description: {
                     Text(noResultSentence(output))
                 } actions: {
-                    Button("Open the run") { router.push(.activity(.task(id: taskID))) }
+                    Button("Open the run", action: openRun)
                 }
             }
         }
@@ -67,30 +69,48 @@ struct TaskNodeOutputScreen: View {
 
     /// Find, Jump to end, and Copy and Share in a menu, in the navigation bar:
     /// a bottom bar on a pushed screen sits behind the floating tab bar.
+    /// The menu's links stay in every state; the output actions need a result.
     @ToolbarContentBuilder
     private var toolbar: some ToolbarContent {
-        if let row = model.output.value?.result {
-            ToolbarItemGroup(placement: .topBarTrailing) { actions(ActivityOutputDocument.plainText(row)) }
+        ToolbarItemGroup(placement: .topBarTrailing) {
+            let row = model.output.value?.result
+            if row != nil {
+                Button("Find", systemImage: "magnifyingglass") { text.find() }
+                Button("Jump to end", systemImage: "arrow.down.to.line") { text.jumpToEnd() }
+            }
+            menu(row.map(ActivityOutputDocument.plainText))
         }
     }
 
-    @ViewBuilder
-    private func actions(_ all: String) -> some View {
-        Button("Find", systemImage: "magnifyingglass") { text.find() }
-        Button("Jump to end", systemImage: "arrow.down.to.line") { text.jumpToEnd() }
+    private func menu(_ all: String?) -> some View {
         Menu {
-            Button("Copy output", systemImage: "doc.on.doc") { UIPasteboard.general.string = all }
+            if let all {
+                Button("Copy output", systemImage: "doc.on.doc") { UIPasteboard.general.string = all }
+                    .disabled(all.isEmpty)
+                ShareLink(item: all, subject: Text("Output of \(taskID) on \(nodes.name(for: nodeID))")) {
+                    Label("Share output", systemImage: "square.and.arrow.up")
+                }
                 .disabled(all.isEmpty)
-            ShareLink(item: all, subject: Text("Output of \(taskID) on \(nodes.name(for: nodeID))")) {
-                Label("Share output", systemImage: "square.and.arrow.up")
+                Divider()
             }
-            .disabled(all.isEmpty)
-            Divider()
-            Button("Open the run", systemImage: "terminal") { router.push(.activity(.task(id: taskID))) }
+            Button("Open the run", systemImage: "terminal", action: openRun)
             Button("Open node", systemImage: "server.rack") { router.push(.fleet(.node(id: nodeID))) }
+            Divider()
+            Button("Copy link", systemImage: "link") { UIPasteboard.general.url = LatticeDeepLink.taskNode(taskID: taskID, nodeID: nodeID).customURL }
             Button("Open on web", systemImage: "safari") { router.openOnWeb(.taskNode(taskID: taskID, nodeID: nodeID)) }
         } label: {
             Label("More", systemImage: "ellipsis.circle")
+        }
+    }
+
+    /// Back to the run when this screen was pushed from it, so the stack
+    /// never holds the same run twice; a push only after a deep link.
+    private func openRun() {
+        let path = appState.paths[appState.selectedTab] ?? []
+        if path.count >= 2, path[path.count - 2] == .activity(.task(id: taskID)) {
+            dismiss()
+        } else {
+            router.push(.activity(.task(id: taskID)))
         }
     }
 }
