@@ -1076,3 +1076,37 @@ public enum InventoryLookup {
         return machines.first { $0.id == id } ?? machines.first { $0.nodeID == id }
     }
 }
+
+// MARK: Delete
+
+/// What deleting a machine profile removes, read fresh from the server right
+/// before the delete (the server has no dry run). The fingerprint stops the
+/// delete when the profile changed after the operator reviewed it.
+public enum InventoryDeleteReport {
+    static let group = "Removed from the profile"
+
+    public static func report(_ machine: MachineProfile, locale: Locale = .current) -> DryRunReport {
+        var lines = [DetailLine(label: "Price", value: InventoryCost.priceLine(machine, locale: locale), group: group)]
+        if let day = machine.renewalDay {
+            lines.append(DetailLine(label: "Renewal", value: "Due \(day.formatted(locale: locale))", group: group))
+        }
+        if machine.remindersEnabled {
+            let offsets = ReminderSchedule.offsets(machine).map(String.init).joined(separator: ", ")
+            lines.append(DetailLine(label: "Reminders", value: offsets.isEmpty ? "On" : "On, \(offsets) days before", group: group))
+        }
+        let links = [machine.hasConsoleURL ? "console" : nil, machine.hasDetailURL ? "detail" : nil].compactMap { $0 }
+        if !links.isEmpty {
+            lines.append(DetailLine(label: "Stored links", value: links.count == 2 ? "Console and detail links" : "\(links[0].capitalized) link", group: group))
+        }
+        if !machine.notes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            lines.append(DetailLine(label: "Notes", value: "Kept nowhere else", group: group))
+        }
+        lines.append(DetailLine(label: "Node", value: "\(machine.nodeName.isEmpty ? machine.nodeID : machine.nodeName) stays enrolled", group: "Not affected"))
+        let fingerprint = [machine.id, machine.updatedAt.map { String($0.timeIntervalSince1970) } ?? "", machine.renewalDay?.description ?? "",
+                           String(machine.priceCents), machine.currency, String(machine.hasConsoleURL), String(machine.hasDetailURL)].joined(separator: "|")
+        return DryRunReport(lines: lines, blocking: false, fingerprint: fingerprint)
+    }
+
+    /// The answer when the profile is already gone: nothing to delete.
+    public static let gone = DryRunReport(lines: [DetailLine(label: "Profile", value: "Already deleted", group: group)], blocking: true, fingerprint: "gone")
+}

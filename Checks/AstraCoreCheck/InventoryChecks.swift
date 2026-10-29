@@ -200,6 +200,19 @@ private func checkInventoryCost() throws {
     try expectEqual(plain(InventoryCost.priceLine(costMachine(2_400, "EUR"), locale: us)), "EUR 24.00 monthly", "price line")
     try expectEqual(plain(InventoryCost.priceLine(costMachine(300, "EUR", cycle: "custom_days", cycleDays: 60), locale: us)), "EUR 3.00 every 60 days", "custom cycle price line")
     try expectEqual(InventoryCost.priceLine(MachineProfile(id: "m"), locale: us), "Free", "a profile with nothing billed is free")
+    var doomed = costMachine(1_200, "USD", id: "m-1")
+    doomed.nodeName = "edge-tyo-1"
+    doomed.hasConsoleURL = true
+    doomed.remindersEnabled = true
+    doomed.remindDaysBefore = [7, 14, 0]
+    let report = InventoryDeleteReport.report(doomed, locale: us)
+    try expectEqual(report.lines.map(\.label), ["Price", "Renewal", "Reminders", "Stored links", "Node"], "what a delete removes")
+    try expectEqual(report.lines[2].value, "On, 14, 7, 0 days before", "reminder offsets in the report")
+    try expectEqual(report.lines.last?.group, "Not affected", "the node is named as staying")
+    var changed = doomed
+    changed.priceCents = 1_500
+    try expect(InventoryDeleteReport.report(changed, locale: us).fingerprint != report.fingerprint, "a changed profile stops the delete")
+    try expect(InventoryDeleteReport.gone.blocking, "a profile already gone blocks the delete")
     try expectEqual(plain(InventoryCurrency.format(cents: 13_409.6, currency: "chy", locale: us)), "CNY 134.10", "money rounds to whole cents and folds the alias")
 }
 
