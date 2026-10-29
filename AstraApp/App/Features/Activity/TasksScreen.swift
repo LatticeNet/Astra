@@ -42,7 +42,7 @@ struct TasksScreen: View {
         // Rows appended at the end move nothing already on screen.
         .onChange(of: store.appendedPages) { offer(force: true) }
         .onChange(of: filter) { offer(force: true) }
-        .polling(.standard, version: changes.version([.tasks]) &* 31 &+ filter.hashValue % 31) {
+        .polling(.standard, version: ActivityPollKey.of(changes.version([.tasks]), filter)) {
             await nodes.refreshIfOlder(than: 60)
             return await store.refresh(filter: filter)
         }

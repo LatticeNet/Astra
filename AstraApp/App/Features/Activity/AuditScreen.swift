@@ -51,7 +51,7 @@ struct AuditScreen: View {
         .onAppear(perform: consumeQuery)
         .onAppear(perform: applyLaunchLayer)
         .onChange(of: appState.pendingQuery) { consumeQuery() }
-        .polling(.standard, version: changes.version([.audit, .tasks, .approvals]) &* 31 &+ request.hashValue % 31) {
+        .polling(.standard, version: ActivityPollKey.of(changes.version([.audit, .tasks, .approvals]), request)) {
             await nodes.refreshIfOlder(than: 60)
             guard layer != .integrity else { return true }
             // Past the first page a poll would re-page under the reader; it holds still.

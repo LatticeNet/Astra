@@ -307,3 +307,15 @@ extension String {
         return first.uppercased() + dropFirst()
     }
 }
+
+/// The polling key for a list that refetches when its question changes:
+/// the change version and the whole question hashed together, so a new
+/// question restarts the poll at once instead of waiting for the next tick.
+enum ActivityPollKey {
+    static func of(_ version: Int, _ question: some Hashable) -> Int {
+        var hasher = Hasher()
+        hasher.combine(version)
+        hasher.combine(question)
+        return hasher.finalize()
+    }
+}
