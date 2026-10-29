@@ -80,6 +80,8 @@ struct SSHGuardNodeScreen: View {
 
     @State private var model: SSHGuardNodeModel
     @State private var armTarget: SSHGuardArmTarget?
+    @State private var excluding = false
+    @State private var excludeReason = ""
     @Environment(SessionStore.self) private var session
     @Environment(SSHGuardStore.self) private var store
     @Environment(NodeDirectory.self) private var nodes
@@ -111,6 +113,18 @@ struct SSHGuardNodeScreen: View {
             }
             .sheet(item: $armTarget) { target in
                 SSHGuardArmSheet(nodeID: target.nodeID, rotate: target.rotate)
+            }
+            .alert("Exclude \(name) from SSH Guard", isPresented: $excluding) {
+                TextField("Reason", text: $excludeReason)
+                Button("Cancel", role: .cancel) { excludeReason = "" }
+                Button("Continue") {
+                    let reason = excludeReason.trimmingCharacters(in: .whitespacesAndNewlines)
+                    excludeReason = ""
+                    Task { await runner.run(SSHGuardIntents.exclude(ref, reason: reason)) }
+                }
+                .disabled(excludeReason.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            } message: {
+                Text("New SSH Guard plans for this node are refused until someone enrolls it. Say why, so the next person does not have to guess.")
             }
             .polling(.standard, version: changes.version([.sshguard, .approvals, .nodes])) {
                 await nodes.refreshIfOlder(than: 60)
@@ -407,7 +421,7 @@ struct SSHGuardNodeScreen: View {
             }
             .disabled(!store.canPlan || !row.isArmable)
             Button {
-                Task { await runner.run(SSHGuardIntents.exclude(ref)) }
+                excluding = true
             } label: {
                 SSHGuardActionLabel(title: "Exclude from SSH Guard", symbol: "minus.circle",
                                     note: store.canExclude ? "Refuses new SSH Guard plans for this node." : "Needs node:admin")
@@ -431,7 +445,8 @@ struct SSHGuardNodeScreen: View {
         case .review(let approvalID):
             router.present(.review(.single(approvalID)))
         case .file:
-            Task { await runner.run(SSHGuardIntents.confirm(ref, deadline: row.deadline)) }
+            let clock = row.deadline.map { TimeDisplay.clock($0, mode: mode, locale: locale) }
+            Task { await runner.run(SSHGuardIntents.confirm(ref, deadlineText: clock)) }
         }
     }
 

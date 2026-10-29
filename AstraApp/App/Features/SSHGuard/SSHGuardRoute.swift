@@ -29,9 +29,9 @@ extension SSHGuardRoute: DemoHooks {
         case "sshguard.arm":
             return demoNode(argument).map { SSHGuardIntents.arm($0, form: SSHGuardRotation.Form(nodeID: $0.id, outOfBandFallback: true)) }
         case "sshguard.confirm":
-            return demoNode(argument).map { SSHGuardIntents.confirm($0, deadline: nil) }
+            return demoNode(argument).map { SSHGuardIntents.confirm($0, deadlineText: nil) }
         case "sshguard.exclude":
-            return demoNode(argument).map { SSHGuardIntents.exclude($0) }
+            return demoNode(argument).map { SSHGuardIntents.exclude($0, reason: "No exposed port until port forwarding is configured") }
         case "agent.plan":
             return demoNode(argument).map { AgentUpdatesPlanning.planOne($0) }
         case "agent.planAll":

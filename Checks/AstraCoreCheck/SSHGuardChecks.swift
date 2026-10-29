@@ -258,7 +258,10 @@ private func checkSSHGuardWriteFlows() async throws {
                     "accepted arm body")
 
     let (confirmClient, confirmMock) = sgMock(["\(sgBase)/api/sshguard/confirm": (200, json(#"{"approval":{"id":"approval_cfm","plan_sha256":"bb","status":"pending"}}"#))])
-    let confirm = await WriteFlow(intent: SSHGuardIntents.confirm(node, deadline: nil), client: confirmClient, authenticator: SSHGuardAuthStub(outcome: .cancelled)).commit(choices: ConfirmChoices())
+    let timed = SSHGuardIntents.confirm(node, deadlineText: "08:25")
+    try expect(timed.consequence.contains("before 08:25, or edge-a undoes"), "the confirm sheet states the deadline itself")
+    try expect(!timed.consequence.contains("shown above"), "the confirm sheet points at nothing it does not show")
+    let confirm = await WriteFlow(intent: SSHGuardIntents.confirm(node, deadlineText: nil), client: confirmClient, authenticator: SSHGuardAuthStub(outcome: .cancelled)).commit(choices: ConfirmChoices())
     guard case .finished(.filed(let confirmIDs, _, _)) = confirm else { throw CheckFailure.failed("confirm files, got \(confirm)") }
     try expectEqual(confirmIDs, ["approval_cfm"], "confirm approval")
     try expectEqual(try sgCanonical(await confirmMock.lastBody), #"{"node_id":"n-a"}"#, "confirm body")
@@ -266,6 +269,8 @@ private func checkSSHGuardWriteFlows() async throws {
     let (excludeClient, excludeMock) = sgMock(["\(sgBase)/api/nodes/capabilities": (200, json(#"{"node_id":"n-a","capability":"sshguard","state":"excluded","reason":"r","enforced":true}"#))])
     let exclude = SSHGuardIntents.exclude(node, reason: "lab machine")
     try expectEqual(exclude.tier, .t3, "exclusion is T3")
+    try expectEqual(exclude.title, "Stop SSH Guard plans for edge-a", "the title reads with the node as its object")
+    try expect(exclude.consequence.contains("\"lab machine\""), "the consequence quotes the operator's reason")
     let cancelled = await WriteFlow(intent: exclude, client: excludeClient, authenticator: SSHGuardAuthStub(outcome: .cancelled)).commit(choices: ConfirmChoices())
     guard case .cancelled = cancelled else { throw CheckFailure.failed("cancelled Face ID must cancel") }
     try expectEqual(await excludeMock.requestURLs.count, 0, "cancelled exclusion sends nothing")

@@ -6,6 +6,8 @@ public func checkAgentUpdates() async throws {
     try checkAgentUpdatesVersions()
     try await checkAgentUpdatesDemo()
     try await checkAgentUpdatesPlanAllBehind()
+    try await checkAgentUpdatesLostAnswers()
+    try checkAgentUpdatesForceWords()
 }
 
 private let auClock = DemoClock(pinned: "2026-10-28T12:00:00Z")!
@@ -186,6 +188,81 @@ private func checkAgentUpdatesPlanAllBehind() async throws {
     let current = ObjectRef(kind: "node", id: DemoWorld.node("edge-tyo-1").id, name: "edge-tyo-1")
     let noop = await AgentUpdatesPlanning.planSequentially([current], client: auDemo())
     guard case .refused = noop else { throw CheckFailure.failed("a node on the target refuses, got \(noop)") }
+}
+
+/// Answers plan posts by node: a timeout for the nodes in `lost`, a 400 for
+/// the nodes in `refused`, a filed approval otherwise; and approval listings
+/// from `pending`, keyed by node id.
+private actor PlanLossTransport: HTTPTransport {
+    let lost: Set<String>
+    let refused: Set<String>
+    let pending: [String: String]
+    private(set) var posts = 0
+
+    init(lost: Set<String>, refused: Set<String> = [], pending: [String: String] = [:]) {
+        self.lost = lost
+        self.refused = refused
+        self.pending = pending
+    }
+
+    func data(for request: URLRequest) async throws -> (Data, URLResponse) {
+        let url = request.url!
+        let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+        func answer(_ status: Int, _ body: String) -> (Data, URLResponse) {
+            (Data(body.utf8), HTTPURLResponse(url: url, statusCode: status, httpVersion: "HTTP/1.1", headerFields: ["Content-Type": "application/json"])!)
+        }
+        if request.httpMethod == "POST" {
+            posts += 1
+            let body = (try? JSONSerialization.jsonObject(with: request.httpBody ?? Data())) as? [String: Any]
+            let node = body?["node_id"] as? String ?? ""
+            if lost.contains(node) { throw URLError(.timedOut) }
+            if refused.contains(node) { return answer(400, #"{"error":"agent update policy is not enabled for this node"}"#) }
+            return answer(200, #"{"id":"approval_\#(node)","node_id":"\#(node)","plugin":"agentupdate","action":"agent-update:v1","plan_sha256":"aa","status":"pending"}"#)
+        }
+        let node = components?.queryItems?.first { $0.name == "node_id" }?.value ?? ""
+        let rows = pending[node].map { #"[{"id":"\#($0)","node_id":"\#(node)","plugin":"agentupdate","action":"agent-update:v1","plan_sha256":"aa","status":"pending"}]"# } ?? "[]"
+        return answer(200, #"{"approvals":\#(rows),"total":0,"limit":5,"offset":0}"#)
+    }
+}
+
+private func checkAgentUpdatesLostAnswers() async throws {
+    let nodes = ["n-a", "n-b", "n-c"].map { ObjectRef(kind: "node", id: $0, name: "edge-\($0.dropFirst(2))") }
+    func client(_ transport: PlanLossTransport) -> LatticeClient {
+        LatticeClient(baseURL: URL(string: "https://lattice.example.com")!, credential: LatticeCredential(bearerToken: "lat_check.notasecret"), transport: transport)
+    }
+
+    // One answer lost, its plan found on the read back: it counts as filed.
+    let found = PlanLossTransport(lost: ["n-b"], pending: ["n-b": "approval_found"])
+    let first = await AgentUpdatesPlanning.planSequentially(nodes, client: client(found))
+    guard case .filed(let ids, let refused, let notes) = first else { throw CheckFailure.failed("a lost answer with a plan found files, got \(first)") }
+    try expectEqual(ids, ["approval_n-a", "approval_n-c", "approval_found"], "the plan found on the read back is filed")
+    try expect(refused.isEmpty, "a lost answer is never a refusal")
+    try expectEqual(notes.first, "3 plans filed", "summary")
+    try expectEqual(await found.posts, 3, "nothing is retried")
+
+    // Lost with no plan found: not confirmed, never refused.
+    let missing = PlanLossTransport(lost: ["n-b"], refused: ["n-c"])
+    let second = await AgentUpdatesPlanning.planSequentially(nodes, client: client(missing))
+    guard case .filed(_, let refusedHalf, let secondNotes) = second else { throw CheckFailure.failed("one filed plan still files, got \(second)") }
+    try expectEqual(refusedHalf.map(\.object.id), ["n-c"], "only the server's answer is refused")
+    try expectEqual(secondNotes.first, "1 plan filed, 1 refused, 1 not confirmed", "summary names the unconfirmed node")
+    try expect(secondNotes.contains { $0.contains("Could not confirm edge-b") }, "the unconfirmed node is named")
+
+    // Every answer lost: unknown, never "No plan was filed".
+    let allLost = PlanLossTransport(lost: ["n-a", "n-b", "n-c"])
+    let third = await AgentUpdatesPlanning.planSequentially(nodes, client: client(allLost))
+    guard case .unknown(let message) = third else { throw CheckFailure.failed("all answers lost is unknown, got \(third)") }
+    try expect(!message.contains("No plan was filed"), "a lost answer never reads as nothing filed")
+}
+
+private func checkAgentUpdatesForceWords() throws {
+    let node = ObjectRef(kind: "node", id: "n-a", name: "edge-a")
+    let down = AgentUpdatesPlanning.planOne(node, force: true, running: "0.4.0-alpha.3", target: "0.3.10")
+    try expectEqual(down.title, "Plan agent downgrade for edge-a", "a forced plan on an ahead node says downgrade")
+    try expect(down.consequence.contains("downgrade of edge-a from 0.4.0-alpha.3 to 0.3.10"), "downgrade versions named")
+    try expect(AgentUpdatesPlanning.planOne(node, force: true, running: "0.3.10", target: "v0.3.10").consequence.contains("reinstalls 0.3.10"), "same version is a reinstall")
+    try expect(AgentUpdatesPlanning.planOne(node, force: true, running: "", target: "0.3.10").consequence.contains("cannot be compared"), "unreported version")
+    try expect(!AgentUpdatesPlanning.planOne(node).consequence.contains("already runs"), "a plain plan claims nothing about the version")
 }
 
 private extension Array {

@@ -53,13 +53,16 @@ public enum SSHGuardIntents {
 
     /// Files the confirm plan. Callers open `actionable_approval_id` in
     /// Review instead when the status names one (`SSHGuardConfirmTarget`).
-    public static func confirm(_ node: ObjectRef, deadline: Date?) -> WriteIntent {
-        WriteIntent(
+    /// `deadlineText` is the revert deadline as the caller shows it ("08:25");
+    /// the sheet covers the countdown, so the sentence has to carry the time.
+    public static func confirm(_ node: ObjectRef, deadlineText: String?) -> WriteIntent {
+        let before = deadlineText.map { "before \($0)" } ?? "before the revert deadline"
+        return WriteIntent(
             tier: .plan,
             verb: "Confirm SSH Guard on",
             object: node,
             scopes: planScopes,
-            consequence: "Files the confirm plan, whose only effect is to cancel the automatic revert. It must be approved and applied before the deadline\(deadline == nil ? "" : " shown above"), or \(node.name) undoes the hardening by itself.",
+            consequence: "Files the confirm plan, whose only effect is to cancel the automatic revert. It must be approved and applied \(before), or \(node.name) undoes the hardening by itself.",
             affected: [node],
             changes: [.approvals, .sshguard],
             perform: { client, _ in
@@ -69,14 +72,17 @@ public enum SSHGuardIntents {
         )
     }
 
-    /// Excludes the node from SSH Guard through its capability record.
-    public static func exclude(_ node: ObjectRef, reason: String = "Excluded from SSH Guard on iPhone") -> WriteIntent {
-        WriteIntent(
+    /// Excludes the node from SSH Guard through its capability record. The
+    /// reason is the operator's own words: the server refuses an exclusion
+    /// without one, and it is what every later refusal quotes.
+    public static func exclude(_ node: ObjectRef, reason: String) -> WriteIntent {
+        let reason = reason.trimmingCharacters(in: .whitespacesAndNewlines)
+        return WriteIntent(
             tier: .t3,
-            verb: "Exclude from SSH Guard",
+            verb: "Stop SSH Guard plans for",
             object: node,
             scopes: ["node:admin"],
-            consequence: "SSH Guard can no longer plan for \(node.name): new arm plans are refused. What is already applied on the node stays, and a running revert timer still needs its confirm.",
+            consequence: "Records an SSH Guard exclusion for \(node.name) with the reason \"\(reason)\". New arm plans are refused. What is already applied on the node stays, and a running revert timer still needs its confirm.",
             affected: [node],
             idempotent: true,
             changes: [.sshguard, .nodes, .gates],

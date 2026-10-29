@@ -274,7 +274,8 @@ struct AgentUpdatesScreen: View {
 
     private func plan(_ row: AgentUpdatesNodeRow, force: Bool) {
         let ref = ObjectRef(kind: "node", id: row.nodeID, name: row.name)
-        Task { await runner.run(AgentUpdatesPlanning.planOne(ref, force: force)) }
+        let target = row.policy?.resolvedTarget(latest: store.latest) ?? store.latest
+        Task { await runner.run(AgentUpdatesPlanning.planOne(ref, force: force, running: row.running, target: target)) }
     }
 
     // MARK: Distribution

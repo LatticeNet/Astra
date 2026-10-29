@@ -13,6 +13,8 @@ struct SSHGuardBoardScreen: View {
     @Environment(ActionRunner.self) private var runner
     @Environment(NetworkMonitor.self) private var network
     @Environment(\.accessibilityVoiceOverEnabled) private var voiceOver
+    @Environment(\.timeZoneMode) private var mode
+    @Environment(\.locale) private var locale
 
     @State private var postureFilter = SSHGuardPostureFilter.all.title
     @State private var coverageFilter = SSHGuardCoverageFilter.all.title
@@ -239,7 +241,8 @@ struct SSHGuardBoardScreen: View {
             router.present(.review(.single(approvalID)))
         case .file:
             let node = ObjectRef(kind: "node", id: row.id, name: row.name)
-            Task { await runner.run(SSHGuardIntents.confirm(node, deadline: row.deadline)) }
+            let clock = row.deadline.map { TimeDisplay.clock($0, mode: mode, locale: locale) }
+            Task { await runner.run(SSHGuardIntents.confirm(node, deadlineText: clock)) }
         }
     }
 
