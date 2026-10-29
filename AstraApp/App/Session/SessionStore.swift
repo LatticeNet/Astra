@@ -96,18 +96,36 @@ final class SessionStore {
         isDemo ? "demo.lattice.invalid" : (serverURL?.host() ?? "the server")
     }
 
+    /// "Keep the session on this iPhone". Demo never touches the Keychain or
+    /// the stored preference (7.3), so in demo the choice lives in memory.
     var keepSession: Bool {
-        get { access(keyPath: \.keepSession); return UserDefaults.standard.bool(forKey: Key.keepSession) }
+        get {
+            access(keyPath: \.keepSession)
+            return isDemo ? demoKeepSession : UserDefaults.standard.bool(forKey: Key.keepSession)
+        }
         set {
+            guard !isDemo else {
+                withMutation(keyPath: \.keepSession) { demoKeepSession = newValue }
+                return
+            }
             withMutation(keyPath: \.keepSession) { UserDefaults.standard.set(newValue, forKey: Key.keepSession) }
-            if newValue, let revealSession, !isDemo { try? KeychainStore.saveSession(revealSession) } else { KeychainStore.deleteSession() }
+            if newValue, let revealSession { try? KeychainStore.saveSession(revealSession) } else { KeychainStore.deleteSession() }
         }
     }
+    @ObservationIgnored private var demoKeepSession = false
 
     var endSessionAfterReveal: Bool {
-        get { access(keyPath: \.endSessionAfterReveal); return UserDefaults.standard.object(forKey: Key.endAfterReveal) as? Bool ?? true }
-        set { withMutation(keyPath: \.endSessionAfterReveal) { UserDefaults.standard.set(newValue, forKey: Key.endAfterReveal) } }
+        get {
+            access(keyPath: \.endSessionAfterReveal)
+            return isDemo ? demoEndSessionAfterReveal : UserDefaults.standard.object(forKey: Key.endAfterReveal) as? Bool ?? true
+        }
+        set {
+            withMutation(keyPath: \.endSessionAfterReveal) {
+                if isDemo { demoEndSessionAfterReveal = newValue } else { UserDefaults.standard.set(newValue, forKey: Key.endAfterReveal) }
+            }
+        }
     }
+    @ObservationIgnored private var demoEndSessionAfterReveal = true
 
     // MARK: Launch
 
@@ -198,7 +216,7 @@ final class SessionStore {
         sessionIdentity = identity
         revealSession = session
         sessionExpired = false
-        if keepSession { try? KeychainStore.saveSession(session) }
+        if keepSession, !isDemo { try? KeychainStore.saveSession(session) }
     }
 
     /// Loads the kept session (after Face ID) when a reveal needs it.
@@ -216,13 +234,15 @@ final class SessionStore {
         self.revealClient = nil
         sessionIdentity = nil
         revealSession = nil
-        KeychainStore.deleteSession()
+        if !isDemo { KeychainStore.deleteSession() }
     }
 
     // MARK: Demo
 
     func enterDemo(scenario: DemoScenario, clock: DemoClock = DemoClock()) {
         isDemo = true
+        demoKeepSession = false
+        demoEndSessionAfterReveal = true
         demoScenario = scenario
         demoClock = clock
         demoState = DemoState()
