@@ -44,15 +44,29 @@ public struct RevealedSecret: Sendable, Hashable, CustomStringConvertible, Custo
         case consoleLink
     }
 
+    /// What the operator does next on the web, such as installing a rotated token.
+    public struct FollowUp: Sendable, Hashable {
+        /// "Reconfigure on web".
+        public var title: String
+        public var path: LatticeConsolePath
+
+        public init(title: String, path: LatticeConsolePath) {
+            self.title = title
+            self.path = path
+        }
+    }
+
     /// "Knock sequence", "Node token".
     public var title: String
     public var value: String
     public var kind: Kind
+    public var followUp: FollowUp?
 
-    public init(title: String, value: String, kind: Kind = .text) {
+    public init(title: String, value: String, kind: Kind = .text, followUp: FollowUp? = nil) {
         self.title = title
         self.value = value
         self.kind = kind
+        self.followUp = followUp
     }
 
     public var description: String { "RevealedSecret(\(title), redacted)" }

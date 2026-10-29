@@ -230,7 +230,7 @@ enum FoundationDemoIntents: DemoHooks {
                 consequence: "edge-tyo-3 stops reporting and receives no plans until the new token is installed on the host. You cannot do that from this iPhone.",
                 affected: [node], changes: [.nodes],
                 perform: { _, _ in
-                    .done("Rotated the token for edge-tyo-3", secret: RevealedSecret(title: "New node token for edge-tyo-3", value: "lat_demo_node_7f3a.notasecret"))
+                    .done("Rotated the token for edge-tyo-3", secret: RevealedSecret(title: "New node token for edge-tyo-3", value: "lat_demo_node_7f3a.notasecret", followUp: .init(title: "Reconfigure on web", path: .node(id: "n-edge-tyo-3", view: .settings))))
                 }
             )
         default:

@@ -140,7 +140,10 @@ public enum FleetIntents {
                 let answer = try await client.rotateNodeToken(nodeID: node.id)
                 return .done(
                     "Rotated the token for \(node.name). Install it on the host to restore reporting.",
-                    secret: RevealedSecret(title: "New node token for \(node.name)", value: answer.token)
+                    secret: RevealedSecret(
+                        title: "New node token for \(node.name)", value: answer.token,
+                        followUp: .init(title: "Reconfigure on web", path: .node(id: node.id, view: .settings))
+                    )
                 )
             }
         )

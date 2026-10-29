@@ -57,6 +57,11 @@ struct SecretRevealStep: View {
                     }
                 }
             }
+            if let followUp = secret.followUp {
+                Section {
+                    WebLinkRow(title: followUp.title, path: followUp.path)
+                }
+            }
         }
         .navigationTitle(secret.title)
         .navigationBarTitleDisplayMode(.inline)
