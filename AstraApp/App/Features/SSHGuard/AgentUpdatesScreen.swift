@@ -51,8 +51,14 @@ struct AgentUpdatesScreen: View {
                 if verticalSizeClass == .compact, store.missingGate == nil {
                     ToolbarItem(placement: .topBarTrailing) { toolbarPicker.frame(maxWidth: 320) }
                 }
+                // A bottom bar in portrait: in the top bar the text button squeezed out the
+                // title, entirely on iPhone SE. Compact height moves it up (section 4.11).
                 if selected == .nodes, store.missingGate == nil {
-                    ToolbarItem(placement: .topBarTrailing) { planAllButton }
+                    if verticalSizeClass == .compact {
+                        ToolbarItem(placement: .topBarTrailing) { planAllButton }
+                    } else {
+                        ToolbarItem(placement: .bottomBar) { planAllButton }
+                    }
                 }
                 ToolbarItem(placement: .topBarTrailing) { menu }
             }
@@ -244,19 +250,23 @@ struct AgentUpdatesScreen: View {
             }
         }
         .contextMenu {
-            Button("Plan update", systemImage: "arrow.down.circle") { plan(row, force: false) }
-                .disabled(row.policy == nil || row.standing != .behind || store.planBlockReason() != nil)
-            Button("Force plan", systemImage: "arrow.clockwise.circle") { plan(row, force: true) }
-                .disabled(row.policy == nil || store.planBlockReason() != nil)
-            if row.policy == nil {
-                Text("No update policy: set one on the web")
-            } else if let reason = store.planBlockReason() {
-                Text(reason)
+            let blocked = row.policy == nil ? "No update policy: set one on the web" : store.planBlockReason()
+            Button { plan(row, force: false) } label: {
+                Label("Plan update", systemImage: "arrow.down.circle")
+                if let blocked { Text(blocked) }
             }
+            .disabled(blocked != nil || row.standing != .behind)
+            Button { plan(row, force: true) } label: {
+                Label(AgentUpdatesPlanning.isForcedDowngrade(running: row.running, target: target) ? "Force downgrade" : "Force plan", systemImage: "arrow.clockwise.circle")
+                if let blocked { Text(blocked) }
+            }
+            .disabled(blocked != nil)
             Divider()
             Button("Open node", systemImage: "server.rack") { router.push(.fleet(.node(id: row.nodeID))) }
             Button("Copy link", systemImage: "link") { SSHGuardCopy.copy(SSHGuardCopy.agentUpdatesLink(row.nodeID)) }
             Button("Open on web", systemImage: "safari") { router.openOnWeb(.agentUpdates(nodeName: row.name)) }
+        } preview: {
+            SSHGuardAgentGlance(row: row, style: style, detail: detail, target: target)
         }
     }
 
@@ -269,6 +279,7 @@ struct AgentUpdatesScreen: View {
             Text("Plan all behind (\(targets.count))")
         }
         .disabled(targets.isEmpty || store.planBlockReason() != nil)
+        .accessibilityLabel(targets.count == 1 ? "Plan all behind, 1 node" : "Plan all behind, \(targets.count) nodes")
         .accessibilityHint(targets.isEmpty ? "No node is behind with a policy" : "Files one plan per node")
     }
 
@@ -517,7 +528,8 @@ struct SSHGuardAgentNodeRow: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: Spacing.xxs) {
-            StatusRow(style: style, title: title, detail: detail, reason: reason)
+            StatusRow(style: style, title: title, detail: detail, reason: reason,
+                      accessibilityPhrase: "\(title), \(style.word), \(detail)")
             if let history {
                 Text(history)
                     .textRole(.stamp)
@@ -525,6 +537,49 @@ struct SSHGuardAgentNodeRow: View {
             }
         }
         .accessibilityElement(children: .combine)
+    }
+}
+
+/// The context-menu glance of a Nodes row: everything the row caps, with
+/// the policy's last error in full.
+struct SSHGuardAgentGlance: View {
+    let row: AgentUpdatesNodeRow
+    let style: StatusStyle
+    let detail: String
+    let target: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Spacing.s) {
+            Label {
+                Text(row.name).textRole(.rowTitle)
+            } icon: {
+                Image(systemName: style.symbol).foregroundStyle(style.tone.glyph)
+            }
+            Text("\(style.word.prefix(1).uppercased() + style.word.dropFirst()), \(detail)").textRole(.rowDetail)
+            if let error = row.policy?.lastError, !error.isEmpty {
+                Divider()
+                Text("Last error").font(.subheadline.weight(.semibold))
+                Text(error).font(.subheadline).fixedSize(horizontal: false, vertical: true)
+            }
+            if let fetch = row.policy?.lastFetch {
+                Divider()
+                fact("Last download", fetch.outcome == .failed ? "failed at \(fetch.stage.isEmpty ? "an unknown stage" : fetch.stage), exit \(fetch.exitCode)" : (fetch.stage.isEmpty ? "done" : fetch.stage))
+                if !fetch.targetVersion.isEmpty { fact("For version", fetch.targetVersion) }
+            }
+            fact("Policy", row.policyState.word)
+            if let target { fact("Target", target) }
+        }
+        .padding(Spacing.l)
+        .frame(width: 320, alignment: .leading)
+    }
+
+    private func fact(_ label: String, _ value: String) -> some View {
+        HStack(alignment: .firstTextBaseline) {
+            Text(label).foregroundStyle(.secondary)
+            Spacer()
+            Text(value).multilineTextAlignment(.trailing)
+        }
+        .font(.subheadline)
     }
 }
 
@@ -543,7 +598,7 @@ struct SSHGuardMirrorRow: View {
         let scope = mirror.global ? "after the control plane for every node" : (count == 1 ? "first for 1 node or group" : "first for \(count) nodes or groups")
         StatusRow(style: style, title: mirror.displayName, detail: "priority \(mirror.priority), \(scope)",
                   reason: health.map { "\($0.fetches) fetch\($0.fetches == 1 ? "" : "es") in the last downloads, \($0.chunkFailures) with bad chunks" },
-                  accessibilityPhrase: "\(mirror.displayName), \(style.word), priority \(mirror.priority)")
+                  accessibilityPhrase: "\(mirror.displayName), \(style.word), priority \(mirror.priority), \(scope)")
         DetailRow(label: "Base URL", value: mirror.baseURL, monospaced: true)
     }
 }

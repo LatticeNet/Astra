@@ -56,6 +56,11 @@ public enum AgentUpdatesPlanning {
         )
     }
 
+    /// True when a forced plan on this row would file a downgrade.
+    public static func isForcedDowngrade(running: String, target: String?) -> Bool {
+        isDowngrade(running: running, target: target)
+    }
+
     static func isDowngrade(running: String, target: String?) -> Bool {
         let from = AgentUpdatesVersion.normalize(running)
         let to = AgentUpdatesVersion.normalize(target)
