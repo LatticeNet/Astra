@@ -136,6 +136,10 @@ struct DirectoryRow: View {
     /// "Needs node:read" for pages this token cannot read, or a result's detail.
     let subtitle: String?
     var available = true
+    /// A search result's state. It replaces the accent icon with the status
+    /// glyph and leads the subtitle with the state word, because the accent
+    /// never sits next to a status meaning (4.1).
+    var status: StatusStyle?
     var onOpen: () -> Void = {}
 
     @Environment(Router.self) private var router
@@ -181,8 +185,12 @@ struct DirectoryRow: View {
             // No icons at accessibility sizes: the title gets the full width,
             // and where the row opens is a line of its own.
             VStack(alignment: .leading, spacing: Spacing.xxs) {
-                Text(entry.title)
-                if let subtitle { Text(subtitle).textRole(.footnote) }
+                if let status {
+                    Text("\(Text(Image(systemName: status.symbol)).foregroundStyle(status.tone.glyph)) \(entry.title)")
+                } else {
+                    Text(entry.title)
+                }
+                if let subtitleLine { subtitleLine.textRole(.footnote) }
                 if let trailing { Text(trailing.text).textRole(.footnote) }
             }
             .frame(maxWidth: .infinity, minHeight: Spacing.minimumTarget, alignment: .leading)
@@ -192,13 +200,17 @@ struct DirectoryRow: View {
                 Label {
                     VStack(alignment: .leading, spacing: Spacing.xxs) {
                         Text(entry.title)
-                        if let subtitle {
-                            Text(subtitle).textRole(.footnote)
+                        if let subtitleLine {
+                            subtitleLine.textRole(.footnote)
                         }
                     }
                 } icon: {
-                    Image(systemName: entry.symbol)
-                        .foregroundStyle(available ? Color.accentText : .secondary)
+                    if let status {
+                        StatusGlyph(style: status, font: .body)
+                    } else {
+                        Image(systemName: entry.symbol)
+                            .foregroundStyle(available ? Color.accentText : .secondary)
+                    }
                 }
                 Spacer(minLength: Spacing.s)
                 if let trailing {
@@ -219,17 +231,29 @@ struct DirectoryRow: View {
             .accessibilityHint(trailing.map { Text($0.text) } ?? Text(verbatim: ""))
         }
     }
+
+    /// The state word, colored for problems, followed by the subtitle.
+    private var subtitleLine: Text? {
+        let word = status.flatMap { $0.word.isEmpty ? nil : Text($0.word).foregroundStyle($0.tone.word) }
+        switch (word, subtitle) {
+        case let (word?, subtitle?): return Text("\(word) · \(subtitle)")
+        case let (word?, nil): return word
+        case let (nil, subtitle?): return Text(subtitle)
+        case (nil, nil): return nil
+        }
+    }
 }
 
-/// An object found by a module's search provider.
+/// An object found by a module's search provider. A result with a state shows
+/// its status glyph and word; one without shows a neutral object glyph.
 struct SearchResultRow: View {
     let result: SearchResult
 
     var body: some View {
-        let style = result.style ?? StatusStyle(word: "", symbol: "circle", tone: .quiet)
         DirectoryRow(
-            entry: DirectoryEntry(id: result.id, title: result.title, symbol: style.symbol, target: result.target),
-            subtitle: result.detail
+            entry: DirectoryEntry(id: result.id, title: result.title, symbol: result.style?.symbol ?? "circle", target: result.target),
+            subtitle: result.detail,
+            status: result.style
         )
     }
 }
