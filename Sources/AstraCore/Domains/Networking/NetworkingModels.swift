@@ -5,12 +5,18 @@ public struct NetEndpoint: Codable, Equatable, Hashable, Sendable {
     public var nodeID: String
     public var cidr: String
     public var domain: String
+    /// A node group remote (`kind: group`), expanded to its members on compile.
+    public var groupID: String = ""
+    /// A NetGuard zone remote (`kind: zone`).
+    public var zoneID: String = ""
 
-    public init(kind: String = "", nodeID: String = "", cidr: String = "", domain: String = "") {
+    public init(kind: String = "", nodeID: String = "", cidr: String = "", domain: String = "", groupID: String = "", zoneID: String = "") {
         self.kind = kind
         self.nodeID = nodeID
         self.cidr = cidr
         self.domain = domain
+        self.groupID = groupID
+        self.zoneID = zoneID
     }
 
     /// Human-readable target, e.g. "node:edge-1", "cidr:10.0.0.0/8", "domain:x.com", "any".
@@ -19,6 +25,8 @@ public struct NetEndpoint: Codable, Equatable, Hashable, Sendable {
         case "node": return nodeID.isEmpty ? "node" : "node:\(nodeID)"
         case "cidr": return cidr.isEmpty ? "cidr" : cidr
         case "domain": return domain.isEmpty ? "domain" : domain
+        case "group": return groupID.isEmpty ? "group" : "group:\(groupID)"
+        case "zone": return zoneID.isEmpty ? "zone" : "zone:\(zoneID)"
         case "any", "": return "any"
         default: return kind
         }
@@ -27,6 +35,8 @@ public struct NetEndpoint: Codable, Equatable, Hashable, Sendable {
     enum CodingKeys: String, CodingKey {
         case kind, cidr, domain
         case nodeID = "node_id"
+        case groupID = "group_id"
+        case zoneID = "zone_id"
     }
 
     public init(from decoder: Decoder) throws {
@@ -35,6 +45,8 @@ public struct NetEndpoint: Codable, Equatable, Hashable, Sendable {
         nodeID = try c.decodeIfPresent(String.self, forKey: .nodeID) ?? ""
         cidr = try c.decodeIfPresent(String.self, forKey: .cidr) ?? ""
         domain = try c.decodeIfPresent(String.self, forKey: .domain) ?? ""
+        groupID = try c.decodeIfPresent(String.self, forKey: .groupID) ?? ""
+        zoneID = try c.decodeIfPresent(String.self, forKey: .zoneID) ?? ""
     }
 }
 
@@ -94,8 +106,11 @@ public struct NetPolicy: Identifiable, Codable, Equatable, Hashable, Sendable {
     public var lastAppliedAt: Date?
     public var lastError: String
     public var updatedAt: Date?
+    /// Built from outbound policies by the group plan rather than authored on its own.
+    public var groupDerived: Bool = false
 
-    public init(id: String, targetNodeID: String = "", targetNodeName: String = "", rules: [NetRule] = [], enabled: Bool = false, lastPlanSHA: String = "", lastAppliedAt: Date? = nil, lastError: String = "", updatedAt: Date? = nil) {
+    public init(id: String, targetNodeID: String = "", targetNodeName: String = "", rules: [NetRule] = [], enabled: Bool = false, lastPlanSHA: String = "", lastAppliedAt: Date? = nil, lastError: String = "", updatedAt: Date? = nil, groupDerived: Bool = false) {
+        self.groupDerived = groupDerived
         self.id = id
         self.targetNodeID = targetNodeID
         self.targetNodeName = targetNodeName
@@ -118,20 +133,26 @@ public struct NetPolicy: Identifiable, Codable, Equatable, Hashable, Sendable {
         case lastAppliedAt = "last_applied_at"
         case lastError = "last_error"
         case updatedAt = "updated_at"
+        case groupDerived = "group_derived"
     }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
+        groupDerived = try c.decodeIfPresent(Bool.self, forKey: .groupDerived) ?? false
         id = try c.decodeIfPresent(String.self, forKey: .id) ?? ""
         targetNodeID = try c.decodeIfPresent(String.self, forKey: .targetNodeID) ?? ""
         targetNodeName = try c.decodeIfPresent(String.self, forKey: .targetNodeName) ?? ""
         rules = try c.decodeIfPresent([NetRule].self, forKey: .rules) ?? []
         enabled = try c.decodeIfPresent(Bool.self, forKey: .enabled) ?? false
         lastPlanSHA = try c.decodeIfPresent(String.self, forKey: .lastPlanSHA) ?? ""
-        lastAppliedAt = try DateValue.decodeIfPresent(from: c, forKey: .lastAppliedAt)
+        lastAppliedAt = NetworkingTime.plausible(try DateValue.decodeIfPresent(from: c, forKey: .lastAppliedAt))
         lastError = try c.decodeIfPresent(String.self, forKey: .lastError) ?? ""
         updatedAt = try DateValue.decodeIfPresent(from: c, forKey: .updatedAt)
     }
+
+    /// The console's `holdsInbound`: any ingress rule, even a disabled one,
+    /// makes the server's `CompileEgressPlan` refuse this document's plan.
+    public var holdsInbound: Bool { rules.contains { $0.direction == "ingress" } }
 }
 
 public struct NetGraphNode: Identifiable, Codable, Equatable, Hashable, Sendable {
@@ -270,6 +291,8 @@ public struct TunnelProfile: Identifiable, Codable, Equatable, Hashable, Sendabl
     public var name: String
     public var nodeID: String
     public var tunnelID: String
+    /// Where cloudflared reads the tunnel credentials on the node; the server never holds them.
+    public var credentialsFile: String = ""
     public var ingress: [TunnelIngress]
     public var createdAt: Date?
     public var updatedAt: Date?
@@ -290,6 +313,7 @@ public struct TunnelProfile: Identifiable, Codable, Equatable, Hashable, Sendabl
         case id, name, ingress
         case nodeID = "node_id"
         case tunnelID = "tunnel_id"
+        case credentialsFile = "credentials_file"
         case createdAt = "created_at"
         case updatedAt = "updated_at"
     }
@@ -300,6 +324,7 @@ public struct TunnelProfile: Identifiable, Codable, Equatable, Hashable, Sendabl
         name = try c.decodeIfPresent(String.self, forKey: .name) ?? ""
         nodeID = try c.decodeIfPresent(String.self, forKey: .nodeID) ?? ""
         tunnelID = try c.decodeIfPresent(String.self, forKey: .tunnelID) ?? ""
+        credentialsFile = try c.decodeIfPresent(String.self, forKey: .credentialsFile) ?? ""
         ingress = try c.decodeIfPresent([TunnelIngress].self, forKey: .ingress) ?? []
         createdAt = try DateValue.decodeIfPresent(from: c, forKey: .createdAt)
         updatedAt = try DateValue.decodeIfPresent(from: c, forKey: .updatedAt)
