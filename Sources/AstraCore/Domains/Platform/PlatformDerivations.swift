@@ -219,7 +219,9 @@ public enum PlatformLifecycle {
 // MARK: - Publishing
 
 /// The origin filter of Publishing (`PUBLISHING_LENSES`).
-public enum PlatformPublishingLens: String, Sendable, Hashable, CaseIterable {
+public enum PlatformPublishingLens: String, Sendable, Hashable, CaseIterable, Identifiable {
+    public var id: String { rawValue }
+
     case all, kv, `static`, share
 
     public var title: String {
@@ -506,5 +508,92 @@ public enum PlatformSystem {
     /// Failures as a fraction of calls.
     public static func errorRate(_ row: PlatformSystemEventRow) -> Double {
         row.calls == 0 ? 0 : Double(row.errors) / Double(row.calls)
+    }
+}
+
+// MARK: - Query fields
+
+/// The Plugins list's query fields (section 6.14).
+public enum PlatformPluginQueryFields: QueryFieldProvider {
+    public typealias Row = PlatformPluginRow
+
+    public static var fields: [LatticeQueryField<PlatformPluginRow>] {
+        [
+            LatticeQueryField(key: "name", type: .string, get: { .string($0.name) }),
+            LatticeQueryField(key: "id", type: .string, get: { .string($0.id) }),
+            LatticeQueryField(key: "publisher", type: .string, get: { $0.publisher.isEmpty ? .none : .string($0.publisher) }),
+            LatticeQueryField(key: "type", type: .enumeration, values: ["system", "wasm", "worker"], get: { .string($0.type) }),
+            LatticeQueryField(key: "status", aliases: ["lifecycle"], type: .enumeration, values: ["verified", "installed", "active", "disabled"], get: { .string($0.status) }),
+            LatticeQueryField(key: "health", aliases: ["state"], type: .enumeration, values: PlatformPluginHealth.allCases.map(\.rawValue),
+                              valueAliases: ["armed": "running", "waiting": "pending"], get: { .string($0.health.rawValue) }),
+            LatticeQueryField(key: "risk", type: .enumeration, values: ["read", "write", "host", "unknown"], get: { .string($0.risk.rawValue) }),
+            LatticeQueryField(key: "capability", aliases: ["cap", "capabilities"], type: .list, get: { .strings($0.capabilities) }),
+            LatticeQueryField(key: "version", type: .version, get: { $0.version.isEmpty ? .none : .string($0.version) }),
+        ]
+    }
+
+    public static func text(_ row: PlatformPluginRow) -> [String] {
+        [row.name, row.id, row.publisher]
+    }
+}
+
+/// The Publishing routes' query fields.
+public enum PlatformRecordQueryFields: QueryFieldProvider {
+    public typealias Row = PlatformPublishingRecord
+
+    public static var fields: [LatticeQueryField<PlatformPublishingRecord>] {
+        [
+            LatticeQueryField(key: "origin", type: .enumeration, values: ["kv", "static", "plugin"], valueAliases: ["share": "plugin"], get: { .string($0.origin) }),
+            LatticeQueryField(key: "host", aliases: ["hostname"], type: .string, get: { $0.anyHost ? .string("*") : .string($0.hostname) }),
+            LatticeQueryField(key: "path", type: .string, get: { .string(PlatformPublishing.routePath($0)) }),
+            LatticeQueryField(key: "bucket", aliases: ["target"], type: .string, get: { .string(PlatformPublishing.originTarget($0)) }),
+            LatticeQueryField(key: "state", aliases: ["status"], type: .enumeration, values: ["serving", "disabled", "expired"],
+                              get: { .string(PlatformRouteState.of($0, now: Date()).rawValue) }),
+            LatticeQueryField(key: "reserved", type: .bool, flag: true, sortable: false, get: { .bool($0.reserved) }),
+            LatticeQueryField(key: "expires", type: .time, get: { $0.expiresAt.map { .time($0) } ?? .none }),
+        ]
+    }
+
+    public static func text(_ row: PlatformPublishingRecord) -> [String] {
+        [row.hostname, row.pathPrefix, row.bucket, row.id]
+    }
+}
+
+/// The storage tokens' query fields.
+public enum PlatformTokenQueryFields: QueryFieldProvider {
+    public typealias Row = PlatformStorageToken
+
+    public static var fields: [LatticeQueryField<PlatformStorageToken>] {
+        [
+            LatticeQueryField(key: "name", type: .string, get: { .string($0.name) }),
+            LatticeQueryField(key: "kind", type: .enumeration, values: ["kv", "static"], get: { .string($0.kind) }),
+            LatticeQueryField(key: "access", type: .enumeration, values: ["read", "write", "admin"], get: { .string($0.access) }),
+            LatticeQueryField(key: "bucket", aliases: ["buckets"], type: .list, get: { .strings($0.buckets) }),
+            LatticeQueryField(key: "revoked", type: .bool, flag: true, sortable: false, get: { .bool($0.isRevoked) }),
+            LatticeQueryField(key: "used", aliases: ["last_used"], type: .time, get: { $0.lastUsedAt.map { .time($0) } ?? .none }),
+        ]
+    }
+
+    public static func text(_ row: PlatformStorageToken) -> [String] {
+        [row.name, row.id] + row.buckets
+    }
+}
+
+/// The shares' query fields, for Browse search.
+public enum PlatformShareQueryFields: QueryFieldProvider {
+    public typealias Row = PlatformShare
+
+    public static var fields: [LatticeQueryField<PlatformShare>] {
+        [
+            LatticeQueryField(key: "slug", aliases: ["name"], type: .string, get: { .string($0.slug) }),
+            LatticeQueryField(key: "state", aliases: ["status"], type: .enumeration, values: ["live", "expiring", "paused", "expired"],
+                              get: { .string(PlatformShareState.of($0, now: Date()).rawValue) }),
+            LatticeQueryField(key: "source", type: .enumeration, values: ["plugin", "core.proxy_user"], valueAliases: ["core": "core.proxy_user"], get: { .string($0.source.kind) }),
+            LatticeQueryField(key: "expires", type: .time, get: { $0.expiresAt.map { .time($0) } ?? .none }),
+        ]
+    }
+
+    public static func text(_ row: PlatformShare) -> [String] {
+        [row.slug, row.id, row.source.subscriptionID, row.source.proxyUserID, row.source.identityID]
     }
 }

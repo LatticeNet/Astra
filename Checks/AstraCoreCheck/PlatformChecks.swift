@@ -11,6 +11,7 @@ public func checkPlatform() async throws {
     try checkPlatformStore()
     try checkPlatformSystem()
     try checkPlatformExtensionPages()
+    try checkPlatformQueries()
     try await checkPlatformDemo()
 }
 
@@ -479,4 +480,45 @@ private func checkPlatformDemo() async throws {
     try expect(!afterShares.contains { $0.id == "share_trial" }, "a deleted share leaves the list")
     let afterRecords = try await operatorClient.platformPublishingRecords()
     try expect(!afterRecords.records.contains { $0.id == "share_trial" }, "and its route")
+}
+
+private func checkPlatformQueries() throws {
+    var failed = PlatformPluginRow(id: "examplelabs.dns-probe", name: "DNS probe")
+    failed.status = "active"
+    failed.runtime = PlatformRuntimeStatus(state: "failed")
+    failed.lifecycleRead = true
+    failed.available = true
+    failed.capabilities = ["http:egress"]
+    var reader = PlatformPluginRow(id: "examplelabs.reader", name: "Reader")
+    reader.status = "disabled"
+    reader.capabilities = ["kv:read"]
+    func plugins(_ query: String) throws -> [String] {
+        guard case .success(let compiled) = LatticeQueryEngine.compile(query, provider: PlatformPluginQueryFields.self) else {
+            throw CheckFailure.failed("plugin query \(query) compiles")
+        }
+        return LatticeQueryEngine.apply(compiled, to: [failed, reader], now: Date()).map(\.id)
+    }
+    try expectEqual(try plugins("health:failed"), ["examplelabs.dns-probe"], "health filter")
+    try expectEqual(try plugins("risk:host"), ["examplelabs.dns-probe"], "risk filter")
+    try expectEqual(try plugins("-status:disabled"), ["examplelabs.dns-probe"], "negated status")
+    try expectEqual(try plugins("reader"), ["examplelabs.reader"], "bare words search the name")
+    if case .success = LatticeQueryEngine.compile("helth:failed", provider: PlatformPluginQueryFields.self) {
+        throw CheckFailure.failed("a misspelt field is an error, never an empty list")
+    }
+
+    let records = [
+        PlatformPublishingRecord(id: "a", origin: "kv", bucket: "status-page", hostname: "status.example.net"),
+        PlatformPublishingRecord(id: "b", origin: "plugin", bucket: "share_a", anyHost: true, pathPrefix: "sub/family", enabled: false, shareID: "share_a"),
+    ]
+    guard case .success(let compiled) = LatticeQueryEngine.compile("origin:share state:disabled", provider: PlatformRecordQueryFields.self) else {
+        throw CheckFailure.failed("record query compiles")
+    }
+    try expectEqual(LatticeQueryEngine.apply(compiled, to: records, now: Date()).map(\.id), ["b"], "share is an alias of the plugin origin")
+
+    let tokens = [PlatformStorageToken(id: "t1", name: "ci", kind: "kv", access: "write", buckets: ["flags"]),
+                  PlatformStorageToken(id: "t2", name: "old", kind: "kv", access: "admin", revokedAt: Date())]
+    guard case .success(let tokenQuery) = LatticeQueryEngine.compile("is:revoked", provider: PlatformTokenQueryFields.self) else {
+        throw CheckFailure.failed("token query compiles")
+    }
+    try expectEqual(LatticeQueryEngine.apply(tokenQuery, to: tokens, now: Date()).map(\.id), ["t2"], "is:revoked")
 }
