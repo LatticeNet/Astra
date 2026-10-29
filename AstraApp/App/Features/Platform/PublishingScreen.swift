@@ -26,6 +26,8 @@ struct PublishingScreen: View {
     @Environment(\.locale) private var locale
     @Environment(\.timeZoneMode) private var mode
     @Environment(NetworkMonitor.self) private var network
+    @Environment(\.accessibilityVoiceOverEnabled) private var voiceOver
+    @State private var stable = PlatformStableList<String, PlatformPublishingRecord>()
 
     @State private var selected = PlatformPublishingView.overview
     @State private var lens = PlatformPublishingLens.all
@@ -47,10 +49,21 @@ struct PublishingScreen: View {
                 }
             }
             .toolbar { toolbar }
-            .onAppear(perform: applyLink)
-            .onChange(of: lens) { _, new in tokens = new == .all ? [] : [new] }
+            .onAppear {
+                applyLink()
+                offerRoutes(force: true)
+            }
+            .onChange(of: lens) { _, new in
+                tokens = new == .all ? [] : [new]
+                offerRoutes(force: true)
+            }
             .onChange(of: tokens) { _, new in if new.isEmpty, lens != .all { lens = .all } }
-            .refreshable { await store.refresh() }
+            .onChange(of: query) { offerRoutes(force: true) }
+            .onChange(of: store.records.value) { offerRoutes(force: false) }
+            .refreshable {
+                await store.refresh()
+                offerRoutes(force: true)
+            }
             .polling(.standard, version: changes.version([.publishing, .store])) { await store.refresh() }
     }
 
@@ -232,19 +245,28 @@ struct PublishingScreen: View {
         }
     }
 
+    /// The filtered routes, offered to the stable list grouped by origin.
+    private func offerRoutes(force: Bool) {
+        let slots = filteredRecords().records.map { PlatformStableList<String, PlatformPublishingRecord>.Slot(group: $0.origin, row: $0) }
+        stable.offer(slots, voiceOver: voiceOver, force: force)
+    }
+
     private var routes: some View {
         let now = Date()
-        let (records, error) = filteredRecords()
+        let error = filteredRecords().error
         let visible = Set(store.records.value?.origins ?? [])
         let origins = (lens.origin.map { [$0] } ?? ["kv", "static", "plugin"])
         return List {
+            if stable.held != nil, voiceOver {
+                Section { PendingUpdatesRow(count: stable.pendingCount) { stable.showHeld() } }
+            }
             if let error { queryErrorRow(error) }
             if lens != .all {
                 FilterStateRow(text: "Showing \(lens.title) routes only.") { lens = .all }
             }
             PlatformRefreshError(state: store.records, noun: "routes") { Task { await store.refresh() } }
             ForEach(origins, id: \.self) { origin in
-                routeSection(origin, rows: records.filter { $0.origin == origin }, visible: visible.contains(origin), now: now)
+                routeSection(origin, rows: stable.rows(in: origin), visible: visible.contains(origin), now: now)
             }
             Section {
                 WebLinkRow(title: "Create a binding or share on web", path: .platformPublishing(view: "routes"))
@@ -253,6 +275,9 @@ struct PublishingScreen: View {
             }
         }
         .listStyle(.insetGrouped)
+        .onScrollPhaseChange { _, phase in
+            if phase != .idle { stable.noteActivity() }
+        }
         .searchable(text: $query, tokens: $tokens, prompt: Text("Search routes")) { token in
             Text(token.title)
         }

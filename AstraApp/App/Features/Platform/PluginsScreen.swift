@@ -10,8 +10,10 @@ struct PluginsScreen: View {
     @Environment(ChangeLog.self) private var changes
     @Environment(Router.self) private var router
     @Environment(ActionRunner.self) private var runner
+    @Environment(\.accessibilityVoiceOverEnabled) private var voiceOver
 
     @SceneStorage(PluginsScreen.queryKey) private var query = ""
+    @State private var stable = PlatformStableList<PlatformPluginHealth, PlatformPluginRow>()
 
     var body: some View {
         PlatformListState(state: store.listState, noun: "plugins", retry: { Task { await store.refresh() } }) { rows in
@@ -20,9 +22,24 @@ struct PluginsScreen: View {
         .navigationTitle("Plugins")
         .navigationSubtitle(query)
         .searchable(text: $query, prompt: "Search plugins")
-        .refreshable { await store.refresh() }
+        .refreshable {
+            await store.refresh()
+            offer(force: true)
+        }
         .polling(.standard, version: changes.version(.plugins)) { await store.refresh() }
+        .onAppear { offer(force: true) }
+        .onChange(of: store.listState.value) { offer(force: false) }
+        .onChange(of: query) { offer(force: true) }
         .toolbar { toolbar }
+    }
+
+    /// The filtered rows grouped worst first, offered to the stable list.
+    private func offer(force: Bool) {
+        let rows = filtered(store.listState.value ?? []).rows
+        let slots = rows.enumerated()
+            .sorted { ($0.element.health.rank, $0.offset) < ($1.element.health.rank, $1.offset) }
+            .map { PlatformStableList<PlatformPluginHealth, PlatformPluginRow>.Slot(group: $0.element.health, row: $0.element) }
+        stable.offer(slots, voiceOver: voiceOver, force: force)
     }
 
     private func filtered(_ rows: [PlatformPluginRow]) -> (rows: [PlatformPluginRow], error: String?) {
@@ -36,9 +53,12 @@ struct PluginsScreen: View {
 
     @ViewBuilder
     private func list(_ all: [PlatformPluginRow]) -> some View {
-        let (rows, queryError) = filtered(all)
-        let groups = Dictionary(grouping: rows, by: \.health)
+        let queryError = filtered(all).error
+        let rows = stable.shown.map(\.row)
         List {
+            if stable.held != nil, voiceOver {
+                Section { PendingUpdatesRow(count: stable.pendingCount) { stable.showHeld() } }
+            }
             if let queryError {
                 Section {
                     Label(queryError, systemImage: "exclamationmark.magnifyingglass")
@@ -61,9 +81,9 @@ struct PluginsScreen: View {
                     ContentUnavailableView.search(text: query)
                 }
             }
-            ForEach(groups.keys.sorted { $0.rank < $1.rank }, id: \.self) { health in
+            ForEach(stable.groups, id: \.self) { health in
                 Section {
-                    ForEach(groups[health] ?? []) { row in
+                    ForEach(stable.rows(in: health)) { row in
                         NavigationLink(value: AppRoute.platform(.plugin(id: row.id))) {
                             PlatformPluginRowView(row: row)
                         }
@@ -91,6 +111,9 @@ struct PluginsScreen: View {
             }
         }
         .listStyle(.insetGrouped)
+        .onScrollPhaseChange { _, phase in
+            if phase != .idle { stable.noteActivity() }
+        }
     }
 
     private func trustRow(_ trust: PluginTrust) -> some View {

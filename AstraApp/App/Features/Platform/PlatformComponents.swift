@@ -375,3 +375,78 @@ struct PlatformFindableText: UIViewRepresentable {
         return CGSize(width: width, height: size.height)
     }
 }
+
+/// The stable-list rule of section 5.0 for grouped Platform lists. A poll
+/// that moves, inserts or removes a row, or moves it to another group,
+/// waits until two seconds after the last scroll; while VoiceOver runs it
+/// waits behind a PendingUpdatesRow. Values of rows that stay in place
+/// apply at once. Pull to refresh and a new filter apply at once too.
+@MainActor @Observable
+final class PlatformStableList<Group: Hashable & Sendable, Row: Identifiable & Sendable> where Row.ID: Sendable {
+    struct Slot: Sendable {
+        var group: Group
+        var row: Row
+    }
+
+    private(set) var shown: [Slot] = []
+    private(set) var held: [Slot]?
+    @ObservationIgnored private var lastActivity = Date.distantPast
+    @ObservationIgnored private var hasShown = false
+    @ObservationIgnored private var voiceOver = false
+    @ObservationIgnored private var release: Task<Void, Never>?
+
+    /// The shown rows of `group`, in the order shown.
+    func rows(in group: Group) -> [Row] {
+        shown.filter { $0.group == group }.map(\.row)
+    }
+
+    /// The groups that hold shown rows, in the order they first appear.
+    var groups: [Group] {
+        var seen = Set<Group>()
+        return shown.compactMap { seen.insert($0.group).inserted ? $0.group : nil }
+    }
+
+    var pendingCount: Int {
+        guard let held else { return 0 }
+        let current = Set(shown.map(\.row.id))
+        let next = Set(held.map(\.row.id))
+        let moved = zip(shown, held).filter { $0.row.id != $1.row.id || $0.group != $1.group }.count
+        return max(current.symmetricDifference(next).count, moved > 0 ? 1 : 0)
+    }
+
+    func noteActivity() {
+        lastActivity = Date()
+        scheduleRelease()
+    }
+
+    func offer(_ slots: [Slot], voiceOver: Bool, force: Bool = false) {
+        self.voiceOver = voiceOver
+        let sameLayout = slots.count == shown.count && zip(slots, shown).allSatisfy { $0.row.id == $1.row.id && $0.group == $1.group }
+        let idle = Date().timeIntervalSince(lastActivity) > 2
+        if !hasShown || shown.isEmpty || force || sameLayout || (idle && !voiceOver) {
+            shown = slots
+            held = nil
+            hasShown = true
+        } else {
+            let fresh = Dictionary(slots.map { ($0.row.id, $0.row) }, uniquingKeysWith: { first, _ in first })
+            shown = shown.map { Slot(group: $0.group, row: fresh[$0.row.id] ?? $0.row) }
+            held = slots
+            scheduleRelease()
+        }
+    }
+
+    func showHeld() {
+        if let held { shown = held }
+        held = nil
+    }
+
+    private func scheduleRelease() {
+        release?.cancel()
+        guard held != nil, !voiceOver else { return }
+        release = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(2.1))
+            guard !Task.isCancelled, let self, Date().timeIntervalSince(self.lastActivity) > 2 else { return }
+            self.showHeld()
+        }
+    }
+}
