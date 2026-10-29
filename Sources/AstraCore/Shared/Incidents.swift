@@ -48,6 +48,14 @@ public struct Incident: Identifiable, Codable, Equatable, Hashable, Sendable {
     public var maintenanceID: String
     /// When a pending incident opens if its condition holds.
     public var opensAt: Date?
+    /// When the open message went out, kept across a later recovery message.
+    public var openNotifiedAt: Date? = nil
+    /// When the server first held the open message.
+    public var suppressedAt: Date? = nil
+    /// Escalation step to the time it was sent.
+    public var escalated: [String: Date] = [:]
+    /// The incident's rule asked for no escalation.
+    public var noEscalate: Bool = false
 
     public init(
         id: String,
@@ -108,6 +116,10 @@ public struct Incident: Identifiable, Codable, Equatable, Hashable, Sendable {
         case owedRecovery = "owed_recovery"
         case maintenanceID = "maintenance_id"
         case opensAt = "opens_at"
+        case openNotifiedAt = "open_notified_at"
+        case suppressedAt = "suppressed_at"
+        case escalated
+        case noEscalate = "no_escalate"
     }
 
     public init(from decoder: Decoder) throws {
@@ -144,6 +156,11 @@ public struct Incident: Identifiable, Codable, Equatable, Hashable, Sendable {
         maintenance = try c.decodeIfPresent(String.self, forKey: .maintenance) ?? ""
         maintenanceID = try c.decodeIfPresent(String.self, forKey: .maintenanceID) ?? ""
         opensAt = try DateValue.decodeIfPresent(from: c, forKey: .opensAt)
+        openNotifiedAt = try DateValue.decodeIfPresent(from: c, forKey: .openNotifiedAt)
+        suppressedAt = try DateValue.decodeIfPresent(from: c, forKey: .suppressedAt)
+        let steps = try c.decodeIfPresent([String: String].self, forKey: .escalated) ?? [:]
+        escalated = steps.compactMapValues { AstraDateParser.date(from: $0) }
+        noEscalate = try c.decodeIfPresent(Bool.self, forKey: .noEscalate) ?? false
     }
 
     /// A derived pending incident; it accepts no writes.
@@ -338,6 +355,50 @@ public enum IncidentFilter: String, Sendable, Hashable, CaseIterable {
         case .pending: incident.state == "pending"
         case .resolved: incident.state == "resolved"
         case .all: true
+        }
+    }
+}
+
+public extension IncidentFilter {
+    /// `compareIncidents`: worst first. Unhandled open incidents, then
+    /// handled ones (acknowledged, snoozed or held), then pending, then
+    /// resolved; within the active ranks critical before warning and the
+    /// oldest problem first; resolved ones newest resolution first.
+    static func areInIncreasingOrder(_ a: Incident, _ b: Incident, now: Date) -> Bool {
+        compare(a, b, now: now) < 0
+    }
+
+    static func compare(_ a: Incident, _ b: Incident, now: Date) -> Int {
+        let rank = attentionRank(a, now: now) - attentionRank(b, now: now)
+        if rank != 0 { return rank }
+        func millis(_ date: Date?) -> Double { date.map { $0.timeIntervalSince1970 * 1_000 } ?? 0 }
+        if a.state == "resolved" {
+            let diff = millis(b.resolvedAt) - millis(a.resolvedAt)
+            return diff < 0 ? -1 : (diff > 0 ? 1 : 0)
+        }
+        let severity = severityRank(a.severity) - severityRank(b.severity)
+        if severity != 0 { return severity }
+        let since = millis(a.since ?? a.openedAt) - millis(b.since ?? b.openedAt)
+        if since != 0 { return since < 0 ? -1 : 1 }
+        return LatticeQueryValues.localeCompare(a.id, b.id, numeric: false)
+    }
+
+    private static func attentionRank(_ incident: Incident, now: Date) -> Int {
+        switch incident.state {
+        case "open": isSnoozed(incident, now: now) || !incident.maintenance.isEmpty ? 1 : 0
+        case "acknowledged": 1
+        case "pending": 2
+        case "resolved": 3
+        default: 4
+        }
+    }
+
+    private static func severityRank(_ severity: String) -> Int {
+        switch severity {
+        case "critical": 0
+        case "warning": 1
+        case "info": 2
+        default: 3
         }
     }
 }
