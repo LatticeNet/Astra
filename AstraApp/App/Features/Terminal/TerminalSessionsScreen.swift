@@ -19,7 +19,7 @@ struct TerminalSessionsScreen: View {
 
     @SceneStorage(Self.queryKey) private var query = ""
     @State private var showAllNodes = false
-    @State private var stable = TerminalStableList<TerminalSession>()
+    @State private var stable = TerminalStableList<TerminalSession> { $0.isLive == $1.isLive }
 
     private var nodeFilter: String? { showAllNodes ? nil : nodeID }
 
@@ -100,12 +100,12 @@ struct TerminalSessionsScreen: View {
                 } header: {
                     Text("Ended").accessibilityAddTraits(.isHeader)
                 } footer: {
-                    Text("The server keeps an ended session for \(TerminalLimits.closedRetentionMinutes) minutes, then forgets it. The audit log keeps every open and close.")
+                    Text("The server keeps an ended session for \(TerminalLimits.closedRetentionMinutes) minutes, then forgets it. The audit log keeps the record.")
                 }
             }
             Section {
                 TerminalOpensInRow(title: "Terminal audit trail", symbol: "list.bullet.rectangle", tab: .activity,
-                                   hint: "Shows every terminal open, attach and close in the audit log") {
+                                   hint: "Shows terminal actions in the audit log") {
                     router.select(tab: .activity, scope: "audit", query: "action:terminal.*")
                 }
                 WebLinkRow(title: "New session on web", path: .terminalNewSession(nodeID: nodeFilter))
@@ -153,7 +153,7 @@ struct TerminalSessionsScreen: View {
             TerminalSessionRow(session: session, nodeName: name, currentTokenID: store.currentTokenID)
         }
         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-            if session.isLive {
+            if session.isLive, network.isSatisfied {
                 Button("Close", systemImage: "xmark.square") { close(session, name: name) }
                     .tint(Color.destructiveFill)
             }
@@ -165,11 +165,13 @@ struct TerminalSessionsScreen: View {
             Button("Open on web", systemImage: "safari") { router.openOnWeb(.terminalSession(id: session.id)) }
             if session.isLive {
                 Divider()
-                Button("Close session", systemImage: "xmark.square", role: .destructive) { close(session, name: name) }
+                TerminalGatedButton(title: "Close session", systemImage: "xmark.square",
+                                    unavailable: network.isSatisfied ? nil : "No connection", role: .destructive) { close(session, name: name) }
             }
         }
         .accessibilityActions {
             Button("Copy link") { TerminalCopy.copy(TerminalCopy.link(sessionID: session.id)) }
+            Button("Copy ID") { TerminalCopy.copy(session.id) }
             Button("Open on web") { router.openOnWeb(.terminalSession(id: session.id)) }
         }
     }
@@ -181,12 +183,10 @@ struct TerminalSessionsScreen: View {
     @ToolbarContentBuilder
     private var toolbar: some ToolbarContent {
         ToolbarItem(placement: .topBarTrailing) {
-            Button("New session on web", systemImage: "plus") { router.openOnWeb(.terminalNewSession(nodeID: nodeFilter)) }
-                .accessibilityHint("Opens the console's Terminal page in your browser")
-        }
-        ToolbarItem(placement: .topBarTrailing) {
             Menu {
-                Button("Open on web", systemImage: "safari") { router.openOnWeb(.terminalNewSession(nodeID: nil)) }
+                // A plus would promise creation here; this leaves the app.
+                Button("New session on web", systemImage: "safari") { router.openOnWeb(.terminalNewSession(nodeID: nodeFilter)) }
+                    .accessibilityHint("Opens the console's Terminal page in your browser")
                 Button("Terminal audit trail", systemImage: "list.bullet.rectangle") {
                     router.select(tab: .activity, scope: "audit", query: "action:terminal.*")
                 }
