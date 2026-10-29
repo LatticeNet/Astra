@@ -28,6 +28,7 @@ struct InboxAttentionItem: Identifiable, Hashable {
     @MainActor
     static func items(store: InboxStore, now: Date, mode: TimeZoneMode = .local, locale: Locale = .current) -> [InboxAttentionItem] {
         var items: [InboxAttentionItem] = []
+        let names = Dictionary((store.nodes.value ?? []).map { ($0.id, $0.displayName) }, uniquingKeysWith: { first, _ in first })
 
         for status in SSHGuardBoard.revertingNodes(store.sshGuard.value ?? [], now: now) {
             let name = status.nodeName.isEmpty ? status.nodeID : status.nodeName
@@ -75,7 +76,7 @@ struct InboxAttentionItem: Identifiable, Hashable {
         for approval in store.stuck.value ?? [] {
             let style = StatusStyle.approval(.waiting)
             let title = ApprovalEvents.title(for: approval)
-            let node = approval.waiting?.nodeName.inboxNonEmpty ?? ApprovalEvents.nodeLabel(approval)
+            let node = approval.waiting?.nodeName.inboxNonEmpty ?? names[approval.nodeID] ?? ApprovalEvents.nodeLabel(approval)
             items.append(InboxAttentionItem(
                 id: "stuck:\(approval.id)", style: style, title: title, detail: "approved, on \(node)",
                 reason: approval.waiting?.reason.inboxNonEmpty, target: .review(approval.id),

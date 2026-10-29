@@ -17,6 +17,7 @@ struct BatchReviewSheet: View {
     @Environment(NodeDirectory.self) private var nodeDirectory
     @Environment(\.dismiss) private var dismiss
     @Environment(\.dynamicTypeSize) private var typeSize
+    @Environment(\.verticalSizeClass) private var heightClass
     @Environment(\.timeZoneMode) private var mode
     @Environment(\.locale) private var locale
 
@@ -37,7 +38,7 @@ struct BatchReviewSheet: View {
             }
             .background(Color(uiColor: .systemGroupedBackground))
             .safeAreaInset(edge: .bottom, spacing: 0) {
-                if model.isLoaded {
+                if model.isLoaded, heightClass != .compact {
                     DecisionPanel(applyAfterApproval: $model.applyAfterApproval, controls: controls, approve: approve, reject: reject)
                 }
             }
@@ -48,8 +49,8 @@ struct BatchReviewSheet: View {
                     Button(role: .close) { dismiss() }
                         .disabled(model.inFlight)
                 }
-                if model.isLoaded, !typeSize.isAccessibilitySize, !controls.hidesButtons {
-                    InboxDecisionToolbar(applyAfterApproval: model.applyAfterApproval, controls: controls, approve: approve, reject: reject)
+                if model.isLoaded, !typeSize.isAccessibilitySize || heightClass == .compact, !controls.hidesButtons {
+                    InboxDecisionToolbar(applyAfterApproval: model.applyAfterApproval, controls: controls, compactHeight: heightClass == .compact, approve: approve, reject: reject)
                 }
             }
             .actionHost(inSheet: true)
@@ -107,6 +108,9 @@ struct BatchReviewSheet: View {
         if let summary = model.summary {
             InboxResultCard(text: summary.text, tone: summary.tone)
         }
+        if heightClass == .compact {
+            DecisionPanel(applyAfterApproval: $model.applyAfterApproval, controls: controls, inline: true, approve: approve, reject: reject)
+        }
         InboxCard {
             VStack(alignment: .leading, spacing: Spacing.s) {
                 Text(model.title)
@@ -159,7 +163,7 @@ struct BatchReviewSheet: View {
     }
 
     private var excludedNote: String? {
-        let excluded = model.rows.filter { exclusion($0) != nil }.count
+        let excluded = model.rows.filter { $0.outcome == nil && exclusion($0) != nil }.count
         return excluded == 0 ? nil : "\(excluded) left out"
     }
 
@@ -300,8 +304,7 @@ struct InboxBatchRowView: View {
             StatusRow(
                 style: style,
                 title: nodeName,
-                detail: row.approval?.waiting?.reason.inboxNonEmpty,
-                reason: outcomeOrExclusion?.text,
+                detail: row.outcome == nil ? row.approval?.waiting?.reason.inboxNonEmpty : nil,
                 accessibilityPhrase: "\(nodeName)" + (style.word.isEmpty ? "" : ", \(style.word)")
             )
             if let approval = row.approval {
@@ -310,11 +313,17 @@ struct InboxBatchRowView: View {
                     .sealCustomContent(approval.planSHA256, state: approval.planHashMatchesServer ? .verified : .mismatch)
             }
             if let outcome = outcomeOrExclusion {
-                Label(outcome.word, systemImage: outcome.symbol)
-                    .font(.footnote.weight(.semibold))
-                    .foregroundStyle(outcome.tone == .ok ? Color.statusOKText : outcome.tone.word)
-                    .padding(.leading, typeSize.isAccessibilitySize ? 0 : glyphWidth + Spacing.m)
-                    .accessibilityHidden(true)
+                Label {
+                    VStack(alignment: .leading, spacing: Spacing.xxs) {
+                        Text(outcome.word).fontWeight(.semibold)
+                        Text(outcome.text).fixedSize(horizontal: false, vertical: true)
+                    }
+                } icon: {
+                    Image(systemName: outcome.symbol)
+                }
+                .font(.subheadline)
+                .foregroundStyle(outcome.tone == .ok ? Color.statusOKText : outcome.tone.word)
+                .padding(.leading, typeSize.isAccessibilitySize ? 0 : glyphWidth + Spacing.m)
             }
         }
         .accessibilityElement(children: .combine)

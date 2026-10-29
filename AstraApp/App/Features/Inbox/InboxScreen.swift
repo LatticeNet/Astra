@@ -38,6 +38,7 @@ struct InboxScreen: View {
     @Environment(\.timeZoneMode) private var mode
     @Environment(\.locale) private var locale
     @Environment(\.scrollToTopSignal) private var scrollToTop
+    @Environment(\.dynamicTypeSize) private var typeSize
 
     @State private var filter: InboxFilter = .all
     @State private var snoozing: Incident?
@@ -60,17 +61,22 @@ struct InboxScreen: View {
                         PendingUpdatesRow(count: store.heldChanges) { store.applyHeld() }
                     }
                 }
-                if filter == .all { statusRows }
+                // At accessibility sizes the first incident or approval must be
+                // on screen without scrolling (4.8), so the counts and the
+                // trust rows follow the two most urgent sections.
+                if filter == .all, !typeSize.isAccessibilitySize { statusRows }
                 if filter.shows(.incidents) { incidentsSection }
                 if filter.shows(.approvals) { needsYouSection }
+                if filter == .all, typeSize.isAccessibilitySize {
+                    countsSection
+                    statusRows
+                }
                 if filter.shows(.attention) {
                     InboxAttentionSection(items: store.displayed.attention, denied: attentionDenied)
                     dueSection
                 }
                 if isQuietAndEmpty {
-                    Section {
-                        ContentUnavailableView("Nothing needs you", systemImage: "checkmark.circle")
-                    }
+                    Section { InboxEmptyRow() }
                 }
                 footerSection
             }
@@ -78,6 +84,7 @@ struct InboxScreen: View {
             .onChange(of: scrollToTop) { withAnimation { proxy.scrollTo("inbox.top", anchor: .top) } }
         }
         .navigationTitle("Inbox")
+        .navigationBarTitleDisplayMode(typeSize.isAccessibilitySize ? .inline : .automatic)
         .navigationSubtitle(filter == .all ? "" : filter.title)
         .toolbar {
             // The filter sits in its own glass group, apart from Settings.
@@ -129,6 +136,8 @@ struct InboxScreen: View {
             guard session.isDemo, !Self.appliedLaunchFilter else { return }
             Self.appliedLaunchFilter = true
             if let raw = UserDefaults.standard.string(forKey: Self.filterArgument), let launch = InboxFilter(rawValue: raw) { filter = launch }
+            // `-AstraInboxOpen attention` opens M1-05, which has no deep link.
+            if UserDefaults.standard.string(forKey: "AstraInboxOpen") == "attention" { router.push(.inbox(.allAttention)) }
         }
     }
 
@@ -137,8 +146,38 @@ struct InboxScreen: View {
     private var verdictSection: some View {
         Section {
             TimelineView(.periodic(from: .now, by: 15)) { context in
-                VerdictView(verdict: verdict(now: context.date)) { segment in
+                let verdict = verdict(now: context.date)
+                VerdictView(verdict: typeSize.isAccessibilitySize ? Verdict(sentence: verdict.sentence, segments: []) : verdict) { segment in
                     open(segment)
+                }
+                // A sentence, not a hero: it stops growing at the first
+                // accessibility size so the rows below stay in view.
+                .dynamicTypeSize(...DynamicTypeSize.accessibility1)
+            }
+        }
+    }
+
+    /// The count buttons as full-width rows, at accessibility sizes.
+    private var countsSection: some View {
+        TimelineView(.periodic(from: .now, by: 15)) { context in
+            let segments = verdict(now: context.date).segments
+            if !segments.isEmpty {
+                Section {
+                    ForEach(segments) { segment in
+                        Button { open(segment) } label: {
+                            HStack(spacing: Spacing.s) {
+                                Text(segment.text).textRole(.count).foregroundStyle(.primary)
+                                Spacer(minLength: Spacing.s)
+                                Image(systemName: segment.target == .approvals || segment.target == .failedTasks ? AppTab.activity.symbol : AppTab.fleet.symbol)
+                                    .foregroundStyle(.secondary)
+                                    .accessibilityHidden(true)
+                            }
+                            .frame(minHeight: Spacing.minimumTarget)
+                        }
+                        .accessibilityHint(segment.target == .approvals || segment.target == .failedTasks ? "Opens in Activity" : "Opens in Fleet")
+                    }
+                } header: {
+                    header("Counts")
                 }
             }
         }
@@ -200,7 +239,7 @@ struct InboxScreen: View {
         case .companionBehind(let surface):
             Section { CompanionBehindRow(surface: surface) } header: { header("Incidents") }
         case .idle, .loading(nil, _):
-            Section { LoadingRows(label: "Loading incidents", count: 2) } header: { header("Incidents") }
+            Section { placeholder("incidents") } header: { header("Incidents") }
         default:
             if !rows.isEmpty || failure(store.incidents) != nil {
                 Section {
@@ -272,7 +311,7 @@ struct InboxScreen: View {
         case .companionBehind(let surface):
             Section { CompanionBehindRow(surface: surface) } header: { header("Needs you") }
         case .idle, .loading(nil, _):
-            Section { LoadingRows(label: "Loading approvals", count: 2) } header: { header("Needs you") }
+            Section { placeholder("approvals") } header: { header("Needs you") }
         default:
             if !events.isEmpty || failure(store.approvals) != nil || !store.hiddenPlugins.isEmpty {
                 Section {
@@ -385,6 +424,23 @@ struct InboxScreen: View {
 
     // MARK: Helpers
 
+    /// Placeholders while a first load runs; offline, a plain statement
+    /// that nothing has loaded, never an endless placeholder.
+    @ViewBuilder
+    private func placeholder(_ noun: String) -> some View {
+        if network.isSatisfied {
+            LoadingRows(label: "Loading \(noun)", count: 2)
+        } else {
+            Label {
+                Text("No connection. No \(noun) have loaded yet.")
+                    .foregroundStyle(Color.statusWarnText)
+            } icon: {
+                Image(systemName: "wifi.slash").foregroundStyle(Color.statusWarnFill)
+            }
+            .frame(minHeight: Spacing.minimumTarget)
+        }
+    }
+
     private var isQuietAndEmpty: Bool {
         filter == .all && store.displayed.isEmpty && store.approvals.value != nil && store.incidents.value != nil && !store.anyFailed
     }
@@ -483,6 +539,27 @@ extension InboxGroupRow {
             }
         }
         return names
+    }
+}
+
+/// The empty Inbox under a quiet verdict.
+struct InboxEmptyRow: View {
+    var body: some View {
+        VStack(spacing: Spacing.s) {
+            Image(systemName: "checkmark.circle")
+                .font(.largeTitle)
+                .symbolRenderingMode(.hierarchical)
+                .foregroundStyle(Color.statusOKFill)
+                .accessibilityHidden(true)
+            Text("Nothing needs you").font(.headline)
+            Text("No open incidents, approvals or attention items.")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, Spacing.xl)
+        .accessibilityElement(children: .combine)
     }
 }
 

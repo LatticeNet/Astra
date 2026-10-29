@@ -23,6 +23,7 @@ struct ApprovalReviewSheet: View {
     @Environment(NodeDirectory.self) private var nodeDirectory
     @Environment(\.dismiss) private var dismiss
     @Environment(\.dynamicTypeSize) private var typeSize
+    @Environment(\.verticalSizeClass) private var heightClass
     @Environment(\.horizontalSizeClass) private var widthClass
     @Environment(\.timeZoneMode) private var mode
     @Environment(\.locale) private var locale
@@ -46,7 +47,7 @@ struct ApprovalReviewSheet: View {
             .onScrollGeometryChange(for: CGFloat.self) { $0.contentOffset.y } action: { _, offset in contentOffset = offset }
             .background(Color(uiColor: .systemGroupedBackground))
             .safeAreaInset(edge: .bottom, spacing: 0) {
-                if let approval = model.approval, model.load == .loaded {
+                if let approval = model.approval, model.load == .loaded, heightClass != .compact {
                     DecisionPanel(applyAfterApproval: $model.applyAfterApproval, controls: controls(approval), approve: approve, reject: reject)
                 }
             }
@@ -128,6 +129,9 @@ struct ApprovalReviewSheet: View {
     private func loaded(_ approval: Approval) -> some View {
         if let result = model.result {
             InboxResultCard(text: result.text, tone: result.tone)
+        }
+        if heightClass == .compact {
+            DecisionPanel(applyAfterApproval: $model.applyAfterApproval, controls: controls(approval), inline: true, approve: approve, reject: reject)
         }
         InboxReviewHeader(approval: approval, nodeName: nodeName(approval), openNode: openNode)
         if approval.isSSHGuardConfirm {
@@ -316,10 +320,10 @@ struct ApprovalReviewSheet: View {
             }
             .disabled(model.inFlight)
         }
-        if let approval = model.approval, model.load == .loaded, !typeSize.isAccessibilitySize {
+        if let approval = model.approval, model.load == .loaded, !typeSize.isAccessibilitySize || heightClass == .compact {
             let controls = controls(approval)
             if !controls.hidesButtons {
-                InboxDecisionToolbar(applyAfterApproval: model.applyAfterApproval, controls: controls, approve: approve, reject: reject)
+                InboxDecisionToolbar(applyAfterApproval: model.applyAfterApproval, controls: controls, compactHeight: heightClass == .compact, approve: approve, reject: reject)
             }
         }
     }
@@ -392,7 +396,7 @@ struct ApprovalReviewSheet: View {
         let node = ObjectRef(kind: "node", id: approval.nodeID, name: nodeName(approval))
         let box = InboxFiledBox()
         let intent = WriteIntent(
-            tier: .plan, verb: "Plan the agent update again for", object: node, scopes: ["node:admin", "network:plan"],
+            tier: .plan, verb: "Replan the agent update on", object: node, scopes: ["node:admin", "network:plan"],
             consequence: "Files a new agent update plan for \(node.name). Nothing changes on the node until that plan is approved.",
             affected: [node], changes: [.approvals, .agentUpdates],
             perform: { client, _ in
@@ -449,9 +453,9 @@ struct ApprovalReviewSheet: View {
         let title = ApprovalEvents.title(for: approval)
         let target = node.isEmpty ? "" : " on \(node)"
         switch decision {
-        case .approve: return "Approved \(title)\(target)"
-        case .reject: return "Rejected \(title)\(target)"
-        case .dismiss: return "Dismissed \(title)\(target)"
+        case .approve: return "Approved: \(title)\(target)"
+        case .reject: return "Rejected: \(title)\(target)"
+        case .dismiss: return "Dismissed: \(title)\(target)"
         }
     }
 

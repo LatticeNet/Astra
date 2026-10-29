@@ -416,13 +416,14 @@ final class InboxStore {
     // MARK: Verdict
 
     func coverage<Value>(_ state: ResourceState<Value>, interval: TimeInterval, offline: Bool, now: Date) -> SectionCoverage {
+        if case .denied(let scope) = state { return .denied(scope: scope) }
+        // Offline is known even before anything loaded: never "Checking".
+        if offline { return .offline(lastGoodAt: state.loadedAt) }
         switch state {
-        case .denied(let scope): return .denied(scope: scope)
         case .idle: return .notLoaded
         case .companionBehind: return .failed(lastGoodAt: nil)
         default: break
         }
-        if offline { return .offline(lastGoodAt: state.loadedAt) }
         if case .failed = state { return .failed(lastGoodAt: state.loadedAt) }
         guard let at = state.loadedAt else { return .notLoaded }
         if now.timeIntervalSince(at) > 3 * interval { return .stale(lastGoodAt: at) }
