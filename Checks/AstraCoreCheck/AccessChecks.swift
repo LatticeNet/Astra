@@ -386,7 +386,17 @@ private func checkAccessDemo() async throws {
     let providers = try await admin.accessListSSOProviders()
     try expect(providers.contains { $0.skipLocalTOTP } && providers.contains { !$0.hasSecret } && providers.contains(where: \.enabled), "providers in every state")
 
-    // A confined token reads only the tokens inside its allowlist.
+    // The phone's own token lists the scopes /api/me reports for it.
+    let phoneListed = try expectUnwrapped(tokens.first { $0.id == AccessFixtures.phoneTokenID }, "phone token listed")
+    try expectEqual(phoneListed.scopes, DemoTransport.scopes(for: .pat, scenario: .fullAdmin).scopes, "the phone token matches /api/me")
+
+    // A confined caller holding token:admin reads only the tokens inside its allowlist.
+    let confinedAdmin = ScopeSet(scopes: ["token:admin"], serverAllowlist: DemoWorld.confinedNodeIDs)
+    let seen = AccessFixtures.visibleTokens(caller: confinedAdmin, scenario: .fullAdmin, deleted: []).map(\.id)
+    try expectEqual(seen, ["tok_demo0004asia"], "a confined caller sees only tokens inside its allowlist")
+    try expect(!AccessFixtures.visibleTokens(caller: ScopeSet(scopes: ["*"]), scenario: .fullAdmin, deleted: ["tok_demo0002ci"]).contains { $0.id == "tok_demo0002ci" }, "a deleted token is not listed")
+
+    // The confined demo token is an Operator preset, which holds no token:admin.
     let confined = accessDemo(.pat, .confinedToken)
     do {
         _ = try await confined.listTokens()

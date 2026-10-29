@@ -83,17 +83,31 @@ public enum AccessFixtures {
         ])
     }
 
-    /// A confined caller sees only the tokens whose allowlist is a subset of
-    /// its own (`handleTokens`).
-    static func tokensBody(_ request: DemoRequest, state: DemoState) async -> String {
-        let caller = DemoTransport.scopes(for: request.identity, scenario: request.scenario)
-        let revoked = await state.members(of: revokedSet)
-        let deleted = await state.members(of: deletedSet)
-        let visible = tokens.filter { token in
+    /// The token list as `caller` reads it. The phone's own token carries
+    /// the scopes `/api/me` reports for the demo PAT in `scenario`, as a real
+    /// PAT does. A confined caller sees only the tokens whose allowlist is a
+    /// subset of its own (`handleTokens`).
+    public static func visibleTokens(caller: ScopeSet, scenario: DemoScenario, deleted: Set<String>) -> [Token] {
+        tokens.map { resolved($0, scenario: scenario) }.filter { token in
             guard !deleted.contains(token.id) else { return false }
             guard caller.isConfined else { return true }
             return !token.allowlist.isEmpty && Set(token.allowlist).isSubset(of: Set(caller.serverAllowlist))
         }
+    }
+
+    static func resolved(_ token: Token, scenario: DemoScenario) -> Token {
+        guard token.id == phoneTokenID else { return token }
+        let own = DemoTransport.scopes(for: .pat, scenario: scenario)
+        var copy = token
+        copy.scopes = own.scopes
+        copy.allowlist = own.serverAllowlist
+        return copy
+    }
+
+    static func tokensBody(_ request: DemoRequest, state: DemoState) async -> String {
+        let caller = DemoTransport.scopes(for: request.identity, scenario: request.scenario)
+        let revoked = await state.members(of: revokedSet)
+        let visible = visibleTokens(caller: caller, scenario: request.scenario, deleted: await state.members(of: deletedSet))
         return DemoJSON.array(visible.map { tokenJSON($0, revokedNow: revoked.contains($0.id) && $0.revoked == nil) }).text
     }
 
@@ -107,7 +121,7 @@ public enum AccessFixtures {
             return .error(status: 404, code: "not_found", message: "token not found")
         }
         if token.revoked == nil { await state.insert(token.id, into: revokedSet) }
-        return .json(tokenJSON(token, revokedNow: token.revoked == nil).text)
+        return .json(tokenJSON(resolved(token, scenario: request.scenario), revokedNow: token.revoked == nil).text)
     }
 
     static func deleteToken(_ request: DemoRequest, state: DemoState) async -> DemoResponse {
