@@ -69,7 +69,7 @@ struct NodeGeoResolveRequest: Encodable {
 }
 
 public extension LatticeClient {
-    // Nodes — actions
+    // Nodes: actions
     @discardableResult
     func setNodeDisabled(nodeID: String, disabled: Bool) async throws -> Data {
         try await performVoid(
