@@ -87,13 +87,43 @@ public struct DemoTransport: HTTPTransport {
         if let scope = route.requiredScope, !scopes.allows(scope) {
             return .error(status: 403, code: "forbidden", message: "missing scope \(scope)")
         }
-        if case .empty = scenario, request.method == "GET" {
-            return DemoResponse(status: route.status, body: route.emptyBody ?? "[]")
+        let servesEmpty = scenario == .empty && request.method == "GET"
+        if servesEmpty, let emptyBody = route.emptyBody {
+            return DemoResponse(status: route.status, body: emptyBody)
         }
-        if let respond = route.respond {
-            return await respond(request, state)
+        let response = if let respond = route.respond {
+            await respond(request, state)
+        } else {
+            DemoResponse(status: route.status, body: route.body)
         }
-        return DemoResponse(status: route.status, body: route.body)
+        if servesEmpty {
+            // Array routes such as approvals and tasks answer an envelope for
+            // count and filtered queries, so the empty answer keeps the shape
+            // the query produced instead of assuming a bare array.
+            return DemoResponse(status: response.status, body: Self.emptied(response.body))
+        }
+        return response
+    }
+
+    /// The same JSON shape with no items: every array emptied, `total` and
+    /// every number under `counts` set to zero.
+    static func emptied(_ body: String) -> String {
+        guard let object = try? JSONSerialization.jsonObject(with: Data(body.utf8)) else { return "[]" }
+        func empty(_ value: Any, key: String?) -> Any {
+            switch value {
+            case is [Any]: return [Any]()
+            case let number as NSNumber where key == "total" && CFGetTypeID(number) != CFBooleanGetTypeID(): return 0
+            case let dictionary as [String: Any] where key == "counts": return dictionary.mapValues { $0 is NSNumber ? 0 : $0 }
+            case let dictionary as [String: Any] where key == nil:
+                return Dictionary(uniqueKeysWithValues: dictionary.map { ($0.key, empty($0.value, key: $0.key)) })
+            default: return value
+            }
+        }
+        let emptiedObject = empty(object, key: nil)
+        guard let data = try? JSONSerialization.data(withJSONObject: emptiedObject, options: [.sortedKeys]),
+              let text = String(data: data, encoding: .utf8)
+        else { return "[]" }
+        return text
     }
 
     /// The most specific matching route.

@@ -236,6 +236,11 @@ private func checkScenarios() async throws {
 
     try expectEqual(try await demoClient(scenario: .empty).fetchNodes().count, 0, "Empty serves no nodes")
     try expectEqual(try await demoClient(scenario: .empty).listIncidents().incidents.count, 0, "Empty serves no incidents")
+    let empty = demoClient(scenario: .empty)
+    try expectEqual(try await empty.countApprovals().pending, 0, "Empty counts no pending approvals")
+    try expectEqual(try await empty.listApprovals(query: ApprovalQuery(status: "pending")).approvals.count, 0, "Empty answers a filtered approvals query with an empty envelope")
+    try expectEqual(try await empty.listTasks(query: TaskQuery(statuses: ["failed"])).tasks.count, 0, "Empty answers a filtered tasks query with an empty envelope")
+    try expectEqual(try await empty.listHumanPendingApprovals().count, 0, "Empty serves no pending approvals")
 
     do {
         _ = try await demoClient(scenario: .companionBehind(prefix: nil)).fetchApproval(id: "approval_d1001")

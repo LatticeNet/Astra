@@ -389,7 +389,11 @@ public extension LatticeClient {
             path: "/api/network/approvals",
             query: [URLQueryItem(name: "count", value: "1")]
         )
-        return try JSONDecoder().decode(ApprovalCountsEnvelope.self, from: data).counts
+        do {
+            return try JSONDecoder().decode(ApprovalCountsEnvelope.self, from: data).counts
+        } catch {
+            throw LatticeAPIError.invalidResponse
+        }
     }
 
     /// `GET /api/network/approvals?id=` → `{"approval":...}` with the plan body.
