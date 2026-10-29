@@ -114,6 +114,26 @@ private func checkTranscriptCleaner() throws {
     try expectEqual(lines("bell\u{07}\u{00}\u{7F}\r\n"), ["bell"], "other controls draw nothing")
     try expectEqual(lines("\(e)[" + String(repeating: "1;", count: 80) + "mtext\r\n"), ["text"], "an overlong sequence stops growing and is still dropped")
 
+    // Counts come from the remote shell: huge ones must neither trap nor grow a line.
+    let width = TranscriptCleaner.defaultMaxColumns
+    let hostile = [
+        "ab\(e)[9223372036854775807X\r\n",
+        "ab\(e)[9223372036854775807C\(e)[5Cz\r\n",
+        "x\(e)[200000000Cy\r\n",
+        "x\(e)[9223372036854775807G\(e)[9223372036854775807@\(e)[9223372036854775807Py\r\n",
+        "ab\(e)[9223372036854775807D\tc\r\n",
+    ]
+    for raw in hostile {
+        let cleaned = TranscriptCleaner.clean(raw)
+        try expect(cleaned.lines.allSatisfy { $0.text.unicodeScalars.count <= width }, "a hostile count stays inside \(width) columns")
+    }
+    try expectEqual(lines("ab\(e)[9223372036854775807X\r\n"), ["ab"], "erasing past the end erases nothing")
+    try expectEqual(lines("x\(e)[200000000Cy\r\n").first?.count, width, "a far move stops at the right margin")
+    try expectEqual(lines("abc\(e)[10X\r\n"), ["abc"], "erasing beyond the line from past its end")
+    let long = String(repeating: "0123456789", count: 110)
+    try expectEqual(lines(long + "\r\n"), [String(long.prefix(width)), String(long.dropFirst(width))], "a line past the margin wraps")
+    try expectEqual(lines(String(repeating: "\t", count: 400) + "t\r\n").first?.count, width, "tabs stop at the margin")
+
     // Alternate screen: a full-screen program is left out and marked.
     var htop = TranscriptCleaner.clean("$ htop\r\n\(e)[?1049h\(e)[H\(e)[2Jframe one\(e)[5;1Hframe two\r\nmore")
     try expectEqual(htop.lines.map(\.kind), [.text, .fullScreen], "the program's frames become one marker")

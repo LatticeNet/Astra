@@ -10,6 +10,12 @@ import Foundation
 /// out and marked with one `.fullScreen` line; `fullScreenActive` says the
 /// program is still running when the output ends.
 ///
+/// Lines are at most `maxColumns` wide: a cursor move stops at the right
+/// margin and a character written past it wraps to a new line, as a terminal
+/// with autowrap does. The bound matters because the counts in a cursor
+/// sequence come from the remote shell, so one escape sequence in a printed
+/// log must not overflow arithmetic or grow a line without limit.
+///
 /// The cleaner is incremental: `feed` keeps a sequence that was split across
 /// two output events, so a poll only feeds what is new.
 public struct TranscriptCleaner: Sendable, Equatable {
@@ -46,6 +52,8 @@ public struct TranscriptCleaner: Sendable, Equatable {
 
     /// Lines kept in memory; older ones are dropped and counted.
     public var maxLines: Int
+    /// The widest a line gets before it wraps.
+    public let maxColumns: Int
     /// Completed lines, oldest first.
     private var completed: [Line] = []
     private var current: [Unicode.Scalar] = []
@@ -62,13 +70,18 @@ public struct TranscriptCleaner: Sendable, Equatable {
     private static let tabWidth = 8
     private static let maxSequenceLength = 64
 
-    public init(maxLines: Int = 5_000) {
+    /// The server caps a session at 300 columns, so 1,024 keeps every real
+    /// line whole and still bounds a hostile one.
+    public static let defaultMaxColumns = 1_024
+
+    public init(maxLines: Int = 5_000, maxColumns: Int = TranscriptCleaner.defaultMaxColumns) {
         self.maxLines = max(1, maxLines)
+        self.maxColumns = max(Self.tabWidth, maxColumns)
     }
 
     /// A cleaner that has read `raw` in one piece.
-    public static func clean(_ raw: String, maxLines: Int = 5_000) -> TranscriptCleaner {
-        var cleaner = TranscriptCleaner(maxLines: maxLines)
+    public static func clean(_ raw: String, maxLines: Int = 5_000, maxColumns: Int = TranscriptCleaner.defaultMaxColumns) -> TranscriptCleaner {
+        var cleaner = TranscriptCleaner(maxLines: maxLines, maxColumns: maxColumns)
         cleaner.feed(raw)
         return cleaner
     }
@@ -199,7 +212,7 @@ public struct TranscriptCleaner: Sendable, Equatable {
         case 0x08:
             column = max(0, column - 1)
         case 0x09:
-            column = (column / Self.tabWidth + 1) * Self.tabWidth
+            column = min((column / Self.tabWidth + 1) * Self.tabWidth, lastColumn)
         default:
             // BEL, NUL, SO, SI and the rest draw nothing.
             return
@@ -213,7 +226,8 @@ public struct TranscriptCleaner: Sendable, Equatable {
             .split(separator: ";", omittingEmptySubsequences: false)
             .map { Int($0.filter(\.isNumber)) }
         let first = numbers.first.flatMap { $0 }
-        let count = max(1, first ?? 1)
+        // Clamped before any arithmetic: no move or edit reaches past the margin.
+        let count = min(max(1, first ?? 1), maxColumns)
 
         if isPrivate, final == "h" || final == "l" {
             let alternate = numbers.contains { [1049, 1047, 47].contains($0 ?? -1) }
@@ -227,11 +241,11 @@ public struct TranscriptCleaner: Sendable, Equatable {
         case "K":
             eraseInLine(first ?? 0)
         case "C", "a":
-            column += count
+            column = min(column + count, lastColumn)
         case "D":
             column = max(0, column - count)
         case "G", "`":
-            column = max(0, count - 1)
+            column = min(count - 1, lastColumn)
         case "P":
             if column < current.count {
                 current.removeSubrange(column..<min(current.count, column + count))
@@ -239,10 +253,13 @@ public struct TranscriptCleaner: Sendable, Equatable {
         case "@":
             if column <= current.count {
                 current.insert(contentsOf: Array(repeating: " ", count: count), at: column)
+                if current.count > maxColumns { current.removeSubrange(maxColumns...) }
             }
         case "X":
-            for index in column..<(column + count) where index < current.count {
-                current[index] = " "
+            if column < current.count {
+                for index in column..<min(column + count, current.count) {
+                    current[index] = " "
+                }
             }
         default:
             // Colors (m), cursor up, down and position, scroll regions,
@@ -253,8 +270,11 @@ public struct TranscriptCleaner: Sendable, Equatable {
 
     // MARK: Line editing
 
+    private var lastColumn: Int { maxColumns - 1 }
+
     private mutating func put(_ scalar: Unicode.Scalar) {
         guard !fullScreenActive else { return }
+        if column >= maxColumns { newline() }
         if column < current.count {
             current[column] = scalar
         } else {
