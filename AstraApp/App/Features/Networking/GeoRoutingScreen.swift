@@ -28,7 +28,7 @@ struct GeoRoutingScreen: View {
                 }
             }
         }
-        .onChange(of: store.geo.loadedAt) { offer(force: false) }
+        .onChange(of: store.geo.loadedAt, initial: true) { offer(force: false) }
         .onChange(of: query) { offer(force: true) }
         .polling(.standard, version: changes.version([.geo, .nodes])) {
             await nodes.refreshIfOlder(than: 60)

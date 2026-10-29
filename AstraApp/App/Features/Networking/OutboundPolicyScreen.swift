@@ -46,7 +46,7 @@ struct OutboundPolicyScreen: View {
         decorated
             .toolbar { toolbar }
             .onChange(of: store.netPolicies.loadedAt) { offer(force: false) }
-            .onChange(of: store.groupPolicies.loadedAt) { offer(force: false) }
+            .onChange(of: store.groupPolicies.loadedAt, initial: true) { offer(force: false) }
             .onChange(of: nodes.loadedAt) { offer(force: false) }
             .onChange(of: query) { offer(force: true) }
             .onChange(of: viewRaw) { offer(force: true) }

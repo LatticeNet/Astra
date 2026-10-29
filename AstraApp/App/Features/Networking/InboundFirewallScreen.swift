@@ -45,7 +45,7 @@ struct InboundFirewallScreen: View {
                 }
             }
         }
-        .onChange(of: store.guardNodes.loadedAt) { offer(force: false) }
+        .onChange(of: store.guardNodes.loadedAt, initial: true) { offer(force: false) }
         .onChange(of: query) { offer(force: true) }
         .polling(.standard, version: changes.version([.netguard, .nodes, .groups])) {
             await nodes.refreshIfOlder(than: 60)

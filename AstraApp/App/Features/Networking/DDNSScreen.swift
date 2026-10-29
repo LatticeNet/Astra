@@ -29,7 +29,7 @@ struct DDNSScreen: View {
                 }
             }
         }
-        .onChange(of: store.ddns.loadedAt) { offer(force: false) }
+        .onChange(of: store.ddns.loadedAt, initial: true) { offer(force: false) }
         .onChange(of: nodes.loadedAt) { offer(force: false) }
         .onChange(of: query) { offer(force: true) }
         .polling(.standard, version: changes.version([.ddns, .nodes])) {

@@ -28,7 +28,7 @@ struct TunnelsScreen: View {
                 }
             }
         }
-        .onChange(of: store.tunnels.loadedAt) { offer(force: false) }
+        .onChange(of: store.tunnels.loadedAt, initial: true) { offer(force: false) }
         .onChange(of: nodes.loadedAt) { offer(force: false) }
         .onChange(of: query) { offer(force: true) }
         .polling(.standard, version: changes.version([.tunnels, .nodes])) {

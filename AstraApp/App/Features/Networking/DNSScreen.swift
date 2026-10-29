@@ -28,7 +28,7 @@ struct DNSScreen: View {
                 }
             }
         }
-        .onChange(of: store.deployments.loadedAt) { offer(force: false) }
+        .onChange(of: store.deployments.loadedAt, initial: true) { offer(force: false) }
         .onChange(of: query) { offer(force: true) }
         .polling(.standard, version: changes.version([.dns, .nodes, .checks])) {
             await store.refreshDNS()
