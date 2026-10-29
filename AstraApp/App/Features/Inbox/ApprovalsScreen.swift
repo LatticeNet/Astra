@@ -103,6 +103,10 @@ struct ApprovalsScreen: View {
         }
         .refreshable { _ = await store.refresh(scope, force: true) }
         .onChange(of: store.range) { Task { await store.refreshHistory(force: true) } }
+        .onChange(of: InboxHistoryRequest(filter, resolveNode: resolveNode), initial: true) { _, request in
+            store.historyRequest = request
+            if scope == .history { Task { await store.refreshHistory() } }
+        }
         .onAppear(perform: consumeLink)
         .onChange(of: appState.approvalsView) { consumeLink() }
         .task { await nodeDirectory.refreshIfOlder(than: 60) }
@@ -155,6 +159,13 @@ struct ApprovalsScreen: View {
             }
         }
         .listStyle(.insetGrouped)
+    }
+
+    /// A `node:` value as a node id, when it is an id or names exactly one node.
+    private func resolveNode(_ token: String) -> String? {
+        if nodeDirectory.nodes[token] != nil { return token }
+        let matches = nodeDirectory.nodes.values.filter { $0.displayName.lowercased() == token }
+        return matches.count == 1 ? matches.first?.id : nil
     }
 
     private func name(_ approval: Approval) -> String {
@@ -214,7 +225,7 @@ struct ApprovalsScreen: View {
                     row(approval)
                 }
             } header: {
-                Text("Approved, waiting on nothing").accessibilityAddTraits(.isHeader)
+                Text("Approved, blocked").accessibilityAddTraits(.isHeader)
             } footer: {
                 VStack(alignment: .leading, spacing: Spacing.xs) {
                     Text("These plans will not apply by themselves. Open one to see why, and dismiss it inside Review where the server allows.")
@@ -227,7 +238,7 @@ struct ApprovalsScreen: View {
     @ViewBuilder
     private var historySections: some View {
         let loader = store.history
-        let rows = loader.items.filter { filter.matches($0, nodeName: name($0)) }
+        let rows = loader.items.filter { store.inRange($0) && filter.matches($0, nodeName: name($0)) }
         if loader.items.isEmpty, loader.isLoading || store.historyLoadedAt == nil, loader.error == nil {
             Section { LoadingRows(label: "Loading approval history") }
         } else if loader.items.isEmpty, let error = loader.error {
@@ -236,8 +247,13 @@ struct ApprovalsScreen: View {
             }
         } else {
             Section {
-                if rows.isEmpty {
+                if rows.isEmpty, loader.reachedEnd {
                     ContentUnavailableView(filter.isEmpty ? "No decided approvals in \(store.range.title)" : "No approvals match", systemImage: filter.isEmpty ? "clock" : "magnifyingglass")
+                } else if rows.isEmpty {
+                    // Later pages may still hold a match; the row below loads them.
+                    Text(loader.items.count == 1 ? "No match in the 1 approval loaded so far" : "No match in the \(loader.items.count) approvals loaded so far")
+                        .foregroundStyle(.secondary)
+                        .frame(minHeight: Spacing.minimumTarget, alignment: .leading)
                 }
                 ForEach(rows) { approval in
                     row(approval)
