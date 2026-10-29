@@ -124,10 +124,12 @@ struct SessionSignInForm: View {
                 Text(message).foregroundStyle(Color.statusFailText)
             }
         }
+        .announcing(message)
     }
 
     private func signIn() async {
         working = true
+        message = nil
         defer { working = false }
         do {
             switch try await session.beginPasswordSignIn(server: server, username: username, password: password) {
@@ -147,6 +149,7 @@ struct SessionSignInForm: View {
     private func submitCode() async {
         guard let challengeID, !working else { return }
         working = true
+        message = nil
         defer { working = false }
         do {
             let login = try await session.completeTOTP(server: server, challengeID: challengeID, code: usingRecovery ? "" : code, recoveryCode: usingRecovery ? recoveryCode : "")

@@ -116,3 +116,15 @@ struct ResourceView<Value: Sendable, Content: View>: View {
         }
     }
 }
+
+extension View {
+    /// Speaks an error or notice that appears after an action, since a footer
+    /// that changes off focus is not read on its own. Callers clear the
+    /// message when the action starts, so the same message again is spoken.
+    func announcing(_ message: String?) -> some View {
+        onChange(of: message) { _, message in
+            guard let message, !message.isEmpty else { return }
+            AccessibilityNotification.Announcement(message).post()
+        }
+    }
+}

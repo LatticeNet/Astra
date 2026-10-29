@@ -109,6 +109,7 @@ private struct ServerStepView: View {
             }
         }
         .navigationTitle("Server")
+        .announcing(message)
         .onAppear { if address.isEmpty { address = lastServer } }
         .toolbar {
             ToolbarItem(placement: .bottomBar) {
@@ -128,6 +129,7 @@ private struct ServerStepView: View {
 
     private func probe() async {
         working = true
+        message = nil
         defer { working = false }
         do {
             let (url, version) = try await session.probeServer(address)
@@ -194,6 +196,7 @@ private struct CredentialStepView: View {
             }
         }
         .navigationTitle("Credential")
+        .announcing(message)
         .toolbar {
             if method == .token {
                 ToolbarItem(placement: .bottomBar) {
@@ -268,6 +271,7 @@ private struct CredentialStepView: View {
 
     private func connect() async {
         working = true
+        message = nil
         defer { working = false }
         do {
             _ = try await session.connect(server: server, token: token)

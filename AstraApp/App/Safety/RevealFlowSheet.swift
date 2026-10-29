@@ -69,6 +69,7 @@ final class RevealFlowModel {
     func submitCode(session: SessionStore, stepUp: StepUpCoordinator) async {
         guard !isSubmitting, code.count == 6 else { return }
         isSubmitting = true
+        codeMessage = nil
         defer { isSubmitting = false }
         do {
             let grant = try await stepUp.submit(code: code)
@@ -206,10 +207,16 @@ private struct RevealFlowContent: View {
                     }
             } footer: {
                 VStack(alignment: .leading, spacing: Spacing.s) {
-                    if let wait = model.waitUntil, wait > .now {
-                        HStack(spacing: Spacing.xs) {
-                            Text("Wait for the next code:")
-                            Text(timerInterval: Date.now...wait, countsDown: true).monospacedDigit()
+                    if let wait = model.waitUntil {
+                        // Re-evaluated each second, so the line goes away at
+                        // the deadline instead of resting on 0:00.
+                        TimelineView(.periodic(from: .now, by: 1)) { context in
+                            if wait > context.date {
+                                HStack(spacing: Spacing.xs) {
+                                    Text("Wait for the next code:")
+                                    Text(timerInterval: context.date...wait, countsDown: true).monospacedDigit()
+                                }
+                            }
                         }
                     }
                     if let message = model.codeMessage {
@@ -219,6 +226,7 @@ private struct RevealFlowContent: View {
             }
         }
         .onAppear { codeFocused = true }
+        .announcing(model.codeMessage)
         .safeAreaInset(edge: .bottom) {
             Button {
                 Task { await model.submitCode(session: session, stepUp: stepUp) }
