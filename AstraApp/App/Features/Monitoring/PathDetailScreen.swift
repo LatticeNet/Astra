@@ -327,36 +327,60 @@ struct PathDetailScreen: View {
         }
     }
 
+    /// Beacon replans for either end of the path, as the console's
+    /// `replanStep` reads them: none is settled, a waiting approval is opened
+    /// rather than filed again, and only a difference with no plan files one.
     @ViewBuilder
     private func beaconSection(_ item: MonitoringPathItem) -> some View {
         let replans = (store.paths.value?.beaconReplans ?? []).filter { $0.nodeID == item.path.targetNode || $0.nodeID == item.path.source }
         if item.path.method == "beacon" || !replans.isEmpty {
-            let request = replans.first { $0.nodeID == item.path.targetNode }?.request ?? replans.first?.request
-                ?? BeaconPlanRequest(nodeID: item.path.targetNode.isEmpty ? item.path.source : item.path.targetNode, action: .change)
-            let missing = store.missing(ScopeRequirement("monitor:admin", "node:admin", "network:plan"))
             Section {
+                if replans.isEmpty {
+                    Label("Beacon sources match the applied plan.", systemImage: "checkmark.circle")
+                        .foregroundStyle(.secondary)
+                        .frame(minHeight: Spacing.minimumTarget)
+                }
                 ForEach(replans, id: \.nodeID) { replan in
-                    StatusRow(
-                        style: StatusStyle(word: PathReason.sentence(for: replan.reason), symbol: "dot.radiowaves.left.and.right", tone: .warn),
-                        title: "\(replan.name.isEmpty ? nodes.name(for: replan.nodeID) : replan.name) beacon",
-                        detail: replanDetail(replan)
-                    )
+                    replanRows(replan)
                 }
-                Button {
-                    Task { await runner.run(Self.replanIntent(request, nodeName: nodes.name(for: request.nodeID))) }
-                } label: {
-                    VStack(alignment: .leading, spacing: Spacing.xxs) {
-                        Label("Plan beacon replan", systemImage: "doc.badge.plus")
-                        if !missing.isEmpty {
-                            Text("Needs \(missing.joined(separator: ", "))").textRole(.footnote)
-                        }
-                    }
-                    .frame(minHeight: Spacing.minimumTarget)
-                }
-                .disabled(!missing.isEmpty)
             } header: {
                 Text("Beacon").accessibilityAddTraits(.isHeader)
             }
+        }
+    }
+
+    @ViewBuilder
+    private func replanRows(_ replan: PathBeaconReplan) -> some View {
+        let name = replan.name.isEmpty ? nodes.name(for: replan.nodeID) : replan.name
+        StatusRow(
+            style: StatusStyle(word: PathReason.sentence(for: replan.reason), symbol: "dot.radiowaves.left.and.right", tone: .warn),
+            title: "\(name) beacon",
+            detail: replanDetail(replan)
+        )
+        if !replan.pendingApprovalID.isEmpty {
+            Button {
+                router.present(.review(.single(replan.pendingApprovalID)))
+            } label: {
+                Label("Review the waiting plan", systemImage: "checkmark.seal")
+                    .frame(minHeight: Spacing.minimumTarget)
+            }
+            .accessibilityHint("A beacon plan for \(name) already waits for approval. Opens it instead of filing another.")
+        } else {
+            let scopes = Self.replanScopes(replan)
+            let missing = store.missing(ScopeRequirement(groups: scopes.map { [$0] }))
+            let request = replan.request ?? BeaconPlanRequest(nodeID: replan.nodeID, action: .change)
+            Button {
+                Task { await runner.run(Self.replanIntent(request, nodeName: name, scopes: scopes)) }
+            } label: {
+                VStack(alignment: .leading, spacing: Spacing.xxs) {
+                    Label("Plan beacon replan", systemImage: "doc.badge.plus")
+                    if !missing.isEmpty {
+                        Text("Needs \(missing.joined(separator: ", "))").textRole(.footnote)
+                    }
+                }
+                .frame(minHeight: Spacing.minimumTarget)
+            }
+            .disabled(!missing.isEmpty)
         }
     }
 
@@ -364,16 +388,24 @@ struct PathDetailScreen: View {
         var parts: [String] = []
         if !replan.added.isEmpty { parts.append("new sources: " + replan.added.map { nodes.name(for: $0) }.joined(separator: ", ")) }
         if !replan.removed.isEmpty { parts.append("gone: " + replan.removed.map { nodes.name(for: $0) }.joined(separator: ", ")) }
-        if !replan.pendingApprovalID.isEmpty { parts.append("a plan is already waiting") }
+        if !replan.pendingApprovalID.isEmpty { parts.append("a plan already waits for approval") }
         return parts.joined(separator: "; ")
     }
 
+    /// A node NetGuard manages (`firewall_pending`) also needs netguard:admin
+    /// to file (`beacon_plan.go`).
+    nonisolated static func replanScopes(_ replan: PathBeaconReplan) -> [String] {
+        var scopes = ["monitor:admin", "node:admin", "network:plan"]
+        if replan.reason == "firewall_pending" { scopes.append("netguard:admin") }
+        return scopes
+    }
+
     /// Plan beacon replan (P): files a change plan; the approval is the gate.
-    nonisolated static func replanIntent(_ request: BeaconPlanRequest, nodeName: String) -> WriteIntent {
+    nonisolated static func replanIntent(_ request: BeaconPlanRequest, nodeName: String, scopes: [String] = ["monitor:admin", "node:admin", "network:plan"]) -> WriteIntent {
         let node = ObjectRef(kind: "node", id: request.nodeID, name: nodeName)
         return WriteIntent(
             tier: .plan, verb: "Plan beacon replan for", object: node,
-            scopes: ["monitor:admin", "node:admin", "network:plan"],
+            scopes: scopes,
             consequence: "Files a beacon change plan for \(nodeName) so its sources match what probes it. Nothing changes until the plan is approved.",
             affected: [node],
             changes: [.approvals, .paths],
