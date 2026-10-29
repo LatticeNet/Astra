@@ -91,6 +91,8 @@ final class EvidenceLogModel {
 /// `before_seq`, a find bar over the loaded lines, and copy per line.
 struct LogExplorerScreen: View {
     var nodeID: String?
+    /// A source named by the route (a search result); the picker can still change it.
+    var sourceID: String?
 
     static let searchKey = "evidence.logs.search"
 
@@ -181,9 +183,11 @@ struct LogExplorerScreen: View {
 
     private var sources: [LogSource] { store.sources.value ?? [] }
 
-    /// The chosen source, else the freshest on the node asked about, else the freshest.
+    /// The chosen source, else the one the route named, else the freshest on
+    /// the node asked about, else the freshest.
     private var source: LogSource? {
-        EvidenceLogs.pickSource(sources, sourceID: chosenSourceID, nodeID: chosenSourceID == nil ? nodeID : nil, stats: store.sourceStats.value ?? [])
+        let named = chosenSourceID ?? sourceID
+        return EvidenceLogs.pickSource(sources, sourceID: named, nodeID: named == nil ? nodeID : nil, stats: store.sourceStats.value ?? [])
     }
 
     private func sourceTitle(_ source: LogSource) -> String {
@@ -245,7 +249,7 @@ struct LogExplorerScreen: View {
                     sourcePicker
                     if let source { sourceFacts(source) }
                 } footer: {
-                    if let nodeID, chosenSourceID == nil, source == nil {
+                    if let nodeID, chosenSourceID == nil, sourceID == nil, source == nil {
                         Text("\(nodes.name(for: nodeID)) has no raw log source. Choose another source above.")
                     }
                 }

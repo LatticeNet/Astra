@@ -8,14 +8,16 @@ enum EvidenceRoute: Hashable, Codable, Sendable {
     case connections(filter: String?)
     case connection(id: String)
     case logs(nodeID: String?)
+    /// One raw log source by id, for results that name a source rather than a node.
+    case logSource(id: String)
 }
 
 /// M10's demo intents and sheets for `-AstraPresent`:
 /// `confirm:evidence.start:<nodeName>:<minutes>` (5, 15 or 60) and
 /// `confirm:evidence.stop:<sessionID>`, and `evidencePush:<page>`, which
 /// pushes a page no link reaches (`overview`, `connections[:<filter>]`,
-/// `logs[:<nodeName>]`, `logsFind:<nodeName>:<text>` with the find bar open
-/// on `text`) onto the selected tab; pair it with `-AstraTab browse`.
+/// `logs[:<nodeName>]`, `logSource:<sourceID>`, `logsFind:<nodeName>:<text>`
+/// with the find bar open on `text`) onto the selected tab; pair it with `-AstraTab browse`.
 /// Ids are the demo's (`edge-tyo-1`, `trace_s1`).
 extension EvidenceRoute: DemoHooks {
     static func demoIntent(_ id: String, session: SessionStore) -> WriteIntent? {
@@ -45,6 +47,7 @@ extension EvidenceRoute: DemoHooks {
         case "overview": .overview
         case "connections": .connections(filter: detail)
         case "logs": .logs(nodeID: detail.flatMap { name in DemoWorld.nodes.first { $0.name == name }?.id })
+        case "logSource": detail.map { .logSource(id: $0) }
         case "logsFind":
             evidenceLogsFind(detail)
         default: nil

@@ -46,7 +46,7 @@ enum EvidenceSearch: SearchProvider {
         for source in snapshot.sources where matches([source.displayName, source.path, context.nodes.name(for: source.nodeID)]) {
             results.append(SearchResult(kind: "Raw logs", id: source.id, title: source.displayName,
                                         detail: context.nodes.name(for: source.nodeID),
-                                        target: .push(.evidence(.logs(nodeID: source.nodeID)))))
+                                        target: .push(.evidence(.logSource(id: source.id)))))
         }
         return results
     }
