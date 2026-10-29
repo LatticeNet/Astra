@@ -64,19 +64,7 @@ struct TaskRunScreen: View {
         return List {
             ActivityRefreshError(state: model.task, noun: "the run", retry: reload)
             Section {
-                ActivityStateHeader(style: StatusStyle.task(state), reason: headerReason(task, state: state))
-                if TasksModel.isLive(task.status) {
-                    Text(TasksModel.liveProgress(summary))
-                        .textRole(.metric)
-                        .contentTransition(.numericText())
-                        .frame(minHeight: Spacing.minimumTarget, alignment: .leading)
-                        .accessibilityLabel(TasksModel.liveProgress(summary))
-                } else if summary.reported > 0 {
-                    Text(summary.failed > 0 ? "\(summary.passed) of \(summary.total) passed, \(summary.failed) failed" : "\(summary.passed) of \(summary.total) passed")
-                        .textRole(.metric)
-                        .foregroundStyle(summary.failed > 0 ? Color.statusFailText : .secondary)
-                        .frame(minHeight: Spacing.minimumTarget, alignment: .leading)
-                }
+                ActivityStateHeader(style: StatusStyle.task(state), reason: headerReason(task, state: state, summary: summary))
             }
             nodesSection(task, rows: rows)
             Section {
@@ -109,8 +97,14 @@ struct TaskRunScreen: View {
         .refreshable { await model.load(id: id, hint: model.task.value, session: session) }
     }
 
-    private func headerReason(_ task: LatticeTask, state: TaskRunState) -> String? {
-        switch state {
+    /// The one line under the state: how far a live run got (a count, never
+    /// a spinner), how a settled one ended, or why it stopped.
+    private func headerReason(_ task: LatticeTask, state: TaskRunState, summary: TasksRunSummary) -> String? {
+        if state == .leased || state == .queued { return TasksModel.liveProgress(summary) }
+        if state == .finished || state == .failed, summary.reported > 0 {
+            return summary.failed > 0 ? "\(summary.passed) of \(summary.total) passed, \(summary.failed) failed" : "\(summary.passed) of \(summary.total) passed"
+        }
+        return switch state {
         case .stalled: TasksModel.stalledText(task.leaseProgress())
         case .expired: "No node picked it up before its queue deadline"
         case .pending: "Not yet sent to nodes"

@@ -14,6 +14,7 @@ struct TasksScreen: View {
     @Environment(ActionRunner.self) private var runner
     @Environment(Router.self) private var router
     @Environment(\.accessibilityVoiceOverEnabled) private var voiceOver
+    @Environment(\.dynamicTypeSize) private var typeSize
 
     @SceneStorage(TasksScreen.queryKey) private var query = ""
     @SceneStorage(TasksScreen.rangeKey) private var rangeTitle = TimeRangeSelection.all.title
@@ -172,8 +173,11 @@ struct TasksScreen: View {
                 VStack(alignment: .leading, spacing: Spacing.xs) {
                     Text(counts.failed24h == 0 ? "No failed runs in 24 hours" : (counts.failed24h == 1 ? "1 failed run in 24 hours" : "\(counts.failed24h) failed runs in 24 hours"))
                         .foregroundStyle(counts.failed24h > 0 ? Color.statusFailText : .primary)
-                    Text(([counts.finished24h == 1 ? "1 finished" : "\(counts.finished24h) finished"] + live).joined(separator: ", "))
-                        .textRole(.rowDetail)
+                    // At accessibility sizes the runs below matter more than the tally.
+                    if !typeSize.isAccessibilitySize {
+                        Text(([counts.finished24h == 1 ? "1 finished" : "\(counts.finished24h) finished"] + live).joined(separator: ", "))
+                            .textRole(.rowDetail)
+                    }
                 }
                 .frame(minHeight: Spacing.minimumTarget, alignment: .leading)
                 .accessibilityElement(children: .combine)
