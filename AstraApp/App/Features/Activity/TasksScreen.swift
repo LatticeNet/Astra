@@ -206,23 +206,33 @@ struct TasksScreen: View {
         if let counts = store.counts.value, !isFiltered {
             let live = [(counts.running, "running"), (counts.stalled, "stalled"), (counts.queued, "queued"), (counts.pending, "pending")]
                 .filter { $0.0 > 0 }.map { "\($0.0) \($0.1)" }
+            let failed = counts.failed24h == 0 ? "No failed runs in 24 hours" : (counts.failed24h == 1 ? "1 failed run in 24 hours" : "\(counts.failed24h) failed runs in 24 hours")
             Section {
-                VStack(alignment: .leading, spacing: Spacing.xs) {
-                    Text(counts.failed24h == 0 ? "No failed runs in 24 hours" : (counts.failed24h == 1 ? "1 failed run in 24 hours" : "\(counts.failed24h) failed runs in 24 hours"))
-                        .foregroundStyle(counts.failed24h > 0 ? Color.statusFailText : .primary)
-                        .onTapGesture { if counts.failed24h > 0, typeSize.isAccessibilitySize { query = "status:failed" } }
-                        .accessibilityAddTraits(counts.failed24h > 0 && typeSize.isAccessibilitySize ? .isButton : [])
-                        .accessibilityHint(counts.failed24h > 0 && typeSize.isAccessibilitySize ? "Shows the failed runs" : "")
-                    // At accessibility sizes the runs below matter more than the tally.
-                    if !typeSize.isAccessibilitySize {
-                        Text(([counts.finished24h == 1 ? "1 finished" : "\(counts.finished24h) finished"] + live).joined(separator: ", "))
-                            .textRole(.rowDetail)
+                if typeSize.isAccessibilitySize, counts.failed24h > 0 {
+                    // At accessibility sizes the runs below matter more than the
+                    // tally, so the tally is the one control: a real button.
+                    Button { query = "status:failed" } label: {
+                        HStack {
+                            Text(failed).foregroundStyle(Color.statusFailText)
+                            Spacer(minLength: Spacing.s)
+                            Image(systemName: "chevron.right").foregroundStyle(.tertiary).accessibilityHidden(true)
+                        }
+                        .frame(minHeight: Spacing.minimumTarget, alignment: .leading)
                     }
-                }
-                .frame(minHeight: Spacing.minimumTarget, alignment: .leading)
-                .accessibilityElement(children: .combine)
-                if counts.failed24h > 0, !typeSize.isAccessibilitySize {
-                    Button("Show failed runs") { query = "status:failed" }
+                    .accessibilityHint("Shows the failed runs")
+                } else {
+                    VStack(alignment: .leading, spacing: Spacing.xs) {
+                        Text(failed).foregroundStyle(counts.failed24h > 0 ? Color.statusFailText : .primary)
+                        if !typeSize.isAccessibilitySize {
+                            Text(([counts.finished24h == 1 ? "1 finished" : "\(counts.finished24h) finished"] + live).joined(separator: ", "))
+                                .textRole(.rowDetail)
+                        }
+                    }
+                    .frame(minHeight: Spacing.minimumTarget, alignment: .leading)
+                    .accessibilityElement(children: .combine)
+                    if counts.failed24h > 0 {
+                        Button("Show failed runs") { query = "status:failed" }
+                    }
                 }
             }
         }

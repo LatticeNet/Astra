@@ -137,7 +137,11 @@ struct AuditScreen: View {
                 ContentUnavailableView {
                     Label(isFiltered ? "No events match" : "No changes in the last day", systemImage: "list.bullet.rectangle")
                 } description: {
-                    Text(isFiltered ? "Nothing matched in this range. Widen the range, or drop a token." : "Nothing was changed in the last 24 hours. All shows every event, including node flips.")
+                    Text(isFiltered ? "Nothing matched in this range. Widen the range, or drop a token." : "Nothing was changed in the last 24 hours. Node reachability flips and observe events are left out of Changes.")
+                } actions: {
+                    if layer == .changes {
+                        Button("Show all events") { layer = .all }
+                    }
                 }
             }
             ForEach(days, id: \.day) { group in
