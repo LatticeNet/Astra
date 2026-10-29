@@ -14,6 +14,10 @@ struct MonitoringDestination: View {
         case .definition(let id): DefinitionDetailScreen(id: id)
         case .incident(let id): IncidentDetailScreen(id: id)
         case .maintenanceWindow(let id): MaintenanceWindowScreen(id: id)
+        case .paths(let query):
+            MonitoringPathsList(initialQuery: query)
+                .navigationTitle("Paths")
+                .navigationBarTitleDisplayMode(.inline)
         }
     }
 }
