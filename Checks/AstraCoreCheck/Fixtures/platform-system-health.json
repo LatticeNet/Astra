@@ -1,0 +1,16 @@
+{
+  "observed_at": "2026-10-28T12:00:00Z", "range": "24h", "from": "2026-10-27T12:00:00Z", "to": "2026-10-28T12:00:00Z",
+  "process": {"started_at": "2026-10-22T12:00:00Z", "uptime_seconds": 518400, "version": "alpha-0.4.2a151", "commit": "d0452d6", "go_version": "go1.26.4",
+              "cpus": 4, "heap_bytes": 96468992, "go_total_bytes": 158334976, "goroutines": 412, "gc_pause_max_seconds": 0.0042},
+  "host": {"data_dir": "/var/lib/lattice", "mem_total_bytes": 8000, "mem_available_bytes": 2000},
+  "files": [{"label": "logs", "path": "/var/lib/lattice/logs", "spark": {"step_seconds": 1800, "t": [1, 2], "n": [3, 4]}}],
+  "store": [],
+  "http": [{"name": "/api/agent", "calls": 1000, "errors": 4, "per_minute": 0.69, "p50_seconds": 0.012, "p95_seconds": 0.041, "max_seconds": 1.8, "avg_seconds": 0.014,
+            "spark": {"step_seconds": 1800, "t": [1, 2, 3], "n": [10, 0, 5], "e": [0, 0, 1], "p95": [0.04, null, 0.05]}}],
+  "plugins": [{"plugin": "latticenet.sub-store", "name": "subscription.render", "calls": 10, "errors": 0, "per_minute": 0, "p50_seconds": 0.2, "p95_seconds": 1.4, "max_seconds": 6.1, "avg_seconds": 0.3, "spark": {"step_seconds": 1800, "t": [], "n": []}}],
+  "plugin_processes": [{"plugin": "latticenet.sub-store", "processes": 12, "cpu_seconds": 3.5, "peak_rss_bytes": 186646528}],
+  "metrics_store": {"path": "/var/lib/lattice/metrics.db", "size_bytes": 2048, "series": 10, "max_series": 4096, "max_series_per_owner": 256, "owners": 3,
+                    "refused_series": [], "refused_series_more": false, "refused_samples": 0, "late_samples": 2, "slots_per_series": 2880, "tiers": [],
+                    "last_write": {}, "last_write_error": "disk full", "sample_seconds": 10},
+  "probe": {"available": false, "reason": "the probe socket /run/lattice-probe.sock does not exist"}
+}

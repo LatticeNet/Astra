@@ -131,3 +131,17 @@ Agents cannot tap, swipe or rotate a simulator, and they cannot run VoiceOver, V
 - Agent Updates: with a Triage token the screen reads "Hidden: this token lacks node:admin"; when the release host cannot be read the Nodes view says so in words and every standing reads unknown instead of current.
 - Release: each artifact row copies its digest from the whole row; Release notes opens the release page in the browser.
 - Voice Control "Show names": the Filter, More, Plan all behind and picker controls all have names.
+
+## M8 Platform
+
+- Plugins: the headings rotor jumps between Failed, Waiting to activate, Running (or Active without plugin:admin), and Disabled; each row reads its name, health word, version, publisher and risk as one element. With an Operator token the footer says runtime health needs plugin:admin and no plugin reads "running"; the context menu shows Activate or Disable disabled with "Needs plugin:admin".
+- Plugin detail: Disable (or Activate) runs a ConfirmSheet naming the plugin and what stops, then Face ID; cancelling Face ID sends nothing; afterwards the Health section shows the new runtime state. Pages list table and detail pages as rows that open here and every other kind as an "Open on web" row with its console path.
+- Extensions: pages are grouped by plugin with the plugin as a heading; the Certificates page reads each row as one element, the alert hook is masked and never spoken in full, and "Recheck now" opens the console page instead of running.
+- Extension page: on DNS probe Resolvers the failed runtime shows "Could not load Resolvers" with Retry, never an empty table.
+- Publishing: the Overview, Routes, Tokens and Buckets control stays pinned under the bar, becomes a menu at AX5 and moves into the navigation bar in landscape; the Filter menu's origin shows as a search token and in the subtitle, and removing the token shows all origins again.
+- Publishing routes: swiping a KV or static route offers Delete only with kv:admin or static:admin, listed once in the actions rotor; Delete runs a ConfirmSheet whose red button names the route, then Face ID, and the row leaves only after the server confirms. Without proxy:admin the Shares section reads "Hidden: this token lacks proxy:admin".
+- Publishing tokens: with kv:admin, swiping an active token offers Revoke (never on a revoked one); without it each kind reads "Hidden: this token lacks kv:admin" (or static:admin).
+- Share detail: Reveal share URL without a signed-in session offers "Sign in for reveals"; with one it asks for the authenticator code, shows the URL masked until Show, offers Copy and Share, and clears it after 60 seconds or when the app goes to the background. Rotate asks for Face ID; Refresh is a dialog naming the share; Delete closes the screen only after the server confirms. A proxy user's share says refresh is not needed.
+- Store: the reserved vpn_users bucket cannot be opened; opening an entry shows Load value, the value appears only after the tap, Find in value opens the system find bar, and leaving the screen or backgrounding the app clears it.
+- System: with a token that lacks * the screen reads "Hidden: this token lacks * (a full administrator)" and offers no range menu; with a full administrator the Range menu reloads the charts, each chart has a text summary above it, Audio Graphs are available from the rotor, and lines break where nothing was recorded.
+- Voice Control "Show names": the Filter, More, Range and picker controls all have names.

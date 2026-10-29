@@ -1,0 +1,13 @@
+[
+  {
+    "id": "share_a", "slug": "family", "source": {"kind": "plugin", "plugin_id": "latticenet.sub-store", "subscription_id": "sub_1", "identity_id": "vid_1"},
+    "enabled": true, "created_at": "2026-04-01T00:00:00Z", "updated_at": "2026-10-01T00:00:00Z", "rotated_at": "2026-10-01T00:00:00Z",
+    "expires_at": "2026-11-06T00:00:00Z", "update_interval_hours": 6, "fleet_feed_now": "fleet",
+    "render_budget": {"remaining": 0, "burst": 60, "per_hour": 30, "exhausted": true, "refused": 14, "last_refused_at": "2026-10-28T11:48:00Z"}
+  },
+  {
+    "id": "share_b", "slug": "travel", "source": {"kind": "core.proxy_user", "proxy_user_id": "pu_alice"}, "default_format": "clash",
+    "enabled": false, "created_at": "2026-04-01T00:00:00Z", "updated_at": "2026-10-01T00:00:00Z", "update_interval_hours": 2,
+    "publishes_fleet_credentials": true
+  }
+]

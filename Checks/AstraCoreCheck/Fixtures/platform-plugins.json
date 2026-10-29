@@ -1,0 +1,30 @@
+[
+  {
+    "id": "latticenet.netguard",
+    "name": "NetGuard (nftables security groups)",
+    "type": "system",
+    "version": "0.2.0-alpha.9",
+    "publisher": "latticenet",
+    "capabilities": ["node:read", "network:plan", "network:apply", "task:run"],
+    "status": "active",
+    "active": true,
+    "ui": {
+      "nav": [{"section": "extensions", "title": "Inbound firewall", "route": "firewall", "icon": "Shield", "scopes": ["netguard:read"]}],
+      "views": [{"route": "firewall", "title": "Inbound firewall", "kind": "sandbox"}, {"route": "audit", "title": "Audit", "kind": "table", "source": {"interface": "latticenet.netguard/firewall", "method": "audit"}}]
+    },
+    "interfaces": [
+      {"service": "latticenet.netguard/firewall", "methods": [{"name": "overview", "effect": "read", "scopes": ["netguard:read"]}, {"name": "audit", "effect": "read"}], "scopes": ["netguard:admin"], "backing": "core"}
+    ],
+    "ui_runtime": {"mode": "sandbox", "entry_url": "/api/plugins/assets/latticenet.netguard/3f9a/index.html", "bridge_version": "1", "asset_digest": "3f9a"},
+    "call_timeouts_ms": {"latticenet.netguard/firewall": {"overview": 30000}},
+    "future_field": {"ignored": true}
+  },
+  {
+    "id": "examplelabs.legacy",
+    "name": "",
+    "type": "wasm",
+    "capabilities": ["kv:read"],
+    "active": false,
+    "interfaces": [{"service": "examplelabs.legacy/rows", "methods": ["list", "get"], "scopes": ["kv:read"]}]
+  }
+]

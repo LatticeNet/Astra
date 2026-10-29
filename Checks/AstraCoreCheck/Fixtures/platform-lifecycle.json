@@ -1,0 +1,13 @@
+[
+  {
+    "id": "latticenet.netguard", "name": "NetGuard", "type": "system", "version": "0.1.0", "publisher": "latticenet",
+    "capabilities": ["node:read"], "artifact_sha256": "3f9a0c21", "available": true, "status": "active",
+    "runtime": {"plugin_id": "latticenet.netguard", "state": "armed", "runner": "core", "started_at": "2026-09-02T00:00:00.123456789Z", "updated_at": "2026-09-02T00:00:01Z"},
+    "verified_at": "2026-09-01T00:00:00Z", "installed_at": "2026-09-01T12:00:00Z", "activated_at": "2026-09-02T00:00:00Z",
+    "created_at": "2026-09-01T00:00:00Z", "updated_at": "2026-09-02T00:00:00Z"
+  },
+  {
+    "id": "examplelabs.gone", "name": "Gone", "type": "wasm", "capabilities": [], "available": false, "status": "active",
+    "created_at": "0001-01-01T00:00:00Z", "updated_at": "0001-01-01T00:00:00Z"
+  }
+]
