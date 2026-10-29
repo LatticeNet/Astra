@@ -454,7 +454,7 @@ struct TerminalTranscriptScreen: View {
             }
             TerminalOpensInRow(title: "Audit trail", symbol: "list.bullet.rectangle", tab: .activity,
                                hint: "Shows terminal opens, attaches and closes on \(nodeName)") {
-                router.select(tab: .activity, scope: "audit", query: auditQuery(record))
+                router.select(tab: .activity, scope: "audit", query: auditQuery(record), auditLayer: .all)
             }
             WebLinkRow(path: .terminalSession(id: record.id))
         } header: {

@@ -106,7 +106,7 @@ struct TerminalSessionsScreen: View {
             Section {
                 TerminalOpensInRow(title: "Terminal audit trail", symbol: "list.bullet.rectangle", tab: .activity,
                                    hint: "Shows terminal actions in the audit log") {
-                    router.select(tab: .activity, scope: "audit", query: "action:terminal.*")
+                    router.select(tab: .activity, scope: "audit", query: "action:terminal.*", auditLayer: .all)
                 }
                 WebLinkRow(title: "New session on web", path: .terminalNewSession(nodeID: nodeFilter))
             } footer: {
@@ -188,7 +188,7 @@ struct TerminalSessionsScreen: View {
                 Button("New session on web", systemImage: "safari") { router.openOnWeb(.terminalNewSession(nodeID: nodeFilter)) }
                     .accessibilityHint("Opens the console's Terminal page in your browser")
                 Button("Terminal audit trail", systemImage: "list.bullet.rectangle") {
-                    router.select(tab: .activity, scope: "audit", query: "action:terminal.*")
+                    router.select(tab: .activity, scope: "audit", query: "action:terminal.*", auditLayer: .all)
                 }
             } label: {
                 Label("More", systemImage: "ellipsis")
