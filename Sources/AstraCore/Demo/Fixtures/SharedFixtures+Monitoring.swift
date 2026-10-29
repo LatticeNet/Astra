@@ -325,6 +325,9 @@ extension SharedFixtures {
         var p50: Double?
         var loss: Double?
         var degraded = false
+        /// The check definition behind the cell; nil for a cell of the path
+        /// set that is not migrated yet, which the server marks managed.
+        var definition: String? = "def_fleet_mesh"
     }
 
     private static let pathCells: [DemoPath] = [
@@ -342,6 +345,7 @@ extension SharedFixtures {
         DemoPath(source: "edge-syd-1", target: "core-sjc-1", method: "tcp", state: "unknown", reason: "path_paused"),
         DemoPath(source: "edge-ams-2", target: "relay-hkg-1", method: "icmp", state: "unknown", reason: "packet_budget"),
         DemoPath(source: nil, target: "core-lon-1", method: "http", state: "up", p50: 21, loss: 0),
+        DemoPath(source: "edge-ams-1", target: "relay-fra-1", method: "tcp", state: "up", p50: 9, loss: 0, definition: nil),
     ]
 
     static func pathsBody(window: String, quiet: Bool) -> String {
@@ -413,8 +417,8 @@ extension SharedFixtures {
             "target_node": .string(target.id),
             "target": .string(address),
             "monitor_id": .string(monitor),
-            "managed": false,
-            "check_definition_id": "def_fleet_mesh",
+            "managed": .bool(cell.definition == nil),
+            "check_definition_id": cell.definition.map(DemoJSON.string),
             "method": .string(cell.method),
             "state": .string(cell.state),
             "reason": reason,

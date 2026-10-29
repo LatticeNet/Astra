@@ -162,6 +162,7 @@ private func checkSharedFixturesDecode() async throws {
     let paths = try await client.fetchPaths(window: .oneHour)
     try expect(paths.judgesDegraded, "the demo server judges degraded")
     try expectEqual(paths.beaconReplans.first?.request?.action, .change, "beacon replans decode with their request")
+    try expect(paths.paths.contains { $0.managed && $0.checkDefinitionID.isEmpty }, "one cell belongs to the unmigrated path set")
     let measures = Set(paths.paths.map { $0.displayState(judgesDegraded: true).measure })
     try expectEqual(measures, [.measured, .skipped, .paused], "paths cover measured, skipped and paused")
 
