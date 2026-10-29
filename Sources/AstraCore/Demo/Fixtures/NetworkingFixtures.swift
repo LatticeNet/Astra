@@ -752,7 +752,11 @@ public enum NetworkingFixtures {
                     return .error(status: 404, code: "not_found", message: "tunnel profile not found")
                 }
                 let approval = await file(plugin: "cftunnel", action: "apply-config", node: node.name, plan: tunnelConfig(tunnel), state: state)
-                return .json(SharedFixtures.approvalJSON(approval, includePlan: true).text)
+                // handleTunnelPlan writes a raw model.Approval, which has no plan_sha256.
+                guard case .object(let pairs) = SharedFixtures.approvalJSON(approval, includePlan: true) else {
+                    return .error(status: 500, code: "internal", message: "approval did not encode")
+                }
+                return .json(DemoJSON.object(pairs.filter { $0.0 != "plan_sha256" }).text)
             }.requiring("tunnel:admin"),
             DemoRoute(method: "POST", pathPattern: "/api/tunnels/delete") { request, state in
                 guard let tunnelID = request.bodyStrings["id"] else { return .error(status: 400, code: "bad_request", message: "id is required") }

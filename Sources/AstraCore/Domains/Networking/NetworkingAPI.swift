@@ -224,10 +224,14 @@ public extension LatticeClient {
         try await perform([TunnelProfile].self, path: "/api/tunnels")
     }
 
-    /// Files the tunnel's plan; the answer is a bare approval.
+    /// Files the tunnel's plan. The server answers with a raw model.Approval,
+    /// which carries no plan_sha256 (only approvalView does), so only the id
+    /// is required: Review reloads the approval by id and hashes it there.
     func networkingPlanTunnel(id: String) async throws -> Approval {
         let data = try await performData(path: "/api/tunnels/plan", method: "POST", body: IDBody(id: id))
-        return try ApprovalReviewDecoder.decode(data)
+        let approval = try JSONDecoder().decode(Approval.self, from: data)
+        if approval.id.isEmpty { throw LatticeAPIError.invalidResponse }
+        return approval
     }
 
     func networkingDeleteTunnel(id: String) async throws {

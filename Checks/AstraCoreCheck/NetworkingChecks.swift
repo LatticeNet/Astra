@@ -265,6 +265,8 @@ private func netRequest(_ path: String, answer: String, _ call: (LatticeClient) 
 
 private func checkNetworkingRequestBodies() async throws {
     let approval = #"{"id":"approval_x","node_id":"n-1","plugin":"nftpolicy","action":"apply-ruleset","plan":"p","plan_sha256":"148de9c5a7a44d19e56cd9ae1a554bf67847afb0c58f6e12fa29ac7ddfca9940","status":"pending"}"#
+    // handleTunnelPlan answers with a raw model.Approval: no plan_sha256.
+    let rawApproval = #"{"id":"approval_t","node_id":"n-1","plugin":"cftunnel","action":"apply-config","plan":"p","status":"pending"}"#
     let ok = #"{"ok":true}"#
     let cases: [(String, String, String, (LatticeClient) async throws -> Void)] = [
         ("/api/netpolicy/plan", approval, #"{"node_id":"n-1"}"#, { _ = try await $0.networkingPlanNodePolicy(nodeID: "n-1") }),
@@ -279,7 +281,7 @@ private func checkNetworkingRequestBodies() async throws {
         ("/api/ddns/delete", ok, #"{"id":"d1"}"#, { try await $0.networkingDeleteDDNS(id: "d1") }),
         ("/api/geo-routing/plan", #"{"geo_routing_id":"g1","hostname":"h","strategy":"geoip","config":"c","sha256":"s"}"#, #"{"id":"g1"}"#, { _ = try await $0.networkingPreviewGeo(id: "g1") }),
         ("/api/geo-routing/delete", ok, #"{"id":"g1"}"#, { try await $0.networkingDeleteGeo(id: "g1") }),
-        ("/api/tunnels/plan", approval, #"{"id":"t1"}"#, { _ = try await $0.networkingPlanTunnel(id: "t1") }),
+        ("/api/tunnels/plan", rawApproval, #"{"id":"t1"}"#, { _ = try await $0.networkingPlanTunnel(id: "t1") }),
         ("/api/tunnels/delete", ok, #"{"id":"t1"}"#, { try await $0.networkingDeleteTunnel(id: "t1") }),
     ]
     for (path, answer, expected, call) in cases {
