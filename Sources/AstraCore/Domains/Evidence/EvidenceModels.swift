@@ -342,6 +342,15 @@ public struct EvidenceRecordKey: Hashable, Sendable, Decodable {
     }
 
     public var startedAt: Date? { AstraDateParser.date(from: startedAtText) }
+
+    /// The same record, allowing the start time to be spelled differently
+    /// ("Z" against "+00:00") as long as it is the same instant.
+    public func names(_ other: EvidenceRecordKey) -> Bool {
+        guard nodeID == other.nodeID, coreGeneration == other.coreGeneration, logID == other.logID else { return false }
+        if startedAtText == other.startedAtText { return true }
+        guard let mine = startedAt, let theirs = other.startedAt else { return false }
+        return abs(mine.timeIntervalSince(theirs)) < 0.001
+    }
 }
 
 public struct EvidenceConnRecord: Identifiable, Decodable, Equatable, Hashable, Sendable {
@@ -534,7 +543,7 @@ public struct EvidenceHopsResponse: Decodable, Sendable {
 
     /// The record the key names, when the server returned it.
     public func record(for key: EvidenceRecordKey) -> EvidenceConnRecord? {
-        records.first { $0.key == key } ?? candidates.first { $0.key == key }
+        records.first { $0.key.names(key) } ?? candidates.first { $0.key.names(key) }
     }
 }
 

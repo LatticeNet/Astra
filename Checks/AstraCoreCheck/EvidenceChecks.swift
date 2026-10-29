@@ -291,6 +291,9 @@ private func checkEvidenceConnectionRows() throws {
 
     let key = record.key
     try expectEqual(EvidenceRecordKey.parse(key.string), key, "the key round-trips with the colons in its time")
+    let respelled = EvidenceRecordKey(nodeID: "n-a", coreGeneration: 7, logID: 1, startedAtText: "2026-10-28T11:58:01+00:00")
+    try expect(respelled.names(EvidenceRecordKey(nodeID: "n-a", coreGeneration: 7, logID: 1, startedAtText: "2026-10-28T11:58:01Z")), "the same instant spelled differently names the same record")
+    try expect(!respelled.names(EvidenceRecordKey(nodeID: "n-a", coreGeneration: 7, logID: 1, startedAtText: "2026-10-28T11:58:02Z")), "another instant is another record")
     try expect(EvidenceRecordKey.parse("n-a:x:1:2026") == nil && EvidenceRecordKey.parse("n-a:1:2") == nil, "malformed keys")
     let link = LatticeDeepLink.connection(id: key.string)
     try expectEqual(LatticeDeepLink(url: try expectUnwrapped(link.customURL, "link URL")), link, "the app link round-trips the key")
