@@ -121,6 +121,8 @@ struct OutcomeBannerView: View {
                 .accessibilityLabel("Dismiss")
             }
         }
+        // The vertical layout at accessibility sizes would otherwise shrink to the text.
+        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, Spacing.l)
         .padding(.vertical, Spacing.s)
         .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 14, style: .continuous))

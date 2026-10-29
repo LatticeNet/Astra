@@ -3,7 +3,6 @@ import SwiftUI
 /// Plugin trust findings (F-17), pushed from the Inbox trust row.
 struct TrustDetailScreen: View {
     @Environment(SessionStore.self) private var session
-    @Environment(Router.self) private var router
     @State private var state: ResourceState<PluginTrust> = .idle
 
     var body: some View {
@@ -29,7 +28,7 @@ struct TrustDetailScreen: View {
                     }
                 }
                 Section {
-                    Button("Plugins") { router.push(.platform(.plugins)) }
+                    NavigationLink("Plugins", value: AppRoute.platform(.plugins))
                     WebLinkRow(path: LatticeConsolePath(path: "/platform/plugins"))
                 } footer: {
                     FreshnessFooter(state: state, interval: 60)

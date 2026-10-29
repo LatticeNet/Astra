@@ -114,6 +114,9 @@ struct ApprovalRow: View {
     var nodeName: String?
 
     @Environment(\.locale) private var locale
+    @Environment(\.dynamicTypeSize) private var typeSize
+    /// StatusRow's glyph column, so the seal lines up with the title at every size.
+    @ScaledMetric(relativeTo: .title3) private var glyphWidth: CGFloat = 28
 
     var body: some View {
         let style = StatusStyle.approval(approval.displayState)
@@ -127,7 +130,8 @@ struct ApprovalRow: View {
             )
             if !approval.id.isEmpty, !planHash.isEmpty {
                 SealLabel(sha256: planHash, state: approval.hasPlanBody ? .unverified : .noBody)
-                    .padding(.leading, 40)
+                    // At accessibility sizes StatusRow drops the glyph column.
+                    .padding(.leading, typeSize.isAccessibilitySize ? 0 : glyphWidth + Spacing.m)
             }
         }
         .accessibilityElement(children: .combine)

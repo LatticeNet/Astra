@@ -190,7 +190,10 @@ private struct TabRootToolbar: ViewModifier {
                         }
                     }
                     .accessibilityLabel("Demo mode, data is invented")
+                    .accessibilityInputLabels(["Demo"])
                 }
+                // Settings sits alone in its glass group (2.1).
+                ToolbarSpacer(.fixed, placement: .topBarTrailing)
             }
             ToolbarItem(placement: .topBarTrailing) {
                 Button {

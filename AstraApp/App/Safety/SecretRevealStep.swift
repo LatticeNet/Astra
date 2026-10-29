@@ -45,7 +45,8 @@ struct SecretRevealStep: View {
                     if shareable && secret.kind == .shareableLink {
                         ShareLink(item: value) { Label("Share", systemImage: "square.and.arrow.up") }
                     }
-                    if secret.kind == .consoleLink, let url = URL(string: value) {
+                    // SFSafariViewController raises for any scheme but http and https.
+                    if secret.kind == .consoleLink, let url = URL(string: value), ["https", "http"].contains(url.scheme?.lowercased() ?? "") {
                         Button("Open", systemImage: "safari") { safariURL = url }
                     }
                 } footer: {

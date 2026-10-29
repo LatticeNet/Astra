@@ -60,6 +60,7 @@ private struct WelcomeStepView: View {
                     appState.welcomePresented = false
                 }
                 .buttonStyle(.bordered)
+                .controlSize(.large)
                 .padding(.top, Spacing.s)
             }
             .frame(maxWidth: 560, alignment: .leading)

@@ -242,12 +242,21 @@ struct ScopeDeniedRow: View {
                 Image(systemName: "lock").foregroundStyle(Color.statusQuiet)
             }
             .foregroundStyle(.secondary)
-            Button("Token scopes") {
-                router.openSettings([.page(.scopes)])
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: Spacing.l) { actions }
+                VStack(alignment: .leading, spacing: Spacing.s) { actions }
             }
+            // Borderless, so each button keeps its own hit area in a list row.
+            .buttonStyle(.borderless)
             .font(.subheadline)
         }
         .frame(minHeight: Spacing.minimumTarget)
+    }
+
+    @ViewBuilder
+    private var actions: some View {
+        Button("Token scopes") { router.openSettings([.page(.scopes)]) }
+        Button("Manage tokens on web") { router.openOnWeb(.tokens) }
     }
 }
 
