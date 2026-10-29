@@ -22,18 +22,18 @@ extension SharedFixtures {
             var node = node
             if request.scenario == .quiet {
                 node.status = "online"
-                node.statusReason = ""
+                node.statusReason = DemoWorld.onlineReason(lastSeen: "-12s")
                 node.statusSince = "-6d"
                 node.lastSeen = "-12s"
                 if node.agentVersion.isEmpty { node.agentVersion = "0.3.10" }
             }
             if disabled.contains(node.id) {
                 node.status = "disabled"
-                node.statusReason = "disabled from this iPhone"
+                node.statusReason = "Disabled by an operator; the agent token is refused until the node is enabled again."
                 node.statusSince = ""
             } else if enabled.contains(node.id), node.status == "disabled" {
                 node.status = "online"
-                node.statusReason = ""
+                node.statusReason = DemoWorld.onlineReason(lastSeen: "-12s")
                 node.lastSeen = "-12s"
             }
             return node
@@ -120,7 +120,8 @@ extension SharedFixtures {
                 "source": "auto",
             ]),
             "group_ids": .strings(node.groupIDs),
-            "created_at": "{{now-90d}}",
+            // The server's never-reported status starts at enrollment.
+            "created_at": node.lastSeen == nil && !node.statusSince.isEmpty ? .time(node.statusSince) : "{{now-90d}}",
         ])
     }
 

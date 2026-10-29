@@ -167,7 +167,7 @@ extension SharedFixtures {
                 "node_name": "relay-fra-2",
                 "node_status": "offline",
                 "node_status_since": .time("-3h"),
-                "node_status_reason": "no report for 3 h",
+                "node_status_reason": .string(DemoWorld.offlineReason(lastSeen: "-3h")),
                 "task_id": "task_d0905apply",
                 "task_status": "queued",
             ])

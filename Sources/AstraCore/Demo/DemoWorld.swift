@@ -132,7 +132,13 @@ public enum DemoWorld {
         // Spread nodes of one city a little so map pins do not stack.
         node.lat = place.lat + Double(host % 5) * 0.02
         node.lon = place.lon + Double(host % 3) * 0.02
+        // Varied but fixed load, so lists do not show one number for every node.
+        node.cpuPercent = Double(3 + (host * 37) % 31)
+        node.memoryPercent = Double(22 + (host * 53) % 41)
         configure(&node)
+        if node.status == "online", node.statusReason.isEmpty, let lastSeen = node.lastSeen {
+            node.statusReason = onlineReason(lastSeen: lastSeen)
+        }
         return node
     }
 
@@ -141,7 +147,7 @@ public enum DemoWorld {
         make("edge-tyo-2", "tyo", host: 12, role: "edge", tags: ["edge", "asia", "sshguard"]),
         make("edge-tyo-3", "tyo", host: 13, role: "edge", tags: ["edge", "asia"]) {
             $0.status = "degraded"
-            $0.statusReason = "agent loop stalled on step metrics"
+            $0.statusReason = "Reporting, but the work loop has been in step metrics for 14 min and has not completed a cycle for 14 min."
             $0.statusSince = "-14m"
             $0.cpuPercent = 96
         },
@@ -154,18 +160,20 @@ public enum DemoWorld {
             $0.lastSeen = nil
             $0.agentVersion = ""
             $0.statusSince = "-2d"
+            $0.statusReason = "No report has arrived since enrollment at {{now-2d}}."
         },
         make("relay-hkg-1", "hkg", host: 31, role: "relay", tags: ["relay", "asia"]) { $0.cpuCores = 4; $0.memoryGiB = 8 },
         make("edge-hkg-2", "hkg", host: 32, role: "edge", tags: ["edge", "asia"]) {
             $0.status = "degraded"
-            $0.statusReason = "disk 94% full"
+            // A full disk alone is load, not degraded; the server proves sing-box restarting.
+            $0.statusReason = "Reporting, but sing-box has been restarting since {{now-3h}} (unit activating/auto-restart, 41 restarts)."
             $0.statusSince = "-3h"
             $0.diskPercent = 94
         },
         make("relay-fra-1", "fra", host: 41, role: "relay", tags: ["relay", "europe"]) { $0.cpuCores = 4; $0.memoryGiB = 16 },
         make("relay-fra-2", "fra", host: 42, role: "relay", tags: ["relay", "europe"]) {
             $0.status = "offline"
-            $0.statusReason = "no report for 3 h"
+            $0.statusReason = offlineReason(lastSeen: "-3h")
             $0.statusSince = "-3h"
             $0.lastSeen = "-3h"
         },
@@ -176,13 +184,14 @@ public enum DemoWorld {
             $0.lastSeen = nil
             $0.agentVersion = ""
             $0.statusSince = "-6h"
+            $0.statusReason = "No report has arrived since enrollment at {{now-6h}}."
         },
         make("edge-ams-1", "ams", host: 51, role: "edge", tags: ["edge", "europe"]) { $0.agentVersion = "0.3.9" },
         make("edge-ams-2", "ams", host: 52, role: "edge", tags: ["edge", "europe"]),
         make("probe-ams-3", "ams", host: 53, role: "probe", tags: ["probe"]),
         make("backup-ams-4", "ams", host: 54, role: "backup", tags: ["backup"]) {
             $0.status = "disabled"
-            $0.statusReason = "disabled by ops"
+            $0.statusReason = "Disabled by an operator at {{now-9d}}; the agent token is refused until the node is enabled again."
             $0.statusSince = "-9d"
             $0.lastSeen = "-9d"
             $0.diskGiB = 2000
@@ -192,7 +201,7 @@ public enum DemoWorld {
         make("edge-iad-1", "iad", host: 71, role: "edge", tags: ["edge", "us"]),
         make("edge-iad-2", "iad", host: 72, role: "edge", tags: ["edge", "us"]) {
             $0.status = "disabled"
-            $0.statusReason = "token leaked, disabled pending rotation"
+            $0.statusReason = "Disabled by an operator at {{now-2d}}; the agent token is refused until the node is enabled again."
             $0.statusSince = "-2d"
             $0.lastSeen = "-2d"
         },
@@ -201,7 +210,7 @@ public enum DemoWorld {
         make("edge-sjc-1", "sjc", host: 81, role: "edge", tags: ["edge", "us"]),
         make("edge-sjc-2", "sjc", host: 82, role: "edge", tags: ["edge", "us"]) {
             $0.status = "offline"
-            $0.statusReason = "no report for 25 min"
+            $0.statusReason = offlineReason(lastSeen: "-25m")
             $0.statusSince = "-25m"
             $0.lastSeen = "-25m"
         },
@@ -209,7 +218,7 @@ public enum DemoWorld {
         make("edge-syd-1", "syd", host: 91, role: "edge", tags: ["edge", "oceania"]),
         make("relay-syd-2", "syd", host: 92, role: "relay", tags: ["relay", "oceania"]) {
             $0.status = "degraded"
-            $0.statusReason = "packet loss to 3 sources"
+            $0.statusReason = "Reporting, but the guard reality snapshot was collected at {{now-1840m}} and is older than 30h0m0s while the agent keeps reporting."
             $0.statusSince = "-40m"
         },
         make("home-nas", "home", host: 201, role: "storage", tags: ["home"]) { $0.diskGiB = 8000; $0.arch = "amd64" },
@@ -226,7 +235,7 @@ public enum DemoWorld {
             $0.arch = "arm64"
             $0.platform = "raspbian"
             $0.status = "offline"
-            $0.statusReason = "no report for 6 d"
+            $0.statusReason = offlineReason(lastSeen: "-6d")
             $0.statusSince = "-6d"
             $0.lastSeen = "-6d"
             $0.agentVersion = "0.3.7"
@@ -259,6 +268,16 @@ public enum DemoWorld {
         var node = node
         node.groupIDs = groupIDs(for: node)
         return node
+    }
+
+    /// The server's reason for a reporting node (deriveNodeStatus, node_status.go).
+    public static func onlineReason(lastSeen: String) -> String {
+        "Reporting; last report at {{now\(lastSeen)}}."
+    }
+
+    /// The server's reason for a silent node, with its 90 s offline threshold.
+    static func offlineReason(lastSeen: String) -> String {
+        "No report since {{now\(lastSeen)}}; the control plane stops trusting a node after 1m30s of silence."
     }
 
     /// The node with this name; fixtures name nodes, never invent ids.
