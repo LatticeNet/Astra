@@ -345,12 +345,8 @@ struct OutboundPolicyScreen: View {
         let ingress = direction == "ingress"
         return List {
             Section {
-                Picker("Direction", selection: $direction) {
-                    Text("Egress").tag("egress")
-                    Text("Ingress").tag("ingress")
-                }
-                .pickerStyle(.segmented)
-                .frame(minHeight: Spacing.minimumTarget)
+                AdaptiveSegmentedPicker(title: "Direction", options: [("egress", "Egress"), ("ingress", "Ingress")], selection: $direction, containerWidth: width)
+                    .frame(minHeight: Spacing.minimumTarget)
             } footer: {
                 Text(ingress ? "Who each targeted group admits, from the enabled policies' ingress rules." : "Where each targeted group may connect, from the enabled policies' egress rules. A policy that targets only nodes has no row.")
             }

@@ -35,7 +35,7 @@ public enum NetworkingIntents {
             verb: "Plan",
             object: ObjectRef(kind: "outbound policies", id: "all", name: "all outbound policies"),
             scopes: [policyAdmin],
-            consequence: "Plans every node covered by any enabled outbound policy, not only this one: \(count) now. Each node gets its own approval. A node with a manual policy is reported as a conflict and left alone, and nothing changes on any node until its plan is approved.",
+            consequence: "Plans every node any enabled outbound policy covers, whichever policy you start from: \(count) now. Each node gets its own approval. A node with a manual policy is reported as a conflict and left alone, and nothing changes on any node until its plan is approved.",
             affected: covered,
             verify: { client in
                 let pending = try await client.listApprovals(query: ApprovalQuery(status: "pending", plugin: "nftpolicy", limit: 100))
@@ -110,6 +110,12 @@ public enum NetworkingIntents {
             consequence: "Renders the CoreDNS config of \(deployment.name) and the firewall chain it needs on \(node.name), and files them for approval. The plan replaces the node's whole lattice_guard input chain, so the server checks it for lockout first.",
             affected: [node],
             toggles: [acceptLockout],
+            dryRun: { client in
+                guard let current = try await client.networkingDNSDeployments().first(where: { $0.id == deployment.id }) else {
+                    return DryRunReport(lines: [DetailLine(label: "Deployment", value: "Deleted since this screen loaded")], blocking: true, fingerprint: "gone")
+                }
+                return dnsPlanReport(current)
+            },
             verify: { client in try await pendingSentence(client, plugin: "selfdns", node: node) },
             changes: [.approvals, .dns],
             perform: { client, choices in
@@ -118,6 +124,22 @@ public enum NetworkingIntents {
                 return .filed(approvalIDs: [answer.approval.id], refused: [], notes: ["Filed the DNS plan for \(deployment.name)"] + warnings)
             }
         )
+    }
+
+    /// What a DNS plan renders, read again right before filing so an edit
+    /// made on the web in between stops it.
+    public static func dnsPlanReport(_ deployment: NetworkingDNSDeployment) -> DryRunReport {
+        let group = "What the plan renders"
+        let answers = deployment.exposure != "public" ? "Mesh peers"
+            : (deployment.allowedClients.isEmpty ? "Every client that reaches the port"
+               : (deployment.allowedClients.count == 1 ? "1 client network" : "\(deployment.allowedClients.count) client networks"))
+        let lines = [
+            DetailLine(label: "Listens", value: deployment.listenSummary, group: group),
+            DetailLine(label: "Answers", value: answers, group: group),
+        ]
+        let fingerprint = [deployment.updatedAt.map { String($0.timeIntervalSince1970) } ?? "", deployment.listenSummary,
+                           deployment.allowedClients.joined(separator: ","), String(deployment.zones.count)].joined(separator: "|")
+        return DryRunReport(lines: lines, fingerprint: fingerprint)
     }
 
     /// Writes the node's current addresses to the external DNS provider.
@@ -282,7 +304,7 @@ public enum NetworkingIntents {
             verb: "Delete geo routing",
             object: ObjectRef(kind: "geo routing", id: id, name: name),
             scopes: [geoAdmin],
-            consequence: impact.lines.joined(separator: " ") + " This cannot be undone.",
+            consequence: geoConsequence(routing, time: time),
             affected: routing.dnsNodeIDs.map { ObjectRef(kind: "node", id: $0, name: names[$0]) },
             confirmPhrase: impact.typed ? name : nil,
             dryRun: { client in
@@ -300,6 +322,15 @@ public enum NetworkingIntents {
                 return .done("Deleted geo routing \(name)")
             }
         )
+    }
+
+    /// One sentence for the geo delete: the record goes; an applied zone stays.
+    static func geoConsequence(_ routing: NetworkingGeoRouting, time: (Date) -> String) -> String {
+        guard let applied = routing.lastAppliedAt else {
+            return "Removes the geo routing for \(routing.hostname). It was never applied, so no node changes. This cannot be undone."
+        }
+        let nodes = routing.dnsNodeIDs.count == 1 ? "its DNS node" : "its \(routing.dnsNodeIDs.count) DNS nodes"
+        return "Removes only the record for \(routing.hostname). The zone applied \(time(applied)) stays on \(nodes), which keep answering it. This cannot be undone."
     }
 
     /// The geo delete's dry run: the record goes, and an applied zone stays

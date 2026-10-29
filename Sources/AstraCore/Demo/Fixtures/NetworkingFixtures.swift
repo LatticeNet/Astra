@@ -558,10 +558,10 @@ public enum NetworkingFixtures {
             .object(["code": "public_resolver", "severity": "warn", "message": "The resolver answers on a public address; only the allowed client networks get answers."]),
         ] : []
         if !blocking.isEmpty && !accepted {
-            return DemoResponse(status: 409, body: DemoJSON.object([("error", "plan blocked by lint findings"), ("findings", .array(blocking + warnings))]).text)
+            return DemoResponse(status: 409, body: DemoJSON.object([("error", "plan blocked by lint findings"), ("findings", .array(warnings + blocking))]).text)
         }
         let approval = await file(plugin: "selfdns", action: "apply-config", node: dep.node, plan: dnsPlan(dep), state: state)
-        return .json(DemoJSON.object([("approval", SharedFixtures.approvalJSON(approval, includePlan: true)), ("findings", .array(blocking + warnings))]).text)
+        return .json(DemoJSON.object([("approval", SharedFixtures.approvalJSON(approval, includePlan: true)), ("findings", .array(warnings + blocking))]).text)
     }
 
     static func dnsPlan(_ dep: Deployment) -> String {

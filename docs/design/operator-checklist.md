@@ -101,6 +101,19 @@ Agents cannot tap, swipe or rotate a simulator, and they cannot run VoiceOver, V
 - Upcoming: the Filter menu narrows to Machines, VPN users, Shares or Certificates and a "Showing ... only. Show all" row appears; with a Triage token the note under the summary names the hidden kinds; swipe Renew on a machine row opens the Renew sheet.
 - Voice Control "Show names": the Group menu, the More menus, the Filter menu and every Reveal and Record button have names.
 
+## M6 Networking
+
+- Outbound policy: the view picker reads Policies, Nodes and Matrix and becomes a menu at accessibility sizes and in landscape; the headings rotor jumps between Enabled and Disabled, and on Nodes between Apply failed, Planned, Applied, Disabled and No policy; each row reads its name, state and node count as one element.
+- Outbound policy: Plan all outbound policies opens the plan ConfirmSheet with no Face ID, says every covered node is planned whichever policy it starts from, and lists the nodes as "Will try"; after File plan the result says how many plans were filed with the conflicts and orphaned nodes counted and never shows green; Done opens BatchReview.
+- Matrix: the Egress and Ingress control is a segmented control at default sizes and a menu at accessibility sizes; each source row is a heading and a group row pushes the node group.
+- Node policy (a manual node such as core-lon-1): the Convert section's name and priority fields are reachable above the keyboard at AX5; Convert opens a ConfirmSheet that says the policy is created first, then Face ID, then the filed plan opens in Review.
+- DNS deployment (public resolver fra): Plan stops on the findings step with the lockout finding visible above an unchecked "Accept lockout risk" and File plan disabled; ticking it files the plan and the result restates the accepted finding.
+- DNS deployment: Publish IPs shows the preview under "Computed on this iPhone from the node's reported address" before the button enables, then asks for Face ID; doh iad offers Measure certificate as a dialog that names host and port and both scopes, and a confined token sees it disabled with "Needs a token without a node allowlist".
+- DDNS: the trailing swipe offers Run now once in the actions rotor with an Operator token and not at all with a Triage token; Run now shows the records it writes, old and new, labelled as computed on this iPhone; Delete profile asks for the typed profile name and Face ID.
+- Geo routing: Preview config renders the config in a horizontally scrolling monospaced block that VoiceOver reads as one value; Delete on an applied routing names each DNS node that keeps answering and asks for the typed name.
+- Tunnel: the Last plan row opens the newest cftunnel approval in Review; Delete tunnel says cloudflared keeps running and asks for the typed name.
+- Inbound firewall: with a confined token the Security groups, Zones and Node-group bindings sections each say why they are hidden instead of reading empty; a node row pushes that node's firewall, and its security groups push the group's rules and bound nodes.
+
 ## M7 SSH Guard and agent updates
 
 - SSH Guard board: the headings rotor jumps between Confirm needed, Password login open, Partial, Unknown, Secured and Excluded; a reverting row reads its node, posture, "confirm by" time and knock state as one element, and the "Reverts in" countdown never pulses.

@@ -309,7 +309,10 @@ private func checkNetworkingDNSFindingsLoop() async throws {
     try expectEqual(intent.scopes, ["dns:admin", "network:plan"], "DNS plan scopes")
     try expect(intent.toggles.allSatisfy { $0.revealedByConflict && $0.id == "accept_lockout_risk" }, "the acceptance shows only after the 409")
 
-    let first = try netFinished(await WriteFlow(intent: intent, client: client, authenticator: NetworkingAuthStub(outcome: .cancelled)).commit(choices: ConfirmChoices()), "first DNS plan")
+    let flow = WriteFlow(intent: intent, client: client, authenticator: NetworkingAuthStub(outcome: .cancelled))
+    let report = try expectUnwrapped(try await flow.dryRun(), "DNS plan preview")
+    try expect(report.lines.contains { $0.label == "Answers" && $0.value == "2 client networks" }, "the preview names the allowed client networks")
+    let first = try netFinished(await flow.commit(choices: ConfirmChoices(), reviewed: report), "first DNS plan")
     guard case .refused(.conflict(let findings), _) = first else { throw CheckFailure.failed("a lockout plan stops on its findings, got \(first)") }
     try expect(findings.contains { $0.contains("cuts off SSH") }, "the blocking finding is listed")
     try expect(findings.count == 2, "warnings come with the blocker")
@@ -339,7 +342,7 @@ private func checkNetworkingGroupPlan() async throws {
     let covered = DemoWorld.nodes.map { ObjectRef(kind: "node", id: $0.id, name: $0.name) }
     let intent = NetworkingIntents.planAllGroupPolicies(covered: covered)
     try expectEqual(intent.affected.count, covered.count, "covered nodes are listed as will try")
-    try expect(intent.consequence.contains("not only this one"), "the sheet says every covered node is planned")
+    try expect(intent.consequence.contains("whichever policy you start from"), "the sheet says every covered node is planned")
     let outcome = try netFinished(await WriteFlow(intent: intent, client: client, authenticator: NetworkingAuthStub(outcome: .cancelled)).commit(choices: ConfirmChoices()), "group plan")
     guard case .filed(let ids, let refused, let notes) = outcome else { throw CheckFailure.failed("group plan files, got \(outcome)") }
     try expectEqual(ids.count, DemoWorld.nodes.count - 4, "every covered node without a manual policy gets a plan")
