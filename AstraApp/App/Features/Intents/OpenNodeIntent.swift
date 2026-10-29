@@ -47,7 +47,7 @@ struct IntentsNodeEntity: AppEntity, Identifiable, Hashable, Sendable {
 
     let id: String
     let name: String
-    /// The honesty word ("online", "never reported"), or "not in the node list".
+    /// The honesty word ("online", "never reported"), or why the node is not known.
     let status: String?
     let symbol: String
     let region: String?
@@ -71,12 +71,13 @@ struct IntentsNodeEntity: AppEntity, Identifiable, Hashable, Sendable {
         region = place
     }
 
-    /// A node the directory does not hold (not loaded, removed, or outside this
-    /// token's allowlist). NodeDetail then shows the server's answer for the id.
-    init(unknownID id: String) {
+    /// A node the picker cannot describe: locked, not loaded, removed, or
+    /// outside this token's allowlist. `note` says which one is known to be
+    /// true. NodeDetail then shows the server's answer for the id.
+    init(unknownID id: String, note: String) {
         self.id = id
         name = id
-        status = "not in the node list"
+        status = note
         symbol = "server.rack"
         region = nil
     }
@@ -84,26 +85,57 @@ struct IntentsNodeEntity: AppEntity, Identifiable, Hashable, Sendable {
 
 /// Reads nodes from `NodeDirectory`, the app's shared node list.
 struct IntentsNodeQuery: EntityStringQuery {
+    /// Matches the directory's own refresh window.
+    private static let window: TimeInterval = 15
+
+    /// Saved shortcuts resolve without throwing, so they still run; the screen
+    /// they open shows the lock or the server's answer.
     func entities(for identifiers: [IntentsNodeEntity.ID]) async throws -> [IntentsNodeEntity] {
-        let nodes = await Self.directory()
-        return identifiers.map { id in nodes[id].map(IntentsNodeEntity.init(node:)) ?? IntentsNodeEntity(unknownID: id) }
+        let nodes: [String: LatticeNode]
+        do {
+            nodes = try await Self.directory()
+        } catch {
+            let note = switch error {
+            case .locked: "Lattice is locked"
+            case .notConnected: "not connected"
+            case .hidden: "not visible to this token"
+            default: "node list not loaded"
+            }
+            return identifiers.map { IntentsNodeEntity(unknownID: $0, note: note) }
+        }
+        return identifiers.map { id in
+            nodes[id].map(IntentsNodeEntity.init(node:)) ?? IntentsNodeEntity(unknownID: id, note: "not in the node list")
+        }
     }
 
     func entities(matching string: String) async throws -> [IntentsNodeEntity] {
-        let nodes = await Self.directory()
+        let nodes = try await Self.directory()
         return Self.matching(string, in: Array(nodes.values)).map(IntentsNodeEntity.init(node:))
     }
 
     func suggestedEntities() async throws -> [IntentsNodeEntity] {
-        let nodes = await Self.directory()
+        let nodes = try await Self.directory()
         return Self.ordered(Array(nodes.values)).map(IntentsNodeEntity.init(node:))
     }
 
+    /// A node list no older than the refresh window, or the reason there is
+    /// none. Rows from a failed refresh are never listed, because their status
+    /// words could claim a health that no longer holds.
     @MainActor
-    private static func directory() async -> [String: LatticeNode] {
+    private static func directory() async throws(IntentsQueryError) -> [String: LatticeNode] {
+        let client = try IntentsGate.client()
         let directory = AppServices.shared.nodes
-        await directory.refreshIfOlder(than: 15)
-        return directory.nodes
+        await directory.refreshIfOlder(than: window)
+        if let loadedAt = directory.loadedAt, Date().timeIntervalSince(loadedAt) < window {
+            return directory.nodes
+        }
+        // The shared refresh drops its error; one direct read says why it failed.
+        do {
+            let list = try await client.fetchNodes()
+            return Dictionary(list.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        } catch {
+            throw IntentsQueryError(error, what: "nodes", scope: "node:read")
+        }
     }
 
     /// Worst state first, then by name, the order Fleet's node list groups by.

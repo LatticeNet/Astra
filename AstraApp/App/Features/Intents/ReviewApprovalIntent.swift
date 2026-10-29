@@ -80,13 +80,13 @@ struct IntentsApprovalEntity: AppEntity, Identifiable, Hashable, Sendable {
         symbol = style.symbol
     }
 
-    /// An approval this token could not load right now (offline, decided and
-    /// gone from the pending list, or not visible). Review shows the server's
-    /// answer for the id, including "Not found, or not visible to this token".
-    init(unknownID id: String) {
+    /// An approval the picker cannot describe. `note` says why: locked, not
+    /// connected, not found or not visible, or a failed load. Review shows the
+    /// server's answer for the id when it opens.
+    init(unknownID id: String, note: String) {
         self.id = id
         title = id
-        detail = "Not loaded right now"
+        detail = note
         symbol = "doc.text.magnifyingglass"
     }
 }
@@ -100,7 +100,7 @@ struct IntentsApprovalQuery: EntityStringQuery {
 
     func entities(matching string: String) async throws -> [IntentsApprovalEntity] {
         let needle = string.trimmingCharacters(in: .whitespacesAndNewlines)
-        let all = await Self.pending()
+        let all = try await Self.pending()
         guard !needle.isEmpty else { return all }
         return all.filter { entity in
             entity.title.localizedStandardContains(needle)
@@ -110,34 +110,70 @@ struct IntentsApprovalQuery: EntityStringQuery {
     }
 
     func suggestedEntities() async throws -> [IntentsApprovalEntity] {
-        await Self.pending()
+        try await Self.pending()
     }
 
+    /// The pending list, or the reason it cannot be read. An empty array means
+    /// the server answered that nothing needs a person.
     @MainActor
-    private static func pending() async -> [IntentsApprovalEntity] {
+    private static func pending() async throws(IntentsQueryError) -> [IntentsApprovalEntity] {
+        let client = try IntentsGate.client()
         let services = AppServices.shared
-        guard let client = services.session.client else { return [] }
-        await services.nodes.refreshIfOlder(than: 15)
-        guard let approvals = try? await client.listHumanPendingApprovals() else { return [] }
+        if let scopes = services.session.tokenScopes, approvalsDenied(scopes) {
+            throw IntentsQueryError.hidden(what: "approvals", scope: "network:plan")
+        }
+        // Node names only label the rows, so their refresh runs beside the list.
+        let nodes = services.nodes
+        async let refresh: Void = nodes.refreshIfOlder(than: 15)
+        let approvals: [Approval]
+        do {
+            approvals = try await client.listHumanPendingApprovals()
+        } catch {
+            throw IntentsQueryError(error, what: "approvals", scope: "network:plan")
+        }
+        await refresh
         return approvals
             .sorted { ($0.createdAt ?? .distantPast) > ($1.createdAt ?? .distantPast) }
-            .map { entity(for: $0, nodes: services.nodes) }
+            .map { entity(for: $0, nodes: nodes) }
+    }
+
+    /// Inbox's test: the server hides every approval only when the token can
+    /// list no plugin at all.
+    private static func approvalsDenied(_ scopes: ScopeSet) -> Bool {
+        !scopes.allows("network:plan")
+            && ApprovalVisibility.hiddenPlugins(scopes: scopes).count == ApprovalVisibility.knownPlugins.count
     }
 
     @MainActor
     private static func resolve(_ ids: [String]) async -> [IntentsApprovalEntity] {
-        let services = AppServices.shared
-        guard let client = services.session.client else { return ids.map(IntentsApprovalEntity.init(unknownID:)) }
-        await services.nodes.refreshIfOlder(than: 15)
-        var resolved: [IntentsApprovalEntity] = []
+        let client: LatticeClient
+        do {
+            client = try IntentsGate.client()
+        } catch {
+            let note = if case .locked = error { "Lattice is locked" } else { "Not connected" }
+            return ids.map { IntentsApprovalEntity(unknownID: $0, note: note) }
+        }
+        let nodes = AppServices.shared.nodes
+        async let refresh: Void = nodes.refreshIfOlder(than: 15)
+        var fetched: [(String, Swift.Result<Approval, LatticeAPIError>)] = []
         for id in ids {
-            if let approval = try? await client.fetchApproval(id: id) {
-                resolved.append(entity(for: approval, nodes: services.nodes))
-            } else {
-                resolved.append(IntentsApprovalEntity(unknownID: id))
+            do {
+                fetched.append((id, .success(try await client.fetchApproval(id: id))))
+            } catch {
+                fetched.append((id, .failure(LatticeAPIError(error))))
             }
         }
-        return resolved
+        await refresh
+        return fetched.map { id, result in
+            switch result {
+            case .success(let approval):
+                return entity(for: approval, nodes: nodes)
+            case .failure(.notFound), .failure(.forbidden):
+                return IntentsApprovalEntity(unknownID: id, note: "Not found, or not visible to this token")
+            case .failure(let error):
+                return IntentsApprovalEntity(unknownID: id, note: "Could not load. \(error.errorDescription ?? "Unknown error.")")
+            }
+        }
     }
 
     @MainActor
