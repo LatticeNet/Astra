@@ -415,10 +415,10 @@ public enum EvidenceFixtures {
         let shown = visibleRecords.filter { record in
             let nodeID = DemoWorld.node(record.node).id
             if !nodes.isEmpty && !nodes.contains(nodeID) { return false }
-            if !users.isEmpty && !(users.contains(record.userID) || users.contains(record.user)) { return false }
+            if !users.isEmpty && !users.contains(record.userID) { return false }
             if !lines.isEmpty && !lines.contains(lineUUID) { return false }
             if !sessionIDs.isEmpty && Set(sessionIDs).isDisjoint(with: record.sessions) { return false }
-            if !dst.isEmpty && ![record.host, record.ip, record.domain].contains(where: { $0.lowercased().contains(dst) }) { return false }
+            if !dst.isEmpty && !record.host.lowercased().contains(dst) { return false }
             if let window, Double(record.ageSeconds) > window { return false }
             if record.open && q["include_open"] != "true" && q["stalled"] != "true" { return false }
             if q["stalled"] == "true" && !record.stalled { return false }

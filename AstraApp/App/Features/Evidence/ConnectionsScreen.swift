@@ -84,9 +84,20 @@ struct ConnectionsScreen: View {
         seeded = true
         if let filter, !filter.isEmpty {
             query = EvidenceConnectionQuery.parse(filter, nodeID: resolveNode)
+            query.userID = resolveUser(query.userID)
             query.text = ""
         }
         offer(force: true)
+    }
+
+    /// A typed `user:` value as a user id: an id passes, a managed user's
+    /// logged name becomes its id, and anything else is kept as typed.
+    private func resolveUser(_ value: String) -> String {
+        value.split(separator: ",").map { part in
+            let typed = String(part)
+            if records.contains(where: { $0.userID == typed }) { return typed }
+            return records.first { !$0.userID.isEmpty && $0.userName.caseInsensitiveCompare(typed) == .orderedSame }?.userID ?? typed
+        }.joined(separator: ",")
     }
 
     private func resolveNode(_ value: String) -> String? {
@@ -97,7 +108,7 @@ struct ConnectionsScreen: View {
     private func absorbTokens() {
         let parsed = EvidenceConnectionQuery.parse(text, nodeID: resolveNode)
         if !parsed.nodeID.isEmpty { query.nodeID = parsed.nodeID }
-        if !parsed.userID.isEmpty { query.userID = parsed.userID }
+        if !parsed.userID.isEmpty { query.userID = resolveUser(parsed.userID) }
         if !parsed.dst.isEmpty { query.dst = parsed.dst }
         if !parsed.lineUUID.isEmpty { query.lineUUID = parsed.lineUUID }
         if !parsed.sessionID.isEmpty { query.sessionID = parsed.sessionID }
@@ -119,11 +130,12 @@ struct ConnectionsScreen: View {
         return ids.map { Option(value: $0, title: nodes.name(for: $0)) }.sorted { $0.title.localizedStandardCompare($1.title) == .orderedAscending }
     }
 
-    private func userValue(_ record: EvidenceConnRecord) -> String { record.userID.isEmpty ? record.userName : record.userID }
-
+    /// The server filters on `user_id` alone, which only managed users carry
+    /// (legacy, discovered and unnamed users log a name and no id), so only
+    /// they can be offered.
     private var userOptions: [Option] {
         var seen: [String: String] = [:]
-        for record in records where !userValue(record).isEmpty { seen[userValue(record)] = record.userName.isEmpty ? record.userID : record.userName }
+        for record in records where !record.userID.isEmpty { seen[record.userID] = record.userName.isEmpty ? record.userID : record.userName }
         if !query.userID.isEmpty, seen[query.userID] == nil { seen[query.userID] = query.userID }
         return seen.map { Option(value: $0.key, title: $0.value) }.sorted { $0.title < $1.title }
     }
