@@ -99,7 +99,7 @@ public enum SSHGuardBoardSection: String, Sendable, Hashable, CaseIterable, Iden
         case .confirmNeeded: "Confirm needed"
         case .passwordOpen: "Password login open"
         case .partial: "Partial"
-        case .unknown: "Not reported"
+        case .unknown: "Unknown"
         case .secured: "Secured"
         case .excluded: "Excluded"
         }

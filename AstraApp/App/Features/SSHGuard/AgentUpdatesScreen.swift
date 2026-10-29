@@ -135,6 +135,8 @@ struct AgentUpdatesScreen: View {
     @ViewBuilder
     private var nodesView: some View {
         switch store.nodes {
+        case .denied(let scope):
+            ScopeDeniedScreen(scope: scope)
         case .failed(let error, nil, _):
             failedState(noun: "nodes", error: error)
         case .companionBehind(let surface):
@@ -294,7 +296,9 @@ struct AgentUpdatesScreen: View {
     @ViewBuilder
     private var distributionView: some View {
         if store.nodes.value == nil, store.release.value == nil, store.artifacts.value == nil {
-            if case .failed(let error, nil, _) = store.release {
+            if case .denied(let scope) = store.release {
+                ScopeDeniedScreen(scope: scope)
+            } else if case .failed(let error, nil, _) = store.release {
                 failedState(noun: "releases", error: error)
             } else {
                 List { LoadingRows(label: "Loading releases", count: 5) }
@@ -320,6 +324,8 @@ struct AgentUpdatesScreen: View {
             }
             Section {
                 switch store.release {
+                case .denied(let scope):
+                    ScopeDeniedRow(scope: scope)
                 case .failed(let error, nil, _):
                     ErrorRow(message: "Could not read releases: \(error.localizedDescription)") { refresh() }
                 default:
@@ -355,6 +361,8 @@ struct AgentUpdatesScreen: View {
     private var artifactsSection: some View {
         Section {
             switch store.artifacts {
+            case .denied(let scope):
+                ScopeDeniedRow(scope: scope)
             case .failed(let error, nil, _):
                 ErrorRow(message: "Could not read stored artifacts: \(error.localizedDescription)") { refresh() }
             default:
@@ -394,6 +402,8 @@ struct AgentUpdatesScreen: View {
     @ViewBuilder
     private var mirrorsView: some View {
         switch store.mirrors {
+        case .denied(let scope):
+            ScopeDeniedScreen(scope: scope)
         case .failed(let error, nil, _):
             failedState(noun: "mirrors", error: error)
         case .companionBehind(let surface):
@@ -491,7 +501,8 @@ struct AgentUpdatesScreen: View {
             } description: {
                 Text("\(surface) could not be read.")
             } actions: {
-                Button("Reload", action: refresh)
+                Button("Reload", action: refresh).buttonStyle(.bordered)
+                Button("Open on web") { router.openOnWeb(LatticeConsolePath(path: "/platform/agent-updates")) }
             }
         }
     }

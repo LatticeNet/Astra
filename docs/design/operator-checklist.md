@@ -73,7 +73,7 @@ Agents cannot tap, swipe or rotate a simulator, and they cannot run VoiceOver, V
 
 ## M7 SSH Guard and agent updates
 
-- SSH Guard board: the headings rotor jumps between Confirm needed, Password login open, Partial, Not reported, Secured and Excluded; a reverting row reads its node, posture, "confirm by" time and knock state as one element, and the "Reverts in" countdown never pulses.
+- SSH Guard board: the headings rotor jumps between Confirm needed, Password login open, Partial, Unknown, Secured and Excluded; a reverting row reads its node, posture, "confirm by" time and knock state as one element, and the "Reverts in" countdown never pulses.
 - SSH Guard board: with an Operator token the trailing swipe offers Arm on an open or failed node that holds an explicit sshguard enrolment (an undecided node offers nothing, as on the console) and Confirm on a reverting one, each listed once in the actions rotor; with a Triage token the board shows "Needs sshguard:read and network:plan" instead of an empty list, and with sshguard:read but no sshguard:admin the swipes are gone and the context menu shows Arm or Confirm disabled with "Needs sshguard:admin".
 - SSH Guard board: Confirm on edge-tyo-2 (a confirm plan already waiting) opens that approval in Review and files nothing; Confirm on a node with no confirm filed opens the plan ConfirmSheet with no Face ID, and after File plan the new approval opens in Review.
 - SSH Guard board: the Filter menu's Posture and Coverage choices show as search tokens and in the subtitle; removing a token clears that filter; leaving and reopening the board starts at All; a query such as `posture:password state:failed` or `is:reverting` filters, and a misspelt field shows a sentence instead of an empty list.

@@ -28,17 +28,11 @@ struct SSHGuardBoardScreen: View {
         content
             .navigationTitle("SSH Guard")
             .navigationSubtitle(subtitle)
-            .searchable(text: $query, tokens: tokensBinding, prompt: "posture:, state:, knock:, tag:") { token in
-                Text(token.title)
-            }
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    FilterMenu(sections: [
-                        FilterMenuSection(title: "Posture", options: SSHGuardPostureFilter.allCases.map(\.title),
-                                          defaultOption: SSHGuardPostureFilter.all.title, selection: $postureFilter),
-                        FilterMenuSection(title: "Coverage", options: SSHGuardCoverageFilter.allCases.map(\.title),
-                                          defaultOption: SSHGuardCoverageFilter.all.title, selection: $coverageFilter),
-                    ])
+                // Search and filters only over the list: over a denied, failed or offline
+                // state they would filter nothing.
+                if store.status.value != nil {
+                    ToolbarItem(placement: .topBarTrailing) { filterMenu }
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu {
@@ -71,6 +65,15 @@ struct SSHGuardBoardScreen: View {
             }
     }
 
+    private var filterMenu: some View {
+        FilterMenu(sections: [
+            FilterMenuSection(title: "Posture", options: SSHGuardPostureFilter.allCases.map(\.title),
+                              defaultOption: SSHGuardPostureFilter.all.title, selection: $postureFilter),
+            FilterMenuSection(title: "Coverage", options: SSHGuardCoverageFilter.allCases.map(\.title),
+                              defaultOption: SSHGuardCoverageFilter.all.title, selection: $coverageFilter),
+        ])
+    }
+
     @ViewBuilder
     private var content: some View {
         switch store.status {
@@ -83,7 +86,8 @@ struct SSHGuardBoardScreen: View {
                 } description: {
                     Text("\(surface) could not be read.")
                 } actions: {
-                    Button("Reload") { Task { await store.refresh() } }
+                    Button("Reload") { Task { await store.refresh() } }.buttonStyle(.bordered)
+                    Button("Open on web") { router.openOnWeb(LatticeConsolePath(path: "/network/ssh-guard")) }
                 }
             }
         case .failed(let error, nil, _):
@@ -179,6 +183,9 @@ struct SSHGuardBoardScreen: View {
             }
         }
         .listStyle(.insetGrouped)
+        .searchable(text: $query, tokens: tokensBinding, prompt: "posture:, state:, knock:, tag:") { token in
+            Text(token.title)
+        }
         .onScrollPhaseChange { _, phase in
             if phase != .idle { stable.noteActivity() }
         }
@@ -198,8 +205,8 @@ struct SSHGuardBoardScreen: View {
         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
             if store.canPlan {
                 switch action {
-                case .confirm:
-                    Button("Confirm", systemImage: "checkmark.shield") { confirm(row) }
+                case .confirm(let target):
+                    Button(target == .file ? "Confirm" : "Open confirm", systemImage: "checkmark.shield") { confirm(row) }
                         .tint(Color.accentFill)
                 case .arm:
                     Button("Arm", systemImage: "lock.shield") { armTarget = SSHGuardArmTarget(nodeID: row.id, rotate: false) }
@@ -225,11 +232,18 @@ struct SSHGuardBoardScreen: View {
         Divider()
         switch action {
         case .confirm(let target):
-            Button(target == .file ? "Confirm" : "Open confirm approval", systemImage: "checkmark.shield") { confirm(row) }
-                .disabled(!store.canPlan)
+            let blocked = target == .file ? store.planBlockReason() : nil
+            Button { confirm(row) } label: {
+                Label(target == .file ? "Confirm" : "Open confirm approval", systemImage: "checkmark.shield")
+                if let blocked { Text(blocked) }
+            }
+            .disabled(blocked != nil)
         case .arm:
-            Button("Arm", systemImage: "lock.shield") { armTarget = SSHGuardArmTarget(nodeID: row.id, rotate: false) }
-                .disabled(!store.canPlan)
+            Button { armTarget = SSHGuardArmTarget(nodeID: row.id, rotate: false) } label: {
+                Label("Arm", systemImage: "lock.shield")
+                if let blocked = store.planBlockReason() { Text(blocked) }
+            }
+            .disabled(!store.canPlan)
         case .none:
             if !row.status.actionableApprovalID.isEmpty {
                 Button("Open approval", systemImage: "hand.raised") { router.present(.review(.single(row.status.actionableApprovalID))) }
@@ -237,9 +251,6 @@ struct SSHGuardBoardScreen: View {
                 Button(row.scope == .excluded ? "Excluded from SSH Guard" : "Not enrolled for SSH Guard", systemImage: "minus.circle") {}
                     .disabled(true)
             }
-        }
-        if !store.canPlan, action != .none {
-            Text(store.planBlockReason() ?? "")
         }
     }
 

@@ -22,8 +22,9 @@ final class AgentUpdatesStore {
         self.changes = changes
     }
 
-    /// The screen's gate (section 5.8): its only writes need node:admin.
-    static let gate = ScopeRequirement("node:admin")
+    /// The screen's gate (section 5.8): its only writes need node:admin, and
+    /// every read needs node:read, which admin does not imply (section 6.12).
+    static let gate = ScopeRequirement("node:read", "node:admin")
     static let planRequirement = ScopeRequirement(groups: AgentUpdatesPlanning.scopes.map { [$0] })
 
     var missingGate: [String]? {

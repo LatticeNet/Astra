@@ -28,12 +28,10 @@ final class SSHGuardNodeModel {
         } catch {
             let apiError = LatticeAPIError(error)
             if case .forbidden = apiError { session.noteForbidden() }
-            if apiError == .invalidResponse, status.value == nil {
-                // The node is not in the rows this token may see.
-                status = .failed(.notFound, last: nil, lastAt: nil)
-            } else {
-                status = status.failing(apiError, surface: "SSH Guard", missingScope: SSHGuardStore.readRequirement.summary)
-            }
+            // An undecodable body is the app behind the server; a node this token
+            // cannot see is the server's 404, shown as "Not visible to this token".
+            if apiError == .invalidResponse { session.markCompanionBehind("SSH Guard") }
+            status = status.failing(apiError, surface: "SSH Guard", missingScope: SSHGuardStore.readRequirement.summary)
             return false
         }
         async let knockOK = loadKnock(client)
