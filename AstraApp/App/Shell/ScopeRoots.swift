@@ -49,7 +49,12 @@ struct MonitorRoot: View {
                         ForEach(MonitorWindow.allCases, id: \.self) { Text($0.rawValue).tag($0) }
                     }
                 } label: {
-                    Label("Window: \(appState.monitorWindow.rawValue)", systemImage: "clock")
+                    HStack(spacing: Spacing.xs) {
+                        Image(systemName: "clock")
+                        Text(appState.monitorWindow.rawValue)
+                    }
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel("Window, \(appState.monitorWindow.rawValue)")
                 }
             }
         }
@@ -88,10 +93,13 @@ private struct ScopedRoot<Value: Hashable, Content: View>: View {
     @ViewBuilder let content: () -> Content
 
     @Environment(\.verticalSizeClass) private var verticalSizeClass
+    @State private var width: CGFloat?
 
     var body: some View {
-        let picker = AdaptiveSegmentedPicker(title: pickerTitle, options: options, selection: $selection)
+        let picker = AdaptiveSegmentedPicker(title: pickerTitle, options: options, selection: $selection, containerWidth: width)
         content()
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
             .navigationTitle(title)
             .safeAreaBar(edge: .top) {
                 if verticalSizeClass != .compact {
@@ -162,8 +170,10 @@ private struct TabRootToolbar: ViewModifier {
                     Button {
                         router.openSettings()
                     } label: {
-                        Label("Demo", systemImage: "theatermasks")
-                            .labelStyle(.titleAndIcon)
+                        HStack(spacing: Spacing.xs) {
+                            Image(systemName: "theatermasks")
+                            Text("Demo")
+                        }
                     }
                     .accessibilityLabel("Demo mode, data is invented")
                 }

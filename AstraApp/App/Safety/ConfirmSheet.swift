@@ -70,7 +70,7 @@ final class ConfirmFlowModel {
 
     /// Text entry, a dry run or toggles open the sheet at the large detent.
     var prefersLarge: Bool {
-        intent.confirmPhrase != nil || intent.dryRun != nil || !intent.toggles.isEmpty || intent.affected.count > 3
+        intent.confirmPhrase != nil || intent.dryRun != nil || !intent.toggles.isEmpty || intent.affected.count > 1
     }
 
     var visibleToggles: [ConfirmToggle] {
@@ -87,6 +87,9 @@ final class ConfirmFlowModel {
         case .loaded(let report) where report.blocking: return "The server would refuse this change"
         default: break
         }
+        if case .findings = step, intent.toggles.contains(where: { $0.revealedByConflict && !accepted.contains($0.id) }) {
+            return "Accept the findings to file the plan anyway"
+        }
         if let phrase = intent.confirmPhrase, typedPhrase.trimmingCharacters(in: .whitespaces) != phrase {
             return "Type \(phrase) to confirm"
         }
@@ -94,7 +97,6 @@ final class ConfirmFlowModel {
     }
 
     var primaryTitle: String {
-        if case .findings = step { return "File plan accepting findings" }
         switch intent.tier {
         case .plan: return "File plan"
         case .t4: return "\(intent.verb) \(intent.object.name)"
@@ -197,11 +199,11 @@ struct ConfirmFlowView: View {
     }
 
     /// `-AstraAutoConfirm YES` (demo only) runs the primary action once, so
-    /// after-states can be captured without a tap.
+    /// after-states can be captured without a tap. Toggles stay unchecked, so a
+    /// plan with findings stops on its Findings step.
     private func autoConfirmIfAsked() async {
         guard LaunchOverrides.current.autoConfirm, session.isDemo else { return }
         if let phrase = model.intent.confirmPhrase { model.typedPhrase = phrase }
-        model.accepted = Set(model.intent.toggles.map(\.id))
         await model.submit(runner: runner)
     }
 }
@@ -217,8 +219,12 @@ private struct ConfirmStepView: View {
             Section {
                 Text(intent.consequence)
                     .fixedSize(horizontal: false, vertical: true)
-                Label("Uses scope \(intent.scopes.joined(separator: ", "))", systemImage: "key")
+                Label("\(intent.scopes.count == 1 ? "Uses scope" : "Uses scopes") \(intent.scopes.joined(separator: ", "))", systemImage: "key")
                     .foregroundStyle(.secondary)
+                if intent.affected.count == 1, intent.tier != .plan {
+                    Label("Affects 1 \(intent.affected[0].kind): \(intent.affected[0].name)", systemImage: "scope")
+                        .foregroundStyle(.secondary)
+                }
                 if WriteFlow.requiresAuthentication(intent.tier) {
                     Label("Face ID or your passcode confirms it", systemImage: "faceid")
                         .foregroundStyle(.secondary)
@@ -278,8 +284,8 @@ private struct ConfirmStepView: View {
 
     @ViewBuilder
     private func blastRadius(_ intent: WriteIntent) -> some View {
-        if !intent.affected.isEmpty {
-            Section(intent.tier == .plan ? "Will try" : (intent.affected.count == 1 ? "Affects 1 \(intent.affected[0].kind)" : "Affects \(intent.affected.count)")) {
+        if intent.tier == .plan ? !intent.affected.isEmpty : intent.affected.count > 1 {
+            Section(intent.tier == .plan ? "Will try" : "Affects \(intent.affected.count)") {
                 ForEach(intent.affected) { object in
                     Text(object.name)
                 }
@@ -307,7 +313,11 @@ private struct ConfirmStepView: View {
             }
         case .loaded(let report):
             let groups = Dictionary(grouping: report.lines, by: { $0.group ?? "What would change" })
-            ForEach(groups.keys.sorted(), id: \.self) { group in
+            let order = report.lines.reduce(into: [String]()) { names, line in
+                let name = line.group ?? "What would change"
+                if !names.contains(name) { names.append(name) }
+            }
+            ForEach(order, id: \.self) { group in
                 Section(group) {
                     ForEach(groups[group] ?? [], id: \.self) { line in
                         DetailRow(label: line.label, value: line.value, copyable: false)
@@ -339,6 +349,8 @@ private struct ConfirmStepView: View {
         }
         .padding(.horizontal, Spacing.l)
         .padding(.vertical, Spacing.s)
+        // The pinned action must leave room for the content above it at AX5.
+        .dynamicTypeSize(...DynamicTypeSize.accessibility1)
         .background(Color(uiColor: .systemGroupedBackground))
     }
 
@@ -371,6 +383,7 @@ private struct ConfirmResultView: View {
                     .buttonStyle(.bordered)
                     .padding(.horizontal, Spacing.l)
                     .padding(.vertical, Spacing.s)
+                    .dynamicTypeSize(...DynamicTypeSize.accessibility1)
                     .background(Color(uiColor: .systemGroupedBackground))
                 }
             }

@@ -36,8 +36,6 @@ struct SecretRevealStep: View {
                     Label("Cleared from this iPhone", systemImage: "checkmark.circle")
                         .foregroundStyle(.secondary)
                 }
-            } header: {
-                Text(secret.title)
             } footer: {
                 Text("iOS cannot block screenshots. This value is not stored on this iPhone.")
             }
@@ -71,6 +69,7 @@ struct SecretRevealStep: View {
             .buttonStyle(.bordered)
             .padding(.horizontal, Spacing.l)
             .padding(.vertical, Spacing.s)
+            .dynamicTypeSize(...DynamicTypeSize.accessibility1)
             .background(Color(uiColor: .systemGroupedBackground))
         }
         .background { SceneCaptureObserver(captured: $captured) }

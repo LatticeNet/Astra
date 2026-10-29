@@ -173,36 +173,51 @@ struct DirectoryRow: View {
         }
     }
 
+    @Environment(\.dynamicTypeSize) private var typeSize
+
+    @ViewBuilder
     private func label(trailing: (symbol: String, text: String)?) -> some View {
-        HStack(spacing: Spacing.m) {
-            Label {
-                VStack(alignment: .leading, spacing: Spacing.xxs) {
-                    Text(entry.title)
-                    if let subtitle {
-                        Text(subtitle).textRole(.footnote)
-                    }
-                }
-            } icon: {
-                Image(systemName: entry.symbol)
-                    .foregroundStyle(available ? Color.accentText : .secondary)
+        if typeSize.isAccessibilitySize {
+            // No icons at accessibility sizes: the title gets the full width,
+            // and where the row opens is a line of its own.
+            VStack(alignment: .leading, spacing: Spacing.xxs) {
+                Text(entry.title)
+                if let subtitle { Text(subtitle).textRole(.footnote) }
+                if let trailing { Text(trailing.text).textRole(.footnote) }
             }
-            Spacer(minLength: Spacing.s)
-            if let trailing {
-                ViewThatFits(in: .horizontal) {
-                    HStack(spacing: Spacing.xs) {
-                        Text(trailing.text)
+            .frame(maxWidth: .infinity, minHeight: Spacing.minimumTarget, alignment: .leading)
+            .accessibilityElement(children: .combine)
+        } else {
+            HStack(spacing: Spacing.m) {
+                Label {
+                    VStack(alignment: .leading, spacing: Spacing.xxs) {
+                        Text(entry.title)
+                        if let subtitle {
+                            Text(subtitle).textRole(.footnote)
+                        }
+                    }
+                } icon: {
+                    Image(systemName: entry.symbol)
+                        .foregroundStyle(available ? Color.accentText : .secondary)
+                }
+                Spacer(minLength: Spacing.s)
+                if let trailing {
+                    ViewThatFits(in: .horizontal) {
+                        HStack(spacing: Spacing.xs) {
+                            Text(trailing.text)
+                            Image(systemName: trailing.symbol)
+                        }
                         Image(systemName: trailing.symbol)
                     }
-                    Image(systemName: trailing.symbol)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .accessibilityHidden(true)
                 }
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .accessibilityHidden(true)
             }
+            .frame(minHeight: Spacing.minimumTarget)
+            .accessibilityElement(children: .combine)
+            .accessibilityHint(trailing.map { Text($0.text) } ?? Text(verbatim: ""))
         }
-        .frame(minHeight: Spacing.minimumTarget)
-        .accessibilityElement(children: .combine)
-        .accessibilityHint(trailing.map { Text($0.text) } ?? Text(verbatim: ""))
     }
 }
 

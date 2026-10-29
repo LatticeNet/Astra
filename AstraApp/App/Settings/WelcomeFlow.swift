@@ -71,8 +71,7 @@ private struct WelcomeStepView: View {
         .toolbar {
             ToolbarItem(placement: .bottomBar) {
                 Button("Connect to a server") { path.append(.server) }
-                    .buttonStyle(.glassProminent)
-                    .tint(Color.accentFill)
+                    .prominentAction()
             }
         }
         .toolbar(.hidden, for: .navigationBar)
@@ -121,8 +120,7 @@ private struct ServerStepView: View {
                         Text("Continue")
                     }
                 }
-                .buttonStyle(.glassProminent)
-                .tint(Color.accentFill)
+                .prominentAction()
                 .disabled(address.trimmingCharacters(in: .whitespaces).isEmpty || working)
             }
         }
@@ -207,8 +205,7 @@ private struct CredentialStepView: View {
                             Text("Connect")
                         }
                     }
-                    .buttonStyle(.glassProminent)
-                    .tint(Color.accentFill)
+                    .prominentAction()
                     .disabled(token.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || working)
                 }
             }
@@ -318,8 +315,7 @@ private struct ScopeStepView: View {
         .toolbar {
             ToolbarItem(placement: .bottomBar) {
                 Button("Done") { appState.welcomePresented = false }
-                    .buttonStyle(.glassProminent)
-                    .tint(Color.accentFill)
+                    .prominentAction()
             }
         }
     }

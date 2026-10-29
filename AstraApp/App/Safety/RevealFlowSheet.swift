@@ -138,8 +138,11 @@ private struct RevealFlowContent: View {
     }
 
     private var navigationTitle: String {
-        if case .value = model.step { return pending.intent.title }
-        return "Confirm with your code"
+        switch model.step {
+        case .value: return pending.intent.title
+        case .needsSession: return "Sign in for reveals"
+        default: return "Confirm with your code"
+        }
     }
 
     @ViewBuilder
@@ -218,6 +221,7 @@ private struct RevealFlowContent: View {
             .disabled(model.code.count != 6 || model.isSubmitting)
             .padding(.horizontal, Spacing.l)
             .padding(.vertical, Spacing.s)
+            .dynamicTypeSize(...DynamicTypeSize.accessibility1)
             .background(Color(uiColor: .systemGroupedBackground))
         }
     }

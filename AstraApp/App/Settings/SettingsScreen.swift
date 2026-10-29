@@ -105,8 +105,13 @@ private struct SettingsRow: View {
             ? AnyLayout(VStackLayout(alignment: .leading, spacing: Spacing.xxs))
             : AnyLayout(HStackLayout(spacing: Spacing.m))
         layout {
-            Label(title, systemImage: symbol)
-            if !typeSize.isAccessibilitySize { Spacer(minLength: Spacing.s) }
+            // At accessibility sizes the icon would squeeze the title into hyphenated fragments.
+            if typeSize.isAccessibilitySize {
+                Text(title)
+            } else {
+                Label(title, systemImage: symbol)
+                Spacer(minLength: Spacing.s)
+            }
             if let value {
                 Text(value)
                     .foregroundStyle(.secondary)

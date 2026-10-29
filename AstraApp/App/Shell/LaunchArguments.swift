@@ -8,6 +8,10 @@ struct LaunchOverrides: Sendable {
 
     var demo = false
     var route: URL?
+    /// `-AstraTab browse`: selects a tab root, for the Browse directory,
+    /// which has no deep link of its own.
+    var tab: AppTab?
+    /// One or more comma-separated sheets, opened in order.
     var present: String?
     var auth: DeviceAuthOutcome?
     var autoConfirm = false
@@ -25,6 +29,7 @@ struct LaunchOverrides: Sendable {
         demo = defaults.bool(forKey: "AstraDemo")
         guard demo else { return }
         route = defaults.string(forKey: "AstraRoute").flatMap(URL.init(string:))
+        tab = defaults.string(forKey: "AstraTab").flatMap(AppTab.init(rawValue:))
         present = defaults.string(forKey: "AstraPresent")
         auth = switch defaults.string(forKey: "AstraAuth") {
         case "succeed": .confirmed
@@ -92,11 +97,22 @@ enum LaunchActions {
         }
         // Give the first frame a moment, so links land on a laid-out stack.
         try? await Task.sleep(for: .milliseconds(400))
+        if let tab = overrides.tab {
+            services.appState.selectedTab = tab
+            services.appState.paths[tab] = []
+        }
         if let route = overrides.route {
             services.deepLinks.handle(route)
         }
-        if let present = overrides.present {
-            await self.present(present, services: services)
+        // Several sheets in a row ("settings,confirm:sample.t3") show a gate
+        // started inside a sheet, and the banner above it.
+        for (index, value) in (overrides.present?.split(separator: ",").map(String.init) ?? []).enumerated() {
+            if index > 0 { try? await Task.sleep(for: .milliseconds(900)) }
+            if value.hasPrefix("confirm:") || value.hasPrefix("reveal:") {
+                Task { await self.present(value, services: services) }
+            } else {
+                await self.present(value, services: services)
+            }
         }
     }
 

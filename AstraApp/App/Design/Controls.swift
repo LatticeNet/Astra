@@ -7,14 +7,17 @@ struct AdaptiveSegmentedPicker<Value: Hashable>: View {
     let title: String
     let options: [(value: Value, label: String)]
     @Binding var selection: Value
+    /// The width of the screen or container the control sits in. Without
+    /// it, the control measures itself, which excludes any padding around it.
+    var containerWidth: CGFloat?
 
     @Environment(\.dynamicTypeSize) private var typeSize
-    @State private var width: CGFloat = 400
+    @State private var measured: CGFloat = 400
     @State private var pulse: HapticPulse?
 
     var body: some View {
         Group {
-            if typeSize >= .xxxLarge || width < 390 {
+            if typeSize >= .xxxLarge || (containerWidth ?? measured) < 390 {
                 Picker(title, selection: $selection) {
                     ForEach(options, id: \.value) { option in
                         Text(option.label).tag(option.value)
@@ -32,7 +35,7 @@ struct AdaptiveSegmentedPicker<Value: Hashable>: View {
                 .pickerStyle(.segmented)
             }
         }
-        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
+        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { measured = $0 }
         .onChange(of: selection) { pulse = HapticPulse(event: .selection) }
         .haptics(pulse)
     }
@@ -205,5 +208,18 @@ struct LoadMoreRow<Item: Sendable>: View {
                 .frame(maxWidth: .infinity, minHeight: Spacing.minimumTarget)
                 .task { await loader.loadMore() }
         }
+    }
+}
+
+extension View {
+    /// The one prominent action of a screen in the control layer (section
+    /// 4.11): prominent glass tinted `accent.fill` with a white label, which
+    /// reaches 4.5:1 in every appearance. In dark mode the system would pick
+    /// a dark label for this tint, so the button resolves its label in the
+    /// light appearance, where it is white.
+    func prominentAction() -> some View {
+        buttonStyle(.glassProminent)
+            .tint(Color.accentFill)
+            .environment(\.colorScheme, .light)
     }
 }
