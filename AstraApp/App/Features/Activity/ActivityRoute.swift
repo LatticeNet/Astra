@@ -15,9 +15,10 @@ enum ActivityRoute: Hashable, Codable, Sendable {
 /// `confirm:activity.rerunNode:<task>:<node name>`,
 /// `confirm:activity.rerunFailed:<task>`, `confirm:activity.delete:<task>`,
 /// `reveal:activity.script:<task>` and the sheet `auditVerify`.
-/// The demo token is the Operator preset, which holds no task:run, so the
-/// write hooks show the runner's "Needs task:run" refusal; the reveal runs
-/// on the demo session.
+/// The default demo token is the Operator preset, which holds no task:run,
+/// so the write hooks show the runner's "Needs task:run" refusal; with
+/// `-AstraDemoScenario root-token` they open their confirmation. The reveal
+/// runs on the demo session.
 extension ActivityRoute: DemoHooks {
     static func demoIntent(_ id: String, session: SessionStore) -> WriteIntent? {
         guard session.isDemo, id.hasPrefix("activity.") else { return nil }
