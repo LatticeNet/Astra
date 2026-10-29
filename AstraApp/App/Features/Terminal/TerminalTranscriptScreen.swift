@@ -151,11 +151,26 @@ struct TerminalTranscriptScreen: View {
 
     private var title: String { nodeName }
 
+    /// The state as last read, and the transport while the view is current.
+    /// A stale or offline view says so here, where it stays in sight while
+    /// the list follows the tail.
     private var subtitle: String {
         guard let record else { return "" }
-        let state = TerminalSessionState.of(record)
+        let state = TerminalSessionState.of(record).word.capitalizedFirst
+        let asOf = model.state.loadedAt.map { TimeDisplay.clock($0, mode: mode, locale: locale) }
+        if case .failed(_, let last, _) = model.state, last != nil {
+            return asOf.map { "\(state), stale since \($0)" } ?? "\(state), stale"
+        }
+        if !network.isSatisfied {
+            return asOf.map { "\(state), offline since \($0)" } ?? "\(state), offline"
+        }
         let transport = TerminalTransport.of(record, runtime: nil, now: Date())
-        return transport == .unknown ? state.word.capitalizedFirst : "\(state.word.capitalizedFirst), \(transport.word)"
+        return transport == .unknown ? state : "\(state), \(transport.word)"
+    }
+
+    private var isStale: Bool {
+        if case .failed(_, let last, _) = model.state, last != nil { return true }
+        return false
     }
 
     // MARK: States
@@ -199,13 +214,14 @@ struct TerminalTranscriptScreen: View {
     private func transcript(_ record: TerminalSession) -> some View {
         ScrollViewReader { proxy in
             List {
-                if case .failed(let error, let last, _) = model.state, last != nil {
+                // With lines, the failure shows under the newest line instead.
+                if case .failed(let error, let last, _) = model.state, last != nil, !model.hasLines {
                     ErrorRow(message: "Could not refresh the transcript: \(error.localizedDescription)", retry: refresh)
                 }
                 if find.trimmingCharacters(in: .whitespaces).isEmpty {
                     sessionSection(record)
-                    linesSection
                     nowSection(record)
+                    linesSection
                 } else {
                     matchesSection(proxy: proxy)
                 }
@@ -220,7 +236,13 @@ struct TerminalTranscriptScreen: View {
                 followTail = geometry.contentOffset.y + geometry.containerSize.height >= geometry.contentSize.height - 120
             }
             .onChange(of: model.revision, initial: true) {
-                guard model.hasLines || record.isLive, find.isEmpty else { return }
+                guard model.hasLines, find.isEmpty else { return }
+                // An ended session opens at the top, where its status and end
+                // reason are; Latest output jumps to the end.
+                guard record.isLive else {
+                    if !scrolledOnce { followTail = false }
+                    return
+                }
                 guard !scrolledOnce || followTail else { return }
                 scrolledOnce = true
                 Task {
@@ -307,10 +329,12 @@ struct TerminalTranscriptScreen: View {
     private var linesSection: some View {
         let lines = model.cleaner.lines
         if !lines.isEmpty {
+            let gutter = String(repeating: "0", count: String(lines.last?.id ?? 1).count)
             Section {
                 ForEach(lines) { line in
-                    lineRow(line)
+                    lineRow(line, gutter: gutter)
                 }
+                tailRow
             } header: {
                 HStack {
                     Text("Transcript").accessibilityAddTraits(.isHeader)
@@ -323,16 +347,48 @@ struct TerminalTranscriptScreen: View {
         }
     }
 
+    /// The newest line's freshness, or why the view stopped updating. It is
+    /// the scroll anchor, so following the tail always keeps it in view.
     @ViewBuilder
-    private func lineRow(_ line: TranscriptCleaner.Line) -> some View {
+    private var tailRow: some View {
+        Group {
+            if case .failed(let error, _, let lastAt) = model.state, isStale {
+                let since = lastAt.map { " since \(TimeDisplay.clock($0, mode: mode, locale: locale))" } ?? ""
+                ErrorRow(message: "Stale\(since). Could not refresh the transcript: \(error.localizedDescription)", retry: refresh)
+            } else {
+                FreshnessFooter(state: model.state, interval: cadence.interval(lowPower: power.isLowPower))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.vertical, Spacing.xs)
+            }
+        }
+        .id(Self.bottomID)
+        .listRowSeparator(.hidden)
+    }
+
+    /// A line-number gutter marks where each logical line starts, so a line
+    /// wrapped across rows reads as one line and table columns stay legible.
+    @ViewBuilder
+    private func lineRow(_ line: TranscriptCleaner.Line, gutter: String) -> some View {
         Group {
             switch line.kind {
             case .text:
-                Text(line.text.isEmpty ? " " : line.text)
-                    .textRole(.code)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .textSelection(.enabled)
-                    .accessibilityHidden(line.text.isEmpty)
+                HStack(alignment: .firstTextBaseline, spacing: Spacing.s) {
+                    ZStack(alignment: .trailing) {
+                        Text(verbatim: gutter).hidden()
+                        Text(verbatim: String(line.id))
+                    }
+                    .font(.caption2.monospacedDigit())
+                    .foregroundStyle(.tertiary)
+                    .lineLimit(1)
+                    // Capped so the gutter never crowds out the text it numbers.
+                    .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
+                    .accessibilityHidden(true)
+                    Text(line.text.isEmpty ? " " : line.text)
+                        .textRole(.code)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .textSelection(.enabled)
+                        .accessibilityHidden(line.text.isEmpty)
+                }
             case .fullScreen:
                 Label("Full-screen program output not shown", systemImage: "macwindow")
                     .font(.footnote)
@@ -342,7 +398,7 @@ struct TerminalTranscriptScreen: View {
         }
         .id(line.id)
         .listRowSeparator(.hidden)
-        .listRowInsets(EdgeInsets(top: 1, leading: Spacing.l, bottom: 1, trailing: Spacing.l))
+        .listRowInsets(EdgeInsets(top: 2, leading: Spacing.m, bottom: 2, trailing: Spacing.l))
         .listRowBackground(highlighted == line.id ? Color.accentText.opacity(0.18) : nil)
     }
 
@@ -380,11 +436,13 @@ struct TerminalTranscriptScreen: View {
                 router.select(tab: .activity, scope: "audit", query: auditQuery(record))
             }
             WebLinkRow(path: .terminalSession(id: record.id))
-                .id(Self.bottomID)
         } header: {
             Text(record.isLive ? "Now" : "After it ended").accessibilityAddTraits(.isHeader)
         } footer: {
-            FreshnessFooter(state: model.state, interval: cadence.interval(lowPower: power.isLowPower))
+            // With lines, freshness sits under the newest line instead.
+            if !model.hasLines {
+                FreshnessFooter(state: model.state, interval: cadence.interval(lowPower: power.isLowPower))
+            }
         }
     }
 
