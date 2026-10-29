@@ -307,6 +307,19 @@ private func checkNotifyDeleteImpact() throws {
     try expectEqual(NotifyChannelDeleteImpact.of(target, rules: [rules[2]], channels: channels), NotifyChannelDeleteImpact(lines: [.unrouted], typed: false), "no enabled rule sends to it")
     try expectEqual(NotifyChannelDeleteImpact.of(target, rules: [NotifyRule(id: "r", name: "All", channelIDs: ["ch1"], enabled: true)], channels: channels).lines,
                     [.silenced(rule: "All", events: "*")], "a rule with no event types matches every event")
+
+    // The server clears every fallback that pointed at the deleted channel.
+    let leaning = [
+        NotifyRule(id: "r4", name: "Incidents", channelIDs: ["ch2"], enabled: true, fallbackChannelID: "ch1"),
+        NotifyRule(id: "r5", name: "Paused", channelIDs: ["ch2"], enabled: false, fallbackChannelID: "ch1"),
+    ]
+    let fallbackChannels = channels + [NotifyChannel(id: "ch4", name: "Chat", enabled: true, fallbackChannelID: "ch1")]
+    let lost = NotifyChannelDeleteImpact.of(target, rules: leaning, channels: fallbackChannels)
+    try expectEqual(lost, NotifyChannelDeleteImpact(lines: [.unrouted, .fallbackLost(rule: "Incidents", primary: ["Mail"]), .channelFallbackLost(channel: "Chat")], typed: true),
+                    "an enabled rule losing its fallback is named and asks for the typed name; a disabled one is not")
+    try expectEqual(lost.sentences(channel: "Phone")[1], "Rule Incidents loses its fallback: when Mail fails, nothing takes over.", "the lost fallback sentence")
+    try expectEqual(NotifyChannelDeleteImpact.of(target, rules: [], channels: fallbackChannels).lines, [.noRules, .channelFallbackLost(channel: "Chat")],
+                    "a channel's fallback is lost even when no rule exists")
 }
 
 // MARK: Rules

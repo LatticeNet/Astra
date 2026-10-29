@@ -352,7 +352,9 @@ public enum NotifyChannels {
 /// What deleting a channel stops (`channelDeleteImpact`, design 23 section
 /// 3.8). Once one enabled rule exists only rules deliver, so an enabled rule
 /// whose every other channel is gone or off stops reaching anyone; then the
-/// operator types the channel's name.
+/// operator types the channel's name. The server also clears every rule's
+/// fallback that pointed at the channel, so an enabled rule that loses its
+/// fallback asks for the typed name too; the console's model does not say so.
 public struct NotifyChannelDeleteImpact: Equatable, Sendable {
     public enum Line: Equatable, Sendable {
         case silenced(rule: String, events: String)
@@ -360,6 +362,10 @@ public struct NotifyChannelDeleteImpact: Equatable, Sendable {
         case noRules
         case unrouted
         case rulesUnread
+        /// An enabled rule whose fallback is the channel; `primary` names its other enabled channels.
+        case fallbackLost(rule: String, primary: [String])
+        /// An enabled channel that hands its failed critical messages to this one.
+        case channelFallbackLost(channel: String)
     }
 
     public var lines: [Line]
@@ -371,26 +377,37 @@ public struct NotifyChannelDeleteImpact: Equatable, Sendable {
     }
 
     public static func of(_ target: NotifyChannel, rules: [NotifyRule]?, channels: [NotifyChannel]) -> NotifyChannelDeleteImpact {
-        guard let rules else { return NotifyChannelDeleteImpact(lines: [.rulesUnread], typed: true) }
+        let channelFallbacks: [Line] = channels
+            .filter { $0.enabled && $0.id != target.id && $0.fallbackChannelID == target.id }
+            .sorted { $0.displayName.localizedCompare($1.displayName) == .orderedAscending }
+            .map { .channelFallbackLost(channel: $0.displayName) }
+        guard let rules else { return NotifyChannelDeleteImpact(lines: [.rulesUnread] + channelFallbacks, typed: true) }
         let enabled = rules.filter(\.enabled)
-        if enabled.isEmpty { return NotifyChannelDeleteImpact(lines: target.enabled ? [.noRules] : [], typed: false) }
+        if enabled.isEmpty { return NotifyChannelDeleteImpact(lines: (target.enabled ? [.noRules] : []) + channelFallbacks, typed: false) }
         var silenced: [Line] = []
         var kept: [Line] = []
+        var fallbacks: [Line] = []
         for rule in enabled.sorted(by: { $0.displayName.localizedCompare($1.displayName) == .orderedAscending }) {
-            guard rule.channelIDs.contains(target.id) else { continue }
             let others = rule.channelIDs
                 .filter { $0 != target.id }
                 .compactMap { id in channels.first { $0.id == id && $0.enabled } }
                 .map(\.displayName)
-            let events = (rule.eventTypes.isEmpty ? ["*"] : rule.eventTypes).joined(separator: ", ")
-            if others.isEmpty {
-                silenced.append(.silenced(rule: rule.displayName, events: events))
-            } else {
+            if rule.channelIDs.contains(target.id) {
+                let events = (rule.eventTypes.isEmpty ? ["*"] : rule.eventTypes).joined(separator: ", ")
+                if others.isEmpty {
+                    // It reaches no one at all, which already says more than a lost fallback.
+                    silenced.append(.silenced(rule: rule.displayName, events: events))
+                    continue
+                }
                 kept.append(.kept(rule: rule.displayName, others: others))
             }
+            if rule.fallbackChannelID == target.id, !others.isEmpty {
+                fallbacks.append(.fallbackLost(rule: rule.displayName, primary: others))
+            }
         }
-        if silenced.isEmpty && kept.isEmpty { return NotifyChannelDeleteImpact(lines: [.unrouted], typed: false) }
-        return NotifyChannelDeleteImpact(lines: silenced + kept, typed: !silenced.isEmpty)
+        let routed = silenced + kept
+        return NotifyChannelDeleteImpact(lines: (routed.isEmpty ? [.unrouted] : routed) + fallbacks + channelFallbacks,
+                                         typed: !silenced.isEmpty || !fallbacks.isEmpty)
     }
 
     /// One sentence per line, for the ConfirmSheet.
@@ -402,6 +419,8 @@ public struct NotifyChannelDeleteImpact: Equatable, Sendable {
             case .noRules: "No rule is enabled, so every channel gets every event; \(channel) simply stops receiving them."
             case .unrouted: "No enabled rule sends to \(channel)."
             case .rulesUnread: "The rules could not be read, so what stops is unknown."
+            case .fallbackLost(let rule, let primary): "Rule \(rule) loses its fallback: when \(primary.joined(separator: " or ")) fails, nothing takes over."
+            case .channelFallbackLost(let other): "\(other) loses its fallback: critical messages it fails to send go nowhere else."
             }
         }
     }
