@@ -13,6 +13,8 @@ struct ApprovalReviewSheet: View {
     @State private var position = ScrollPosition()
     @State private var planTop: CGFloat = 0
     @State private var contentOffset: CGFloat = 0
+    @FocusState private var noteFocused: Bool
+    @AccessibilityFocusState private var noteAccessibilityFocused: Bool
 
     @Environment(SessionStore.self) private var session
     @Environment(ActionRunner.self) private var runner
@@ -35,16 +37,26 @@ struct ApprovalReviewSheet: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: Spacing.xl) {
-                    content
+            ScrollViewReader { proxy in
+                ScrollView {
+                    VStack(alignment: .leading, spacing: Spacing.xl) {
+                        content
+                    }
+                    .padding(.horizontal, Spacing.l)
+                    .padding(.vertical, Spacing.m)
+                    .coordinateSpace(.named(Self.contentSpace))
                 }
-                .padding(.horizontal, Spacing.l)
-                .padding(.vertical, Spacing.m)
-                .coordinateSpace(.named(Self.contentSpace))
+                .scrollPosition($position)
+                .onScrollGeometryChange(for: CGFloat.self) { $0.contentOffset.y } action: { _, offset in contentOffset = offset }
+                .onChange(of: model.dismissing) { _, dismissing in
+                    // The note field appears where the operator is looking,
+                    // with the keyboard and VoiceOver focus on it.
+                    guard dismissing else { return }
+                    withAnimation { proxy.scrollTo(Self.dismissCardID, anchor: .center) }
+                    noteFocused = true
+                    noteAccessibilityFocused = true
+                }
             }
-            .scrollPosition($position)
-            .onScrollGeometryChange(for: CGFloat.self) { $0.contentOffset.y } action: { _, offset in contentOffset = offset }
             .background(Color(uiColor: .systemGroupedBackground))
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 if let approval = model.approval, model.load == .loaded, heightClass != .compact {
@@ -71,6 +83,7 @@ struct ApprovalReviewSheet: View {
     }
 
     private nonisolated static let contentSpace = "review.content"
+    private nonisolated static let dismissCardID = "review.dismiss"
 
     // MARK: Content
 
@@ -136,7 +149,7 @@ struct ApprovalReviewSheet: View {
         if heightClass == .compact {
             DecisionPanel(applyAfterApproval: $model.applyAfterApproval, controls: controls(approval), inline: true, approve: approve, reject: reject)
         }
-        InboxReviewHeader(approval: approval, nodeName: nodeName(approval), openNode: openNode)
+        InboxReviewHeader(approval: approval, nodeName: nodeName(approval), openNode: openNode, disabled: model.inFlight)
         if approval.isSSHGuardConfirm {
             InboxCard {
                 VStack(alignment: .leading, spacing: Spacing.s) {
@@ -182,15 +195,17 @@ struct ApprovalReviewSheet: View {
         if let notice = model.notice {
             InboxResultCard(text: notice, tone: .warn)
         }
-        planCard(approval)
-        if let waiting = approval.waiting {
-            InboxWaitingCard(waiting: waiting, open: { model.retarget($0) })
+        // A stale row's ways forward sit above the plan, where Review opens.
+        if approval.isStale, ApprovalsDecisionGate.canReplan(approval) || ApprovalsDecisionGate.canDismiss(approval) {
+            staleCard(approval)
         }
         if model.dismissing {
             dismissCard(approval)
+                .id(Self.dismissCardID)
         }
-        if ApprovalsDecisionGate.canReplan(approval) {
-            replanCard(approval)
+        planCard(approval)
+        if let waiting = approval.waiting {
+            InboxWaitingCard(waiting: waiting, open: { model.retarget($0) }, disabled: model.inFlight)
         }
     }
 
@@ -246,6 +261,8 @@ struct ApprovalReviewSheet: View {
                 TextField("Why it is dismissed", text: $model.note, axis: .vertical)
                     .textFieldStyle(.roundedBorder)
                     .lineLimit(1...4)
+                    .focused($noteFocused)
+                    .accessibilityFocused($noteAccessibilityFocused)
                 ViewThatFits(in: .horizontal) {
                     HStack { dismissButtons(approval) }
                     VStack(alignment: .leading) { dismissButtons(approval) }
@@ -267,21 +284,38 @@ struct ApprovalReviewSheet: View {
             .frame(minHeight: Spacing.minimumTarget)
     }
 
-    private func replanCard(_ approval: Approval) -> some View {
-        let missing = session.missing(ScopeRequirement("node:admin", "network:plan")) ?? []
-        return InboxCard(title: "Plan again") {
+    /// The two exits of a stale row: plan again (P tier) and dismiss (D tier).
+    private func staleCard(_ approval: Approval) -> some View {
+        let replanMissing = session.missing(ScopeRequirement("node:admin", "network:plan")) ?? []
+        let dismissMissing = ApprovalsDecisionGate.missingScopes(approval, scopes: session.tokenScopes)
+        let canReplan = ApprovalsDecisionGate.canReplan(approval)
+        let canDismiss = ApprovalsDecisionGate.canDismiss(approval)
+        return InboxCard(title: "Stale") {
             VStack(alignment: .leading, spacing: Spacing.s) {
-                Text("This plan is stale: what it would change is no longer what the node runs. File a new plan to review instead.")
+                Text(canReplan
+                     ? "What this plan would change is no longer what the node runs, so it cannot be approved. File a new plan to review, or dismiss this one."
+                     : "This plan can no longer be approved. Dismiss it to retire it.")
                     .textRole(.footnote)
                     .fixedSize(horizontal: false, vertical: true)
-                Button("Plan the agent update again", systemImage: "arrow.triangle.2.circlepath") {
-                    Task { await replan(approval) }
+                if canReplan {
+                    Button("Plan the agent update again", systemImage: "arrow.triangle.2.circlepath") {
+                        Task { await replan(approval) }
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(!replanMissing.isEmpty || model.inFlight || runner.isBusy || !network.isSatisfied)
+                    .frame(minHeight: Spacing.minimumTarget)
+                    if !replanMissing.isEmpty {
+                        Text("Planning again needs \(replanMissing.joined(separator: ", "))").textRole(.footnote)
+                    }
                 }
-                .buttonStyle(.bordered)
-                .disabled(!missing.isEmpty || model.inFlight || runner.isBusy)
-                .frame(minHeight: Spacing.minimumTarget)
-                if !missing.isEmpty {
-                    Text("Needs \(missing.joined(separator: ", "))").textRole(.footnote)
+                if canDismiss, !model.dismissing {
+                    Button("Dismiss this plan", systemImage: "archivebox", role: .destructive) { model.dismissing = true }
+                        .buttonStyle(.bordered)
+                        .disabled(!dismissMissing.isEmpty || model.inFlight)
+                        .frame(minHeight: Spacing.minimumTarget)
+                    if !dismissMissing.isEmpty {
+                        Text("Dismissing needs \(dismissMissing.joined(separator: ", "))").textRole(.footnote)
+                    }
                 }
             }
         }
@@ -679,6 +713,8 @@ struct InboxReviewHeader: View {
     let approval: Approval
     let nodeName: String
     let openNode: (String) -> Void
+    /// A decision is in flight: the sheet stays put (section 6.1, step 13).
+    var disabled = false
     @Environment(\.timeZoneMode) private var mode
     @Environment(\.locale) private var locale
 
@@ -730,9 +766,10 @@ struct InboxReviewHeader: View {
                             .frame(minHeight: Spacing.minimumTarget)
                         }
                         .tint(.primary)
+                        .disabled(disabled)
                         .accessibilityHint("Closes the review and opens the node in Fleet")
                     }
-                    DetailRow(label: "Filed by", value: approval.actorID == ApprovalEvents.systemWriter ? "filed by Lattice" : (approval.actorID.isEmpty ? "filed by agent" : approval.actorID), copyable: false)
+                    DetailRow(label: "Filed by", value: approval.actorID == ApprovalEvents.systemWriter ? "Lattice" : (approval.actorID.isEmpty ? "agent" : approval.actorID), copyable: false)
                     if let created = approval.createdAt {
                         DetailRow(label: "Filed", value: RelativeDateFormatter.string(from: created), secondary: TimeDisplay.dateTime(created, mode: mode, locale: locale), copyable: false)
                     }
@@ -759,6 +796,7 @@ struct InboxReviewHeader: View {
 struct InboxWaitingCard: View {
     let waiting: ApprovalWaiting
     let open: (String) -> Void
+    var disabled = false
     @Environment(\.timeZoneMode) private var mode
     @Environment(\.locale) private var locale
 
@@ -790,6 +828,7 @@ struct InboxWaitingCard: View {
                     } label: {
                         Label("Open the newer plan, \(waiting.supersededBy)", systemImage: "arrow.uturn.right.circle")
                     }
+                    .disabled(disabled)
                     .frame(minHeight: Spacing.minimumTarget)
                 }
             }
