@@ -293,7 +293,13 @@ final class SessionStore {
             serverVersion = (try? await client.fetchServerVersion()) ?? serverVersion
         }
         if let revealClient {
-            sessionIdentity = try? await revealClient.fetchIdentity()
+            // A failed read keeps the last identity, so a passing network
+            // error does not read as signed out; only a 401 clears it.
+            do {
+                sessionIdentity = try await revealClient.fetchIdentity()
+            } catch {
+                if case .unauthorized = LatticeAPIError(error) { sessionIdentity = nil }
+            }
         }
     }
 
