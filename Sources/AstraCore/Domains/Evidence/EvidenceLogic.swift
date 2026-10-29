@@ -622,6 +622,41 @@ public enum EvidenceLogs {
         page.lines.reversed()
     }
 
+    /// How many older pages one refresh reads to join the newest page to the
+    /// lines already shown before it gives up and starts over from the newest.
+    public static let gapFillPages = 4
+
+    /// What a refresh did to the lines shown.
+    public enum Merge: Equatable, Sendable {
+        case unchanged
+        /// New lines went below the ones shown.
+        case appended(Int)
+        /// The lines were replaced: a new question, or too many lines arrived to join up.
+        case replaced
+    }
+
+    /// Whether newest-first pages read back to `cursor` (their oldest chunk;
+    /// nil when they reached the start) join the lines shown. Pages hold whole
+    /// chunks, so they cover every chunk from `cursor` up, and they join when
+    /// no chunk can sit between the newest line shown and `cursor`.
+    public static func joins(cursor: UInt64?, shown: [LogLine]) -> Bool {
+        guard let cursor, let newest = shown.last?.seq else { return true }
+        return cursor <= newest + 1
+    }
+
+    /// The lines after a refresh. `newest` is oldest first and was read back
+    /// to `cursor`; `olderCursor` is where "Load older" stood before. When the
+    /// pages do not join the lines shown, the shown lines are dropped rather
+    /// than kept beside a hole nothing could fill.
+    public static func mergingNewest(_ shown: [LogLine], newest: [LogLine], cursor: UInt64?, olderCursor: UInt64?) -> (lines: [LogLine], nextBeforeSeq: UInt64?, merge: Merge) {
+        guard !shown.isEmpty, joins(cursor: cursor, shown: shown) else { return (newest, cursor, .replaced) }
+        // The pages replace every chunk they cover; a page that reached the start covers them all.
+        let kept = shown.filter { $0.seq < (cursor ?? 0) }
+        let have = Set(shown.map(\.id))
+        let added = newest.filter { !have.contains($0.id) }.count
+        return (kept + newest, cursor == nil ? nil : olderCursor, added > 0 ? .appended(added) : .unchanged)
+    }
+
     /// An older page goes above the lines shown, once each.
     public static func prependingOlder(_ shown: [LogLine], page: LogQueryResponse) -> [LogLine] {
         let have = Set(shown.map(\.id))

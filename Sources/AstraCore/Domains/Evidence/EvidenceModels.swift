@@ -59,10 +59,15 @@ public struct LogLine: Identifiable, Codable, Equatable, Hashable, Sendable {
     public var at: Date?
     public var line: String
     public var truncated: Bool
-    /// The agent's byte offset after this line in the source file.
+    /// The agent's byte offset after this line in the source file. The
+    /// server's own producers leave it 0, so it never identifies a line.
     public var offset: UInt64 = 0
+    /// The line's place in its chunk, oldest first. Every line of one ingest
+    /// batch shares a `seq`, and the server always returns whole chunks, so
+    /// this ordinal is stable for a given source and search.
+    public var ordinal = 0
 
-    public init(sourceID: String, nodeID: String = "", path: String = "", seq: UInt64 = 0, at: Date? = nil, line: String = "", truncated: Bool = false) {
+    public init(sourceID: String, nodeID: String = "", path: String = "", seq: UInt64 = 0, at: Date? = nil, line: String = "", truncated: Bool = false, ordinal: Int = 0) {
         self.sourceID = sourceID
         self.nodeID = nodeID
         self.path = path
@@ -70,10 +75,10 @@ public struct LogLine: Identifiable, Codable, Equatable, Hashable, Sendable {
         self.at = at
         self.line = line
         self.truncated = truncated
+        self.ordinal = ordinal
     }
 
-    /// One chunk (one `seq`) holds several lines, so the offset tells them apart.
-    public var id: String { "\(sourceID).\(seq).\(offset)" }
+    public var id: String { "\(sourceID).\(seq).\(ordinal)" }
 
     enum CodingKeys: String, CodingKey {
         case sourceID = "source_id"
@@ -103,7 +108,7 @@ public struct LogQueryResponse: Decodable, Sendable {
     public var nextBeforeSeq: UInt64?
 
     public init(lines: [LogLine] = [], truncated: Bool = false, nextBeforeSeq: UInt64? = nil) {
-        self.lines = lines
+        self.lines = Self.numbered(lines)
         self.truncated = truncated
         self.nextBeforeSeq = nextBeforeSeq
     }
@@ -115,9 +120,22 @@ public struct LogQueryResponse: Decodable, Sendable {
 
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        lines = try container.decodeIfPresent([LogLine].self, forKey: .lines) ?? []
+        lines = Self.numbered(try container.decodeIfPresent([LogLine].self, forKey: .lines) ?? [])
         truncated = try container.decodeIfPresent(Bool.self, forKey: .truncated) ?? false
         nextBeforeSeq = try container.decodeIfPresent(UInt64.self, forKey: .nextBeforeSeq)
+    }
+
+    /// Numbers the lines of each chunk from its oldest. The page is newest
+    /// first, so a chunk's lines arrive newest first too.
+    static func numbered(_ lines: [LogLine]) -> [LogLine] {
+        var counts: [UInt64: Int] = [:]
+        var out = lines
+        for index in out.indices.reversed() {
+            let seq = out[index].seq
+            out[index].ordinal = counts[seq, default: 0]
+            counts[seq, default: 0] += 1
+        }
+        return out
     }
 }
 

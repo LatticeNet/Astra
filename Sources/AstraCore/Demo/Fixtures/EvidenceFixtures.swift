@@ -582,14 +582,15 @@ public enum EvidenceFixtures {
         ])
     }
 
-    /// Lines held for a source, oldest first: (seq, offset, seconds ago, text). Eight lines per chunk.
+    /// Lines held for a source, oldest first: (seq, offset, seconds ago, text).
+    /// Eight lines share each chunk's seq and the offset is 0, as the server sends them.
     static func logLines(_ source: Source) -> [(seq: Int, offset: Int, age: Int, text: String)] {
         let count = min(source.lines, 420)
         let baseAge = source.lastIngest == "-3d" ? 259_200 : source.lastIngest == "-3h" ? 10_800 : 4
         return (0..<count).map { index in
             let fromNewest = count - 1 - index
             let age = baseAge + fromNewest * 9
-            return (index / 8 + 1, (index + 1) * 180, age, logText(source.kind, index: index))
+            return (index / 8 + 1, 0, age, logText(source.kind, index: index))
         }
     }
 

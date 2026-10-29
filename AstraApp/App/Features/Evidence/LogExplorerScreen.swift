@@ -14,8 +14,9 @@ final class EvidenceLogModel {
     private(set) var skippedChunks = false
     /// The source and server search the lines answer.
     private(set) var question: (sourceID: String, search: String)?
-    /// Bumped when the newest page replaced the lines, so the view scrolls to the bottom.
+    /// Bumped when a refresh changed the lines; `lastMerge` says how.
     private(set) var newestRevision = 0
+    private(set) var lastMerge: EvidenceLogs.Merge = .unchanged
 
     @discardableResult
     func refresh(session: SessionStore, sourceID: String, search: String) async -> Bool {
@@ -30,23 +31,33 @@ final class EvidenceLogModel {
             state = state.reloading
         }
         question = (sourceID, search)
+        func current() -> Bool { question?.sourceID == sourceID && question?.search == search }
         do {
             let page = try await client.queryLogs(sourceID: sourceID, search: search, limit: EvidenceLogs.pageSize)
-            guard question?.sourceID == sourceID, question?.search == search else { return true }
-            let newest = EvidenceLogs.chronological(page)
-            if changed || lines.isEmpty {
-                lines = newest
-                nextBeforeSeq = page.nextBeforeSeq
-                newestRevision += 1
-            } else {
-                // Keep the older pages already read; replace the newest one.
-                let fresh = Set(newest.map(\.id))
-                let floor = newest.first?.seq ?? .max
-                let grew = newest.last?.id != lines.last?.id
-                lines = lines.filter { !fresh.contains($0.id) && $0.seq < floor } + newest
-                if grew { newestRevision += 1 }
+            guard current() else { return true }
+            var newest = EvidenceLogs.chronological(page)
+            var cursor = page.nextBeforeSeq
+            var truncated = page.truncated
+            // More than a page may have arrived since the last read: page back
+            // until the new lines meet the ones shown, so no chunk goes missing.
+            var fills = 0
+            while !lines.isEmpty, !EvidenceLogs.joins(cursor: cursor, shown: lines), fills < EvidenceLogs.gapFillPages, let before = cursor {
+                let older = try await client.queryLogs(sourceID: sourceID, search: search, limit: EvidenceLogs.pageSize, beforeSeq: before)
+                guard current() else { return true }
+                newest = EvidenceLogs.chronological(older) + newest
+                cursor = older.nextBeforeSeq
+                truncated = truncated || older.truncated
+                fills += 1
             }
-            skippedChunks = page.truncated
+            let merged = EvidenceLogs.mergingNewest(lines, newest: newest, cursor: cursor, olderCursor: nextBeforeSeq)
+            lines = merged.lines
+            nextBeforeSeq = merged.nextBeforeSeq
+            if merged.merge == .replaced { olderError = nil }
+            if merged.merge != .unchanged {
+                lastMerge = merged.merge
+                newestRevision += 1
+            }
+            skippedChunks = truncated
             state = .loaded(true, at: Date())
             return true
         } catch {

@@ -335,6 +335,36 @@ private func checkEvidenceLogs() throws {
     try expectEqual(EvidenceLogs.step(matches, from: matches[1], forward: true), matches[0], "find wraps forward")
     try expectEqual(EvidenceLogs.step(matches, from: nil, forward: false), matches[1], "find starts from the bottom going back")
     try expect(EvidenceLogs.matches(shown, find: "  ").isEmpty, "a blank find matches nothing")
+
+    // The server gives every line of a batch one seq and offset 0.
+    let chunk = try JSONDecoder().decode(LogQueryResponse.self, from: json(#"""
+    {"lines":[{"source_id":"s","seq":7,"offset":0,"line":"c error"},{"source_id":"s","seq":7,"offset":0,"line":"b error"},
+              {"source_id":"s","seq":7,"offset":0,"line":"a error"},{"source_id":"s","seq":6,"offset":0,"line":"z error"}],"next_before_seq":6}
+    """#))
+    let chunkLines = EvidenceLogs.chronological(chunk)
+    try expectEqual(chunkLines.map(\.line), ["z error", "a error", "b error", "c error"], "a chunk reads oldest first")
+    try expectEqual(Set(chunkLines.map(\.id)).count, 4, "lines of one chunk get distinct ids")
+    try expectEqual(chunkLines.map(\.id), ["s.6.0", "s.7.0", "s.7.1", "s.7.2"], "ids number a chunk from its oldest line")
+    let chunkMatches = EvidenceLogs.matches(chunkLines, find: "error")
+    var walked: [String] = []
+    var at: String?
+    for _ in 0..<4 { at = EvidenceLogs.step(chunkMatches, from: at, forward: true); walked.append(at ?? "") }
+    try expectEqual(walked, chunkMatches, "find steps across every line of a chunk")
+
+    // A refresh that joins keeps the older pages; one that does not starts over.
+    func page(_ seqs: [UInt64], next: UInt64?) -> LogQueryResponse {
+        LogQueryResponse(lines: seqs.sorted(by: >).flatMap { seq in (0..<2).map { _ in LogLine(sourceID: "s", seq: seq, line: "\(seq)") } }, nextBeforeSeq: next)
+    }
+    let held = EvidenceLogs.chronological(page([10, 11, 12], next: 10))
+    try expect(EvidenceLogs.joins(cursor: 13, shown: held) && EvidenceLogs.joins(cursor: 12, shown: held) && EvidenceLogs.joins(cursor: nil, shown: held), "pages reaching the newest chunk shown join")
+    try expect(!EvidenceLogs.joins(cursor: 14, shown: held), "a chunk between the pages and the lines is a gap")
+    let joined = EvidenceLogs.mergingNewest(held, newest: EvidenceLogs.chronological(page([12, 13, 14], next: 12)), cursor: 12, olderCursor: 9)
+    try expectEqual(joined.lines.map(\.seq), [10, 10, 11, 11, 12, 12, 13, 13, 14, 14], "joined pages replace the chunks they cover, once each")
+    try expect(joined.nextBeforeSeq == 9 && joined.merge == .appended(4), "Load older keeps its place and the new lines are counted")
+    let same = EvidenceLogs.mergingNewest(held, newest: EvidenceLogs.chronological(page([11, 12], next: 11)), cursor: 11, olderCursor: 9)
+    try expect(same.merge == .unchanged && same.lines == held, "a poll with nothing new changes nothing")
+    let gap = EvidenceLogs.mergingNewest(held, newest: EvidenceLogs.chronological(page([20, 21], next: 20)), cursor: 20, olderCursor: 9)
+    try expect(gap.merge == .replaced && gap.lines.map(\.seq) == [20, 20, 21, 21] && gap.nextBeforeSeq == 20, "a gap no page filled starts over from the newest, never shows a hole")
 }
 
 private func checkEvidenceBudget() throws {
