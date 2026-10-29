@@ -70,6 +70,7 @@ struct IncidentsScreen: View {
             }
         }
         .monitoringSnoozeDialog($snoozeTarget)
+        .onChange(of: snoozeTarget == nil) { _, closed in stable.setBusy(!closed) }
         .onAppear {
             consumeQuery()
             offer(force: true)
@@ -118,7 +119,7 @@ struct IncidentsScreen: View {
                 FilterStateRow(text: "Showing incidents matching \(query)") { query = "" }
             }
             if let queryError { Section { MonitoringQueryErrorRow(message: queryError) } }
-            if stable.held != nil {
+            if stable.held != nil, voiceOver {
                 Section { PendingUpdatesRow(count: stable.pendingCount) { stable.showHeld() } }
             }
             Section {

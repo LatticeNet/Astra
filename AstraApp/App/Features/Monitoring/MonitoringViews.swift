@@ -354,6 +354,10 @@ final class MonitoringStableList<Row: Identifiable & Sendable> where Row.ID: Sen
     private(set) var held: [Row]?
     @ObservationIgnored private var lastActivity = Date.distantPast
     @ObservationIgnored private var hasShown = false
+    /// A dialog over the list (snooze) holds updates as scrolling does.
+    @ObservationIgnored private var busy = false
+    @ObservationIgnored private var voiceOver = false
+    @ObservationIgnored private var release: Task<Void, Never>?
 
     /// The number of rows that would change if the held update were shown.
     var pendingCount: Int {
@@ -366,13 +370,34 @@ final class MonitoringStableList<Row: Identifiable & Sendable> where Row.ID: Sen
 
     func noteActivity() {
         lastActivity = Date()
+        scheduleRelease()
+    }
+
+    /// Holds updates while a dialog is up; closing it lets a held update in
+    /// once the list has been still for two seconds.
+    func setBusy(_ value: Bool) {
+        busy = value
+        if !value { lastActivity = Date(); scheduleRelease() }
+    }
+
+    /// A sighted user's held update applies on its own after two idle
+    /// seconds; under VoiceOver it waits for the Show row.
+    private func scheduleRelease() {
+        release?.cancel()
+        guard held != nil, !voiceOver else { return }
+        release = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(2.1))
+            guard !Task.isCancelled, let self, !self.busy, Date().timeIntervalSince(self.lastActivity) > 2 else { return }
+            self.showHeld()
+        }
     }
 
     /// Applies `rows` now when only values changed, or the list is idle;
     /// otherwise holds them. `force` is pull to refresh.
     func offer(_ rows: [Row], voiceOver: Bool, force: Bool = false) {
         let sameOrder = rows.map(\.id) == shown.map(\.id)
-        let idle = Date().timeIntervalSince(lastActivity) > 2
+        self.voiceOver = voiceOver
+        let idle = Date().timeIntervalSince(lastActivity) > 2 && !busy
         if !hasShown || shown.isEmpty || force || sameOrder || (idle && !voiceOver) {
             shown = rows
             held = nil
@@ -382,6 +407,7 @@ final class MonitoringStableList<Row: Identifiable & Sendable> where Row.ID: Sen
             let fresh = Dictionary(rows.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
             shown = shown.map { fresh[$0.id] ?? $0 }
             held = rows
+            scheduleRelease()
         }
     }
 

@@ -82,7 +82,7 @@ struct ChecksScreen: View {
                 FilterStateRow(text: "Showing checks matching \(query)") { query = "" }
             }
             if let queryError { Section { MonitoringQueryErrorRow(message: queryError) } }
-            if stable.held != nil {
+            if stable.held != nil, voiceOver {
                 Section {
                     PendingUpdatesRow(count: stable.pendingCount) { stable.showHeld() }
                 }
