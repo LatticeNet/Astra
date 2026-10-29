@@ -5,6 +5,14 @@ struct SettingsDestination: View {
     let route: SettingsRoute
 
     var body: some View {
+        // Stated here rather than inherited from the inline root: a deep link
+        // opens the sheet with its path already set, the root is never laid
+        // out, and an inherited large title then overlaps the first section.
+        content.navigationBarTitleDisplayMode(.inline)
+    }
+
+    @ViewBuilder
+    private var content: some View {
         switch route {
         case .page(let page):
             switch page {
