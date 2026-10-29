@@ -50,6 +50,22 @@ final class NetworkingStore {
         blocked(NetworkingIntents.measureScopes) ?? (isConfined ? "Needs a token without a node allowlist" : nil)
     }
 
+    /// Every node an enabled outbound policy covers, named, for Plan all.
+    func coveredNodes(name: (String) -> String) -> [ObjectRef] {
+        let ids = Set((groupPolicies.value ?? []).filter(\.enabled).flatMap(\.targetNodeIDs))
+        return ids.map { ObjectRef(kind: "node", id: $0, name: name($0)) }.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+    }
+
+    /// handleGroupPolicyPlan checks netpolicy:admin on every node any enabled
+    /// policy covers across the whole fleet, including nodes a confined token
+    /// cannot see, so a node allowlist is refused as measuring is.
+    func planAllBlocked(covered: [ObjectRef]) -> String? {
+        if let blocked = blocked([NetworkingIntents.policyAdmin]) { return blocked }
+        if isConfined { return "Needs a token without a node allowlist" }
+        if groupPolicies.value == nil { return "Loading outbound policies" }
+        return covered.isEmpty ? "No enabled policy covers a node" : nil
+    }
+
     private func missing(_ scope: String) -> String? {
         guard let missing = session.missing(ScopeRequirement(scope)), !missing.isEmpty else { return nil }
         return missing.joined(separator: " and ")

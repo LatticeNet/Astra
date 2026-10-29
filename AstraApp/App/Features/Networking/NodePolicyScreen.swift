@@ -31,8 +31,10 @@ struct NodePolicyScreen: View {
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 NetworkingMoreMenu(link: nil, web: web) {
-                    if let doc {
+                    if let doc, !doc.groupDerived {
                         NetworkingGatedButton(title: "Plan this node", systemImage: "doc.badge.gearshape", blocked: planBlocked(doc)) { plan() }
+                    } else if store.groupPolicies.value != nil, doc != nil || !covering.isEmpty {
+                        NetworkingGatedButton(title: "Plan all outbound policies", systemImage: "doc.badge.gearshape", blocked: planAllBlocked) { planAll() }
                     }
                     Button("Open node", systemImage: "server.rack") { router.push(.fleet(.node(id: nodeID))) }
                     Button("Inbound firewall", systemImage: "shield.lefthalf.filled") { router.push(.networking(.inboundFirewall(nodeID: nodeID))) }
@@ -63,12 +65,19 @@ struct NodePolicyScreen: View {
         nodes.nodes[id]?.displayName ?? store.groupNames[id] ?? id
     }
 
+    /// The enabled outbound policies whose targets include this node, in merge order.
+    private var covering: [NetworkingGroupPolicy] {
+        (store.groupPolicies.value ?? []).filter { $0.enabled && $0.targetNodeIDs.contains(nodeID) }
+            .sorted { ($0.priority, $0.displayName) < ($1.priority, $1.displayName) }
+    }
+
     @ViewBuilder
     private func content(_ doc: NetPolicy?) -> some View {
         List {
             Section {
                 NetworkingRefreshError(state: store.netPolicies, noun: "the node's policy") { Task { await store.refreshPolicies() } }
-                let row = NetworkingNodePolicyRow(nodeID: nodeID, nodeName: nodeName, policy: doc)
+                NetworkingDependencyRow(state: store.groupPolicies, noun: "outbound policies") { Task { await store.refreshPolicies() } }
+                let row = NetworkingNodePolicyRow(nodeID: nodeID, nodeName: nodeName, policy: doc, coveredBy: covering.map(\.displayName))
                 StatusRow(style: .networkingNodePolicy(row), title: nodeName,
                           detail: doc == nil ? "egress not filtered" : row.kind.word,
                           reason: doc.flatMap { $0.lastError.isEmpty ? nil : $0.lastError })
@@ -79,11 +88,7 @@ struct NodePolicyScreen: View {
                 builtFrom(doc)
                 actions(doc)
             } else {
-                Section {
-                    Text("No outbound policy reaches \(nodeName) and it has no policy of its own, so nothing filters its egress.")
-                        .frame(minHeight: Spacing.minimumTarget, alignment: .leading)
-                    WebLinkRow(title: "Write a policy on web", path: LatticeConsolePath(path: "/network/outbound"))
-                }
+                noDocument
             }
             Section {
                 NetworkingNodeLink(nodeID: nodeID)
@@ -97,6 +102,39 @@ struct NodePolicyScreen: View {
             }
         }
         .listStyle(.insetGrouped)
+    }
+
+    /// No document: covered and not planned yet, not covered, or unknown
+    /// while the outbound policies have not loaded.
+    @ViewBuilder
+    private var noDocument: some View {
+        if store.groupPolicies.value == nil {
+            Section {
+                Text("\(nodeName) has no document, so nothing filters its egress. Whether an outbound policy covers it is not known until the outbound policies load.")
+                    .frame(minHeight: Spacing.minimumTarget, alignment: .leading)
+            }
+        } else if covering.isEmpty {
+            Section {
+                Text("No outbound policy reaches \(nodeName) and it has no policy of its own, so nothing filters its egress.")
+                    .frame(minHeight: Spacing.minimumTarget, alignment: .leading)
+                WebLinkRow(title: "Write a policy on web", path: LatticeConsolePath(path: "/network/outbound"))
+            }
+        } else {
+            Section {
+                ForEach(covering) { policy in
+                    NavigationLink(value: AppRoute.networking(.policy(id: policy.id))) {
+                        StatusRow(style: StatusStyle(word: "priority \(policy.priority)", symbol: "arrow.up.forward.circle", tone: .quiet),
+                                  title: policy.displayName, detail: NetworkingText.plural(policy.rules.count, "rule"))
+                    }
+                }
+                NetworkingActionRow(title: "Plan all outbound policies", systemImage: "doc.badge.gearshape",
+                                    detail: "Files one plan per covered node for approval", blocked: planAllBlocked) { planAll() }
+            } header: {
+                Text("Covered by")
+            } footer: {
+                Text("\(covering.count == 1 ? "This outbound policy covers" : "These outbound policies cover") \(nodeName), but it is not planned yet, so nothing filters its egress until a plan is approved and applied.")
+            }
+        }
     }
 
     private func facts(_ doc: NetPolicy) -> some View {
@@ -114,6 +152,13 @@ struct NodePolicyScreen: View {
             }
             if !doc.lastError.isEmpty {
                 DetailRow(label: "Last error", value: doc.lastError)
+            }
+            if doc.enabled, doc.holdsInbound {
+                let count = doc.rules.filter { $0.direction == "ingress" }.count
+                Label("\(count == 1 ? "1 inbound rule blocks" : "\(count) inbound rules block") planning this policy. Its plan never applies inbound rules: recreate them in the Inbound firewall, then remove them on the web.",
+                      systemImage: "exclamationmark.triangle.fill")
+                    .foregroundStyle(Color.statusWarnText)
+                    .frame(minHeight: Spacing.minimumTarget, alignment: .leading)
             }
         }
     }
@@ -134,9 +179,13 @@ struct NodePolicyScreen: View {
     @ViewBuilder
     private func builtFrom(_ doc: NetPolicy) -> some View {
         if doc.groupDerived {
-            let sources = (store.groupPolicies.value ?? []).filter { $0.enabled && $0.targetNodeIDs.contains(nodeID) }
+            let sources = covering
             Section {
-                if sources.isEmpty {
+                if store.groupPolicies.value == nil {
+                    Text("The outbound policies have not loaded, so which ones build this document is not known.")
+                        .foregroundStyle(.secondary)
+                        .frame(minHeight: Spacing.minimumTarget, alignment: .leading)
+                } else if sources.isEmpty {
                     Text("No enabled outbound policy reaches this node any more. Plan all outbound policies reports it as orphaned.")
                         .foregroundStyle(Color.statusWarnText)
                         .frame(minHeight: Spacing.minimumTarget)
@@ -158,9 +207,17 @@ struct NodePolicyScreen: View {
     @ViewBuilder
     private func actions(_ doc: NetPolicy) -> some View {
         Section {
-            NetworkingActionRow(title: "Plan this node", systemImage: "doc.badge.gearshape",
-                                detail: "Files the compiled ruleset for approval", blocked: planBlocked(doc)) { plan() }
-            WebLinkRow(title: "Edit on web", path: web)
+            // A document built from outbound policies changes only through
+            // them and their plan; its own plan would file a stale ruleset
+            // and clear the apply error (console menuFor).
+            if doc.groupDerived {
+                NetworkingActionRow(title: "Plan all outbound policies", systemImage: "doc.badge.gearshape",
+                                    detail: "Rebuilds this document from the policies above and files it for approval", blocked: planAllBlocked) { planAll() }
+            } else {
+                NetworkingActionRow(title: "Plan this node", systemImage: "doc.badge.gearshape",
+                                    detail: "Files the compiled ruleset for approval", blocked: planBlocked(doc)) { plan() }
+                WebLinkRow(title: "Edit on web", path: web)
+            }
         }
         if !doc.groupDerived {
             Section {
@@ -187,11 +244,19 @@ struct NodePolicyScreen: View {
     private func planBlocked(_ doc: NetPolicy) -> String? {
         if let blocked = store.blocked([NetworkingIntents.policyAdmin]) { return blocked }
         if !doc.enabled { return "The policy is disabled; enable it on the web first" }
+        if doc.holdsInbound { return "Remove its inbound rules first" }
         return nil
+    }
+
+    private var planAllBlocked: String? { store.planAllBlocked(covered: store.coveredNodes(name: name)) }
+
+    private func planAll() {
+        Task { await runner.run(NetworkingIntents.planAllGroupPolicies(covered: store.coveredNodes(name: name))) }
     }
 
     private var convertBlocked: String? {
         if let blocked = store.blocked([NetworkingIntents.policyAdmin]) { return blocked }
+        if let doc, doc.enabled, doc.holdsInbound { return "It holds inbound rules, which cannot be planned. Remove them first" }
         let priority = convertPriority.trimmingCharacters(in: .whitespaces)
         if !priority.isEmpty, Int(priority) == nil { return "Priority must be a whole number" }
         return nil

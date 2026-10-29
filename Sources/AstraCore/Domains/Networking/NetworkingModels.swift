@@ -149,6 +149,10 @@ public struct NetPolicy: Identifiable, Codable, Equatable, Hashable, Sendable {
         lastError = try c.decodeIfPresent(String.self, forKey: .lastError) ?? ""
         updatedAt = try DateValue.decodeIfPresent(from: c, forKey: .updatedAt)
     }
+
+    /// The console's `holdsInbound`: any ingress rule, even a disabled one,
+    /// makes the server's `CompileEgressPlan` refuse this document's plan.
+    public var holdsInbound: Bool { rules.contains { $0.direction == "ingress" } }
 }
 
 public struct NetGraphNode: Identifiable, Codable, Equatable, Hashable, Sendable {

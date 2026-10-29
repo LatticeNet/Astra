@@ -107,6 +107,9 @@ public enum NetworkingNodePolicyKind: String, Sendable, Hashable, CaseIterable {
 public enum NetworkingPolicyState: String, Sendable, Hashable, CaseIterable {
     /// The last apply reported an error.
     case failed
+    /// An enabled document holding an inbound rule: its own plan is refused
+    /// ("egress-only MVP"), so it can be neither planned nor applied.
+    case blocked
     /// A plan exists that has not applied yet.
     case planned
     /// The last plan applied.
@@ -119,6 +122,7 @@ public enum NetworkingPolicyState: String, Sendable, Hashable, CaseIterable {
     public var word: String {
         switch self {
         case .failed: "apply failed"
+        case .blocked: "inbound rules block planning"
         case .planned: "planned, not applied"
         case .applied: "applied"
         case .notPlanned: "not planned yet"
@@ -126,43 +130,64 @@ public enum NetworkingPolicyState: String, Sendable, Hashable, CaseIterable {
         }
     }
 
-    /// The console's reading of a `netPolicyView`: an error first, then the
-    /// enabled flag, then whether the last plan reached the node.
+    /// The console's `policyState`: an error first, then the enabled flag,
+    /// then inbound rules, then whether anything ever applied. Unapplied
+    /// splits into planned and not planned on `last_plan_sha`. `updated_at`
+    /// is not compared: the server stamps it when the apply result lands.
     public static func of(_ policy: NetPolicy) -> NetworkingPolicyState {
         if !policy.lastError.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return .failed }
         if !policy.enabled { return .off }
-        if policy.lastPlanSHA.isEmpty { return .notPlanned }
-        guard let applied = policy.lastAppliedAt else { return .planned }
-        if let updated = policy.updatedAt, updated > applied.addingTimeInterval(1) { return .planned }
-        return .applied
+        if policy.holdsInbound { return .blocked }
+        if policy.lastAppliedAt != nil { return .applied }
+        return policy.lastPlanSHA.isEmpty ? .notPlanned : .planned
     }
 }
 
-/// One node on the Nodes view: its document (or none) and where it stands.
+/// One node on the Nodes view: its document (or none), the enabled outbound
+/// policies that reach it, and where it stands.
 public struct NetworkingNodePolicyRow: Identifiable, Hashable, Sendable {
     public var nodeID: String
     public var nodeName: String
     public var policy: NetPolicy?
+    /// Names of the enabled outbound policies whose targets include the node, in merge order.
+    public var coveredBy: [String]
 
-    public init(nodeID: String, nodeName: String, policy: NetPolicy?) {
+    public init(nodeID: String, nodeName: String, policy: NetPolicy?, coveredBy: [String] = []) {
         self.nodeID = nodeID
         self.nodeName = nodeName
         self.policy = policy
+        self.coveredBy = coveredBy
     }
 
     public var id: String { nodeID }
     public var kind: NetworkingNodePolicyKind { NetworkingNodePolicyKind.of(policy) }
-    public var state: NetworkingPolicyState? { policy.map(NetworkingPolicyState.of) }
+    /// A node an enabled policy reaches but that has no document yet is not
+    /// planned yet; only a node nothing reaches has no state ("no policy").
+    public var state: NetworkingPolicyState? {
+        if let policy { return NetworkingPolicyState.of(policy) }
+        return coveredBy.isEmpty ? nil : .notPlanned
+    }
+
+    /// Node id to the names of the enabled outbound policies that reach it,
+    /// lower priority first, as they merge.
+    public static func coverage(_ groupPolicies: [NetworkingGroupPolicy]) -> [String: [String]] {
+        let enabled = groupPolicies.filter(\.enabled).sorted { ($0.priority, $0.displayName) < ($1.priority, $1.displayName) }
+        var out: [String: [String]] = [:]
+        for policy in enabled {
+            for nodeID in Set(policy.targetNodeIDs) { out[nodeID, default: []].append(policy.displayName) }
+        }
+        return out
+    }
 
     /// Every node with a document, then every other node the credential sees,
     /// so "no policy" is listed and not left out. Failed rows lead.
-    public static func rows(policies: [NetPolicy], nodes: [(id: String, name: String)]) -> [NetworkingNodePolicyRow] {
+    public static func rows(policies: [NetPolicy], nodes: [(id: String, name: String)], coverage: [String: [String]] = [:]) -> [NetworkingNodePolicyRow] {
         let byNode = Dictionary(policies.map { ($0.targetNodeID, $0) }, uniquingKeysWith: { first, _ in first })
         var names = Dictionary(nodes.map { ($0.id, $0.name) }, uniquingKeysWith: { first, _ in first })
         for policy in policies where names[policy.targetNodeID] == nil {
             names[policy.targetNodeID] = policy.displayName
         }
-        let rows = names.map { NetworkingNodePolicyRow(nodeID: $0.key, nodeName: $0.value, policy: byNode[$0.key]) }
+        let rows = names.map { NetworkingNodePolicyRow(nodeID: $0.key, nodeName: $0.value, policy: byNode[$0.key], coveredBy: coverage[$0.key] ?? []) }
         return rows.sorted { lhs, rhs in
             let left = rank(lhs), right = rank(rhs)
             if left != right { return left < right }
@@ -172,12 +197,40 @@ public struct NetworkingNodePolicyRow: Identifiable, Hashable, Sendable {
 
     private static func rank(_ row: NetworkingNodePolicyRow) -> Int {
         switch row.state {
-        case .failed: 0
+        case .failed, .blocked: 0
         case .planned, .notPlanned: 1
         case .applied: 2
         case .off: 3
         case nil: 4
         }
+    }
+}
+
+/// Where an outbound policy's target nodes stand, from their documents.
+/// A target node without a document counts as not planned, never as applied.
+public struct NetworkingPolicyReach: Hashable, Sendable {
+    public var targets: Int
+    public var failed: Int
+    /// Documents planned, never planned, or held up by inbound rules.
+    public var notApplied: Int
+    /// Target nodes with no document at all.
+    public var noDocument: Int
+
+    public init(policy: NetworkingGroupPolicy, docs: [String: NetPolicy]) {
+        let ids = Set(policy.targetNodeIDs)
+        targets = ids.count
+        var failed = 0, notApplied = 0, noDocument = 0
+        for id in ids {
+            guard let doc = docs[id] else { noDocument += 1; continue }
+            switch NetworkingPolicyState.of(doc) {
+            case .failed: failed += 1
+            case .planned, .notPlanned, .blocked: notApplied += 1
+            case .applied, .off: break
+            }
+        }
+        self.failed = failed
+        self.notApplied = notApplied
+        self.noDocument = noDocument
     }
 }
 

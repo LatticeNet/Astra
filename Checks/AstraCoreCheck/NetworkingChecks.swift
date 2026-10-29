@@ -111,6 +111,10 @@ private func checkNetworkingEdgeDecoding() throws {
     """#))
     try expect(zeroTime.lastAppliedAt == nil, "Go's zero time reads as never applied")
     try expectEqual(NetworkingPolicyState.of(zeroTime), .planned, "planned but never applied")
+    let reapplied = try JSONDecoder().decode(NetPolicy.self, from: json(#"""
+    {"id":"n","target_node_id":"n","rules":[],"enabled":true,"last_plan_sha":"ab","last_applied_at":"2026-10-01T00:00:00Z","updated_at":"2026-10-01T00:00:09Z"}
+    """#))
+    try expectEqual(NetworkingPolicyState.of(reapplied), .applied, "updated_at stamped after the apply result does not read as planned")
     try expectEqual(NetworkingNodePolicyKind.of(zeroTime), .outbound, "group_derived is the outbound kind")
 
     let missingID = try? JSONDecoder().decode(NetworkingDNSDeployment.self, from: json(#"{"name":"x"}"#))
@@ -143,14 +147,16 @@ private func checkNetworkingDemoDecoding() async throws {
     let now = netClock.anchor
 
     let policies = try await client.listNetPolicies()
-    try expectEqual(policies.count, 11, "every node document")
+    try expectEqual(policies.count, 12, "every node document")
     let names = Dictionary(DemoWorld.nodes.map { ($0.id, $0.name) }, uniquingKeysWith: { first, _ in first })
     let rows = NetworkingNodePolicyRow.rows(policies: policies, nodes: DemoWorld.nodes.map { ($0.id, $0.name) })
     try expectEqual(rows.count, DemoWorld.nodes.count, "every node is listed, with or without a document")
     try expectEqual(rows.first?.nodeName, "edge-hkg-2", "a failed apply leads")
     try expectEqual(rows.first?.state, .failed, "edge-hkg-2 failed")
     try expectEqual(rows.first(where: { $0.nodeName == "core-lon-1" })?.kind, .manual, "core-lon-1 is manual")
-    try expectEqual(rows.first(where: { $0.nodeName == "edge-sin-2" })?.state, .planned, "edited after its last apply is planned")
+    try expectEqual(rows.first(where: { $0.nodeName == "edge-sin-2" })?.state, .planned, "a plan that never applied is planned")
+    try expectEqual(rows.first(where: { $0.nodeName == "lab-pi-2" })?.state, .blocked, "an enabled document with an inbound rule is blocked")
+    try expect(rows.prefix(2).allSatisfy { $0.state == .failed || $0.state == .blocked }, "failed and blocked rows lead")
     try expectEqual(rows.first(where: { $0.nodeName == "home-router" })?.state, .off, "disabled document is off")
     try expectEqual(rows.first(where: { $0.nodeName == "edge-iad-1" })?.kind, NetworkingNodePolicyKind.none, "no document is none")
     _ = names
@@ -160,6 +166,17 @@ private func checkNetworkingDemoDecoding() async throws {
     let fleet = try expectUnwrapped(groupPolicies.first { $0.target.all }, "fleet policy")
     try expectEqual(fleet.targetNodeIDs.count, DemoWorld.nodes.count - 2, "the fleet target leaves out the two excluded nodes")
     try expectEqual(groupPolicies.first { $0.id == "gnp_d04" }?.displayName, "build-fra-4", "an unnamed policy is labelled by its target")
+
+    // A target node without a document is not planned, never applied.
+    let docs = Dictionary(policies.map { ($0.targetNodeID, $0) }, uniquingKeysWith: { first, _ in first })
+    let europeMesh = try expectUnwrapped(groupPolicies.first { $0.id == "gnp_d03" }, "europe relay mesh")
+    let europeReach = NetworkingPolicyReach(policy: europeMesh, docs: docs)
+    try expect(europeReach.targets == 6 && europeReach.noDocument == 4 && europeReach.failed == 0, "four of six europe targets have no document")
+    let coverage = NetworkingNodePolicyRow.coverage(groupPolicies)
+    let covered = NetworkingNodePolicyRow.rows(policies: policies, nodes: DemoWorld.nodes.map { ($0.id, $0.name) }, coverage: coverage)
+    let sjc = try expectUnwrapped(covered.first { $0.nodeName == "core-sjc-1" }, "core-sjc-1 row")
+    try expect(sjc.policy == nil && sjc.coveredBy.contains("Fleet baseline") && sjc.state == .notPlanned, "a covered node without a document is not planned yet")
+    try expect(covered.first { $0.nodeName == "lab-pi-2" }?.coveredBy.isEmpty ?? false, "an excluded node is covered by nothing")
 
     let confined = try await netDemo(.confinedToken).networkingGroupPolicies()
     try expect(confined.first { $0.id == "gnp_d04" }.map { $0.hiddenTargetNodes == 1 && $0.targetNodeIDs.isEmpty } ?? false, "a confined token is told how many target nodes it cannot see")

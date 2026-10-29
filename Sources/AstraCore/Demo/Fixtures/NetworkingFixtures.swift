@@ -152,7 +152,7 @@ public enum NetworkingFixtures {
         NodeDoc(node: "edge-tyo-2", derived: true, rules: derivedRules),
         NodeDoc(node: "edge-tyo-3", derived: true, rules: derivedRules),
         NodeDoc(node: "edge-sin-1", derived: true, rules: derivedRules),
-        NodeDoc(node: "edge-sin-2", derived: true, rules: derivedRules, applied: "-4d", updated: "-1h"),
+        NodeDoc(node: "edge-sin-2", derived: true, rules: derivedRules, planned: "-1h", applied: nil, updated: "-1h"),
         NodeDoc(node: "edge-hkg-2", derived: true, rules: derivedRules, applied: nil,
                 error: "nft: table inet lattice_egress: Could not process rule: No such file or directory", updated: "-2h"),
         NodeDoc(node: "relay-fra-1", derived: true, rules: derivedRules, planned: "-9d", applied: "-9d", updated: "-9d"),
@@ -166,6 +166,10 @@ public enum NetworkingFixtures {
         NodeDoc(node: "home-router", derived: false, rules: [
             Rule(id: "r_001", proto: "udp", ports: [51820], comment: "wireguard"),
         ], enabled: false, planned: nil, applied: nil, updated: "-70d"),
+        NodeDoc(node: "lab-pi-2", derived: false, rules: [
+            Rule(id: "r_001", direction: "ingress", ports: [22], remote: cidrRemote("192.168.10.0/24"), comment: "ssh from the lab LAN"),
+            Rule(id: "r_002", ports: [443]),
+        ], planned: nil, applied: nil, updated: "-12d"),
     ]
 
     static func nodeDocJSON(_ doc: NodeDoc, convertedTo policy: String? = nil) -> DemoJSON {
@@ -214,8 +218,11 @@ public enum NetworkingFixtures {
             }.requiring("netpolicy:admin"),
             DemoRoute(method: "POST", pathPattern: "/api/netpolicy/plan") { request, state in
                 let nodeID = request.bodyStrings["node_id"] ?? request.bodyStrings["target_node_id"] ?? ""
-                guard let node = DemoWorld.node(id: nodeID), nodeDocs.contains(where: { $0.node == node.name }) else {
+                guard let node = DemoWorld.node(id: nodeID), let doc = nodeDocs.first(where: { $0.node == node.name }) else {
                     return .error(status: 404, code: "not_found", message: "netpolicy not found")
+                }
+                if let inbound = doc.rules.first(where: { $0.direction != "egress" }) {
+                    return .error(status: 400, code: "bad_request", message: "rule \(inbound.id) uses unsupported direction \"\(inbound.direction)\"; egress-only MVP")
                 }
                 let approval = await file(plugin: "nftpolicy", action: "apply-ruleset", node: node.name, plan: nftPlan(node: node.name), state: state)
                 return .json(SharedFixtures.approvalJSON(approval, includePlan: true).text)

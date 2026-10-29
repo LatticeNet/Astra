@@ -134,10 +134,20 @@ struct OutboundPolicyScreen: View {
     @ViewBuilder
     private var content: some View {
         switch selected {
-        case .policies, .nodes:
+        case .policies:
             NetworkingListState(state: store.groupPolicies, noun: "outbound policies", web: LatticeConsolePath(path: "/network/outbound"),
                                 retry: { Task { await store.refreshPolicies() } }) { _ in
-                if selected == .policies { policiesList } else { nodesList }
+                policiesList
+            }
+        case .nodes:
+            // A node's row reads both its document and the policies that
+            // cover it, so the view waits for both rather than guessing.
+            NetworkingListState(state: store.netPolicies, noun: "node policies", web: LatticeConsolePath(path: "/network/outbound", query: [URLQueryItem(name: "view", value: "nodes")]),
+                                retry: { Task { await store.refreshPolicies() } }) { _ in
+                NetworkingListState(state: store.groupPolicies, noun: "outbound policies", web: LatticeConsolePath(path: "/network/outbound"),
+                                    retry: { Task { await store.refreshPolicies() } }) { _ in
+                    nodesList
+                }
             }
         case .matrix:
             NetworkingListState(state: store.matrix(direction), noun: "the policy matrix", web: LatticeConsolePath(path: "/network/outbound", query: [URLQueryItem(name: "view", value: "matrix")]),
@@ -170,7 +180,8 @@ struct OutboundPolicyScreen: View {
     }
 
     private var allNodeRows: [NetworkingNodePolicyRow] {
-        NetworkingNodePolicyRow.rows(policies: store.netPolicies.value ?? [], nodes: nodes.nodes.values.map { ($0.id, $0.displayName) })
+        NetworkingNodePolicyRow.rows(policies: store.netPolicies.value ?? [], nodes: nodes.nodes.values.map { ($0.id, $0.displayName) },
+                                     coverage: NetworkingNodePolicyRow.coverage(store.groupPolicies.value ?? []))
     }
 
     private var filteredNodes: (rows: [NetworkingNodePolicyRow], error: String?) {
@@ -187,18 +198,10 @@ struct OutboundPolicyScreen: View {
         stableNodes.offer(filteredNodes.rows, voiceOver: voiceOver, force: force)
     }
 
-    /// Failed and not-yet-applied documents among a policy's target nodes.
-    private func counts(_ policy: NetworkingGroupPolicy) -> (failed: Int, pending: Int) {
-        let docs = docsByNode
-        var failed = 0, pending = 0
-        for id in policy.targetNodeIDs {
-            switch docs[id].map(NetworkingPolicyState.of) {
-            case .failed: failed += 1
-            case .planned, .notPlanned: pending += 1
-            default: break
-            }
-        }
-        return (failed, pending)
+    /// Where a policy's target nodes stand; nil while the node documents have not loaded.
+    private func reach(_ policy: NetworkingGroupPolicy) -> NetworkingPolicyReach? {
+        guard store.netPolicies.value != nil else { return nil }
+        return NetworkingPolicyReach(policy: policy, docs: docsByNode)
     }
 
     // MARK: Policies
@@ -209,6 +212,8 @@ struct OutboundPolicyScreen: View {
         let disabled = shown.filter { !$0.enabled }
         return List {
             NetworkingRefreshError(state: store.groupPolicies, noun: "outbound policies") { Task { await store.refreshPolicies() } }
+            NetworkingDependencyRow(state: store.netPolicies, noun: "node policies") { Task { await store.refreshPolicies() } }
+            NetworkingRefreshError(state: store.netPolicies, noun: "node policies") { Task { await store.refreshPolicies() } }
             NetworkingQueryError(message: filteredPolicies.error)
             if stablePolicies.held != nil, voiceOver {
                 Section { PendingUpdatesRow(count: stablePolicies.pendingCount) { stablePolicies.showHeld() } }
@@ -268,8 +273,7 @@ struct OutboundPolicyScreen: View {
     }
 
     private func policyRow(_ policy: NetworkingGroupPolicy) -> some View {
-        let counts = counts(policy)
-        let style = StatusStyle.networkingGroupPolicy(policy, failed: counts.failed, pending: counts.pending)
+        let style = StatusStyle.networkingGroupPolicy(policy, reach: reach(policy))
         let target = NetworkingText.target(policy.target, groupNames: store.groupNames, nodeName: name)
         let detail = "\(target), priority \(policy.priority)"
         let nodesText = NetworkingText.plural(policy.targetNodeIDs.count, "node")
@@ -284,16 +288,18 @@ struct OutboundPolicyScreen: View {
         let groups = Dictionary(grouping: shown) { row -> Int in
             switch row.state {
             case .failed: 0
-            case .planned: 1
-            case .notPlanned: 2
-            case .applied: 3
-            case .off: 4
-            case nil: 5
+            case .blocked: 1
+            case .planned: 2
+            case .notPlanned: 3
+            case .applied: 4
+            case .off: 5
+            case nil: 6
             }
         }
-        let titles = ["Apply failed", "Planned, not applied", "Not planned yet", "Applied", "Disabled", "No policy"]
+        let titles = ["Apply failed", "Held up by inbound rules", "Planned, not applied", "Not planned yet", "Applied", "Disabled", "No policy"]
         return List {
             NetworkingRefreshError(state: store.netPolicies, noun: "node policies") { Task { await store.refreshPolicies() } }
+            NetworkingRefreshError(state: store.groupPolicies, noun: "outbound policies") { Task { await store.refreshPolicies() } }
             NetworkingQueryError(message: filteredNodes.error)
             if stableNodes.held != nil, voiceOver {
                 Section { PendingUpdatesRow(count: stableNodes.pendingCount) { stableNodes.showHeld() } }
@@ -313,14 +319,24 @@ struct OutboundPolicyScreen: View {
                         ForEach(rows) { row in
                             NavigationLink(value: AppRoute.networking(.nodePolicy(nodeID: row.nodeID))) {
                                 StatusRow(style: .networkingNodePolicy(row), title: row.nodeName,
-                                          detail: row.policy == nil ? "egress not filtered" : "\(row.kind.word), \(NetworkingText.plural(row.policy?.rules.count ?? 0, "rule"))",
+                                          detail: Self.nodeDetail(row),
                                           reason: row.policy.flatMap { $0.lastError.isEmpty ? nil : $0.lastError })
                             }
+                        }
+                        if index == 3, rows.contains(where: { $0.policy == nil }) {
+                            NetworkingActionRow(title: "Plan all outbound policies", systemImage: "doc.badge.gearshape",
+                                                detail: "Files one plan per covered node for approval", blocked: planAllBlocked) { planAll() }
                         }
                     } header: {
                         Text("\(titles[index]) (\(rows.count))").accessibilityAddTraits(.isHeader)
                     } footer: {
-                        if index == 5 { Text("No outbound policy reaches these nodes and none has its own, so nothing filters their egress.") }
+                        switch index {
+                        case 1: Text("A policy's own plan never applies inbound rules, so the server refuses to plan these. Recreate the rules in the Inbound firewall, then remove them on the web.")
+                        case 3 where rows.contains(where: { $0.policy == nil }):
+                            Text("An enabled outbound policy covers these nodes, but nothing filters their egress until a plan is approved and applied.")
+                        case 6: Text("No outbound policy reaches these nodes and none has its own, so nothing filters their egress.")
+                        default: EmptyView()
+                        }
                     }
                 }
             }
@@ -335,6 +351,16 @@ struct OutboundPolicyScreen: View {
             await nodes.refreshIfOlder(than: 0)
             await store.refreshPolicies()
             offer(force: true)
+        }
+    }
+
+    /// "manual policy, 3 rules", "covered by Fleet baseline, egress not filtered yet".
+    static func nodeDetail(_ row: NetworkingNodePolicyRow) -> String {
+        if let policy = row.policy { return "\(row.kind.word), \(NetworkingText.plural(policy.rules.count, "rule"))" }
+        switch row.coveredBy.count {
+        case 0: return "egress not filtered"
+        case 1: return "covered by \(row.coveredBy[0]), egress not filtered yet"
+        default: return "covered by \(row.coveredBy.count) policies, egress not filtered yet"
         }
     }
 
@@ -412,16 +438,9 @@ struct OutboundPolicyScreen: View {
 
     // MARK: Plan all
 
-    private var coveredNodes: [ObjectRef] {
-        let ids = Set((store.groupPolicies.value ?? []).filter(\.enabled).flatMap(\.targetNodeIDs))
-        return ids.map { ObjectRef(kind: "node", id: $0, name: name($0)) }.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
-    }
+    private var coveredNodes: [ObjectRef] { store.coveredNodes(name: name) }
 
-    private var planAllBlocked: String? {
-        if let blocked = store.blocked([NetworkingIntents.policyAdmin]) { return blocked }
-        if store.groupPolicies.value == nil { return "Loading outbound policies" }
-        return coveredNodes.isEmpty ? "No enabled policy covers a node" : nil
-    }
+    private var planAllBlocked: String? { store.planAllBlocked(covered: coveredNodes) }
 
     private func planAll() {
         Task { await runner.run(NetworkingIntents.planAllGroupPolicies(covered: coveredNodes)) }

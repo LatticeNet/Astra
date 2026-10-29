@@ -56,14 +56,15 @@ struct PolicyDetailScreen: View {
     @ViewBuilder
     private func detail(_ policy: NetworkingGroupPolicy) -> some View {
         let docs = docsByNode
-        let members = policy.targetNodeIDs.map { NetworkingNodePolicyRow(nodeID: $0, nodeName: name($0), policy: docs[$0]) }
+        let docsLoaded = store.netPolicies.value != nil
+        let members = policy.targetNodeIDs.map { NetworkingNodePolicyRow(nodeID: $0, nodeName: name($0), policy: docs[$0], coveredBy: [policy.displayName]) }
             .sorted { ($0.state.map(rank) ?? 9, $0.nodeName) < ($1.state.map(rank) ?? 9, $1.nodeName) }
-        let failed = members.filter { $0.state == .failed }.count
-        let pending = members.filter { $0.state == .planned || $0.state == .notPlanned }.count
         List {
             Section {
                 NetworkingRefreshError(state: store.groupPolicies, noun: "the outbound policy") { Task { await store.refreshPolicies() } }
-                StatusRow(style: .networkingGroupPolicy(policy, failed: failed, pending: pending), title: policy.displayName,
+                NetworkingDependencyRow(state: store.netPolicies, noun: "node policies") { Task { await store.refreshPolicies() } }
+                NetworkingRefreshError(state: store.netPolicies, noun: "node policies") { Task { await store.refreshPolicies() } }
+                StatusRow(style: .networkingGroupPolicy(policy, reach: docsLoaded ? NetworkingPolicyReach(policy: policy, docs: docs) : nil), title: policy.displayName,
                           detail: NetworkingText.target(policy.target, groupNames: store.groupNames, nodeName: name))
             }
 
@@ -110,9 +111,13 @@ struct PolicyDetailScreen: View {
                 }
                 ForEach(members) { member in
                     NavigationLink(value: AppRoute.networking(.nodePolicy(nodeID: member.nodeID))) {
-                        StatusRow(style: .networkingNodePolicy(member), title: member.nodeName,
-                                  detail: lastPlanText(member.policy),
-                                  reason: member.policy.flatMap { $0.lastError.isEmpty ? nil : $0.lastError })
+                        if docsLoaded {
+                            StatusRow(style: .networkingNodePolicy(member), title: member.nodeName,
+                                      detail: lastPlanText(member.policy),
+                                      reason: member.policy.flatMap { $0.lastError.isEmpty ? nil : $0.lastError })
+                        } else {
+                            StatusRow(style: StatusStyle(word: "state unknown", symbol: "questionmark.circle", tone: .quiet), title: member.nodeName, detail: nil)
+                        }
                     }
                 }
             } header: {
@@ -136,15 +141,16 @@ struct PolicyDetailScreen: View {
     private func rank(_ state: NetworkingPolicyState) -> Int {
         switch state {
         case .failed: 0
-        case .planned: 1
-        case .notPlanned: 2
-        case .applied: 3
-        case .off: 4
+        case .blocked: 1
+        case .planned: 2
+        case .notPlanned: 3
+        case .applied: 4
+        case .off: 5
         }
     }
 
     private func lastPlanText(_ doc: NetPolicy?) -> String {
-        guard let doc else { return "no document yet" }
+        guard let doc else { return "not planned yet, egress not filtered" }
         guard !doc.lastPlanSHA.isEmpty else { return "never planned" }
         if let applied = doc.lastAppliedAt {
             return "plan \(NetworkingText.shortHash(doc.lastPlanSHA)), applied \(TimeDisplay.relative(applied, now: .now, locale: locale))"
@@ -165,15 +171,9 @@ struct PolicyDetailScreen: View {
         }
     }
 
-    private var coveredNodes: [ObjectRef] {
-        let ids = Set((store.groupPolicies.value ?? []).filter(\.enabled).flatMap(\.targetNodeIDs))
-        return ids.map { ObjectRef(kind: "node", id: $0, name: name($0)) }.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
-    }
+    private var coveredNodes: [ObjectRef] { store.coveredNodes(name: name) }
 
-    private var planAllBlocked: String? {
-        if let blocked = store.blocked([NetworkingIntents.policyAdmin]) { return blocked }
-        return coveredNodes.isEmpty ? "No enabled policy covers a node" : nil
-    }
+    private var planAllBlocked: String? { store.planAllBlocked(covered: coveredNodes) }
 
     private func planAll() {
         Task { await runner.run(NetworkingIntents.planAllGroupPolicies(covered: coveredNodes)) }

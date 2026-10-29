@@ -9,6 +9,7 @@ extension StatusStyle {
     static func networkingPolicyState(_ state: NetworkingPolicyState) -> StatusStyle {
         switch state {
         case .failed: StatusStyle(word: state.word, symbol: "xmark.circle.fill", tone: .fail)
+        case .blocked: StatusStyle(word: state.word, symbol: "exclamationmark.triangle.fill", tone: .warn)
         case .planned: StatusStyle(word: state.word, symbol: "clock.arrow.circlepath", tone: .warn)
         case .notPlanned: StatusStyle(word: state.word, symbol: "circle.dashed", tone: .quiet)
         case .applied: StatusStyle(word: state.word, symbol: "checkmark.circle.fill", tone: .ok)
@@ -23,11 +24,17 @@ extension StatusStyle {
     }
 
     /// An outbound policy: off when disabled, otherwise the worst state among
-    /// its target nodes' last plans, counted.
-    static func networkingGroupPolicy(_ policy: NetworkingGroupPolicy, failed: Int, pending: Int) -> StatusStyle {
+    /// its target nodes, counted. `reach` is nil when the node documents did
+    /// not load, and then nothing is claimed.
+    static func networkingGroupPolicy(_ policy: NetworkingGroupPolicy, reach: NetworkingPolicyReach?) -> StatusStyle {
         if !policy.enabled { return StatusStyle(word: "disabled", symbol: "minus.circle", tone: .quiet) }
-        if failed > 0 { return StatusStyle(word: "\(failed == 1 ? "1 node" : "\(failed) nodes") failed to apply", symbol: "xmark.circle.fill", tone: .fail) }
-        if pending > 0 { return StatusStyle(word: "\(pending == 1 ? "1 node" : "\(pending) nodes") not applied", symbol: "clock.arrow.circlepath", tone: .warn) }
+        guard let reach else { return StatusStyle(word: "state unknown", symbol: "questionmark.circle", tone: .quiet) }
+        if reach.targets == 0 { return StatusStyle(word: "reaches no visible node", symbol: "circle.dashed", tone: .quiet) }
+        if reach.failed > 0 { return StatusStyle(word: "\(NetworkingText.plural(reach.failed, "node")) failed to apply", symbol: "xmark.circle.fill", tone: .fail) }
+        var parts: [String] = []
+        if reach.notApplied > 0 { parts.append("\(NetworkingText.plural(reach.notApplied, "node")) not applied") }
+        if reach.noDocument > 0 { parts.append("\(NetworkingText.plural(reach.noDocument, "node")) not planned") }
+        if !parts.isEmpty { return StatusStyle(word: parts.joined(separator: ", "), symbol: "clock.arrow.circlepath", tone: .warn) }
         return StatusStyle(word: "applied", symbol: "arrow.up.forward.circle.fill", tone: .ok)
     }
 
@@ -124,6 +131,34 @@ struct NetworkingListState<Value: Sendable, Content: View>: View {
         switch state {
         case .idle, .loading, .failed: true
         case .loaded, .denied, .companionBehind: false
+        }
+    }
+}
+
+/// The row for a second resource a screen derives from, when it has no
+/// data: its error, companion-behind or loading state, so derived words
+/// never read as healthy over a resource that did not load.
+struct NetworkingDependencyRow<Value: Sendable>: View {
+    let state: ResourceState<Value>
+    let noun: String
+    let retry: () -> Void
+
+    var body: some View {
+        if state.value == nil {
+            switch state {
+            case .failed(let error, _, _):
+                ErrorRow(message: "Could not load \(noun), so their state is unknown: \(error.localizedDescription)", retry: retry)
+            case .companionBehind(let surface):
+                CompanionBehindRow(surface: surface)
+            case .denied(let scope):
+                Label("\(noun.networkingCapitalized) need \(scope), so their state is unknown", systemImage: "lock")
+                    .foregroundStyle(.secondary)
+                    .frame(minHeight: Spacing.minimumTarget)
+            case .idle, .loading, .loaded:
+                Label("Loading \(noun)", systemImage: "hourglass")
+                    .foregroundStyle(.secondary)
+                    .frame(minHeight: Spacing.minimumTarget)
+            }
         }
     }
 }
