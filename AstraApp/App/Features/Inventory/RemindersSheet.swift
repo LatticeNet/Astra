@@ -36,6 +36,7 @@ struct RemindersSheet: View {
             .actionHost(inSheet: true)
         }
         .presentationDetents([.large])
+        .presentationBackground(Color(uiColor: .systemGroupedBackground))
         .interactiveDismissDisabled(sending)
         .task {
             if store.machines.value == nil { await store.refresh() }
@@ -75,9 +76,8 @@ struct RemindersSheet: View {
             Section {
                 if let next = ReminderSchedule.nextAfterToday(machines, today: today) {
                     let days = next.reminder.inDays
-                    DetailRow(label: "Next after today",
-                              value: "\(next.machine.inventoryName), \(next.reminder.at.formatted(locale: locale))",
-                              secondary: days == 1 ? "In 1 day" : "In \(days) days", copyable: false)
+                    DetailRow(label: "Next after today", value: next.machine.inventoryName,
+                              secondary: "\(next.reminder.at.formatted(locale: locale)), \(days == 1 ? "in 1 day" : "in \(days) days")", copyable: false)
                     let same = coverage.pending.filter { $0.reminder.at == next.reminder.at }.count
                     if same > 1 {
                         DetailRow(label: "Same day", value: "\(same) machines, sent as one message", copyable: false)
@@ -104,12 +104,21 @@ struct RemindersSheet: View {
     private func row(_ pending: ReminderSchedule.Pending) -> some View {
         let state = InventoryRenewalState.of(pending.machine, today: today)
         let style = StatusStyle.inventoryRenewal(state)
+        let fact = reminderFact(pending.reminder)
         return StatusRow(
             style: style,
             title: pending.machine.inventoryName,
-            detail: ReminderSchedule.line(pending.reminder, today: today, locale: locale),
-            accessibilityPhrase: "\(pending.machine.inventoryName), \(style.word), \(ReminderSchedule.line(pending.reminder, today: today, locale: locale))"
+            detail: fact,
+            accessibilityPhrase: "\(pending.machine.inventoryName), \(style.word), \(fact)"
         )
+    }
+
+    /// Which reminder this is; the state word already gives the countdown.
+    private func reminderFact(_ reminder: ReminderSchedule.Next) -> String {
+        let date = reminder.renewal.formatted(locale: locale)
+        if reminder.offset < 0 { return "Daily overdue reminder, renewal was \(date)" }
+        if reminder.offset == 0 { return "Renewal day reminder for \(date)" }
+        return reminder.offset == 1 ? "1 day before the \(date) renewal" : "\(reminder.offset) days before the \(date) renewal"
     }
 
     @ViewBuilder
@@ -134,9 +143,6 @@ struct RemindersSheet: View {
             }
         } header: {
             Text(fired.count == 1 ? "1 reminder sent" : "\(fired.count) reminders sent")
-        } footer: {
-            Button("Done") { dismiss() }
-                .frame(minHeight: Spacing.minimumTarget)
         }
     }
 
@@ -168,6 +174,8 @@ struct RemindersSheet: View {
         }
         .padding(.horizontal, Spacing.l)
         .padding(.vertical, Spacing.s)
+        // The pinned action must leave room for the content above it at AX5, as in ConfirmSheet.
+        .dynamicTypeSize(...DynamicTypeSize.accessibility1)
         .background(Color(uiColor: .systemGroupedBackground))
     }
 

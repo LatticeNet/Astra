@@ -24,7 +24,7 @@ struct RenewSheet: View {
     var body: some View {
         NavigationStack {
             content
-                .navigationTitle("Record renewal")
+                .navigationTitle(machine.map { "Renew \($0.inventoryName)" } ?? "Record renewal")
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {
@@ -38,6 +38,8 @@ struct RenewSheet: View {
                 .actionHost(inSheet: true)
         }
         .presentationDetents(typeSize.isAccessibilitySize ? [.large] : [.medium, .large])
+        // At the medium detent the sheet is glass; the form stays opaque (sections 1 and 4.11).
+        .presentationBackground(Color(uiColor: .systemGroupedBackground))
         .presentationDragIndicator(.visible)
         .interactiveDismissDisabled(saving)
         .task {
@@ -81,31 +83,27 @@ struct RenewSheet: View {
         }
     }
 
+    /// One section, so the current date, the picker and what recording
+    /// would do all fit at the medium detent above the pinned action.
     private func form(_ machine: MachineProfile) -> some View {
-        let current = machine.renewalDay
         let state = InventoryRenewalState.of(machine, today: today)
+        let billing = [machine.vendor, InventoryCost.priceLine(machine, locale: locale)].filter { !$0.isEmpty }.joined(separator: ", ")
         return Form {
             Section {
-                VStack(alignment: .leading, spacing: Spacing.xs) {
-                    Text(machine.inventoryName).textRole(.detailHeader)
-                    Text([machine.vendor, InventoryCost.priceLine(machine, locale: locale)].filter { !$0.isEmpty }.joined(separator: ", "))
-                        .textRole(.rowDetail)
-                }
-                .padding(.vertical, Spacing.xxs)
-                .accessibilityElement(children: .combine)
-                LabeledContent("Due now") {
-                    Text(current.map { "\($0.formatted(locale: locale)), \(state.word)" } ?? "No date")
-                        .foregroundStyle(state.inventoryTone.isProblem ? state.inventoryTone.word : Color.secondary)
-                        .multilineTextAlignment(.trailing)
+                LabeledContent {
+                    VStack(alignment: .trailing, spacing: Spacing.xxs) {
+                        Text(machine.renewalDay?.formatted(locale: locale) ?? "No date")
+                        if machine.renewalDay != nil {
+                            Text(state.word.inventoryCapitalized)
+                                .textRole(.footnote)
+                                .foregroundStyle(state.inventoryTone.isProblem ? state.inventoryTone.word : Color.secondary)
+                        }
+                    }
+                    .multilineTextAlignment(.trailing)
+                } label: {
+                    Text("Current renewal")
                 }
                 .frame(minHeight: Spacing.minimumTarget)
-            } footer: {
-                if machine.autoRoll {
-                    Text("This machine renews by itself and its date moves forward when it passes. Record a renewal only to set a different date.")
-                }
-            }
-
-            Section {
                 DatePicker("Paid until", selection: $chosen, displayedComponents: .date)
                     .frame(minHeight: Spacing.minimumTarget)
                 if let rolled = rolledSuggestion(machine) {
@@ -113,9 +111,14 @@ struct RenewSheet: View {
                         .frame(minHeight: Spacing.minimumTarget)
                 }
             } header: {
-                Text("Next renewal")
+                if !billing.isEmpty { Text(billing) }
             } footer: {
-                preview(machine).announcing(problem(machine))
+                VStack(alignment: .leading, spacing: Spacing.xs) {
+                    preview(machine).announcing(problem(machine))
+                    if machine.autoRoll {
+                        Text("This machine renews by itself and its date moves forward when it passes. Record a renewal only to set a different date.")
+                    }
+                }
             }
         }
     }
@@ -173,6 +176,8 @@ struct RenewSheet: View {
         }
         .padding(.horizontal, Spacing.l)
         .padding(.vertical, Spacing.s)
+        // The pinned action must leave room for the content above it at AX5, as in ConfirmSheet.
+        .dynamicTypeSize(...DynamicTypeSize.accessibility1)
         .background(Color(uiColor: .systemGroupedBackground))
     }
 
