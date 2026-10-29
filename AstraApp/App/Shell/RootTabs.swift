@@ -69,8 +69,17 @@ struct RootTabs: View {
         }
         .environment(\.timeZoneMode, showUTC ? .utc : .local)
         .onChange(of: session.generation) { changes.recordAll() }
+        // Scene storage is written on every change and saved by the system
+        // when the scene goes to the background.
+        .onChange(of: appState.paths) { if restored { persist() } }
+        .onChange(of: appState.selectedTab) { if restored { persist() } }
+        .onChange(of: appState.fleetScope) { if restored { persist() } }
+        .onChange(of: appState.monitorSegment) { if restored { persist() } }
+        .onChange(of: appState.monitorWindow) { if restored { persist() } }
+        .onChange(of: appState.activityScope) { if restored { persist() } }
+        .onChange(of: appState.globalSheet) { if restored { persist() } }
         .onChange(of: scenePhase) { _, phase in
-            if phase == .background { persist() }
+            if phase != .active, restored { persist() }
         }
         .task { await LaunchActions.apply(AppServices.shared.launch, services: AppServices.shared) }
     }
@@ -108,7 +117,6 @@ struct RootTabs: View {
         }
     }
 
-    /// Scene storage is saved only when the scene goes to the background.
     private func persist() {
         storedTab = appState.selectedTab
         storedFleetScope = appState.fleetScope

@@ -32,7 +32,7 @@
 		<true/>
 	</dict>
 	<key>NSFaceIDUsageDescription</key>
-	<string>Lattice confirms approve and reject with Face ID or your device passcode. Cancelling does not send anything.</string>
+	<string>Lattice uses Face ID to confirm approvals and privileged changes.</string>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Lattice connects to your self-hosted Lattice server on your network.</string>
 	<key>CFBundleURLTypes</key>

@@ -30,6 +30,7 @@ struct StatusSampler: View {
         .background(Color(uiColor: .systemBackground))
         .colorFilter(colorFilter)
         .navigationTitle("Status sampler")
+        .navigationBarTitleDisplayMode(.inline)
     }
 
     private var samples: some View {
