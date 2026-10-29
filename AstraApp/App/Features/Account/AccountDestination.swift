@@ -12,6 +12,7 @@ struct AccountDestination: View {
         case .user(let id): UserDetailScreen(id: id)
         case .token(let id): TokenDetailScreen(id: id)
         case .ssoProvider(let id): SSOProviderScreen(id: id)
+        case .passkeyDeleteCode(let id): AccountStepUpPage(passkeyID: id)
         }
     }
 }
