@@ -158,7 +158,7 @@ public enum NetworkingIntents {
             verb: "Publish",
             object: ObjectRef(kind: "DNS deployment", id: id, name: name),
             scopes: publishScopes,
-            consequence: "Writes the node's current address to the DNS provider for \(host). Resolvers see the new record within its TTL. This changes a record outside Lattice.",
+            consequence: "Writes the node's current address to the DNS provider for \(IdentifierText.breakable(host)). Resolvers see the new record within its TTL. This changes a record outside Lattice.",
             affected: [ObjectRef(kind: "node", id: nodeID, name: deployment.nodeDisplayName)],
             dryRun: { client in
                 async let nodes = client.fetchNodes()
@@ -238,7 +238,7 @@ public enum NetworkingIntents {
             verb: "Run DDNS profile",
             object: ObjectRef(kind: "DDNS profile", id: id, name: name),
             scopes: ddnsRunScopes,
-            consequence: "Writes \(domains.isEmpty ? "its records" : domains) at the DNS provider now instead of waiting for the next sweep. This changes records outside Lattice.",
+            consequence: "Writes \(domains.isEmpty ? "its records" : IdentifierText.breakable(domains)) at the DNS provider now instead of waiting for the next sweep. This changes records outside Lattice.",
             dryRun: { client in
                 async let nodes = client.fetchNodes()
                 async let profiles = client.listDDNS()

@@ -2,6 +2,7 @@ import Foundation
 import AstraCore
 
 public func checkShared() async throws {
+    try checkIdentifierText()
     try checkNodeDecoding()
     try checkURLAndRequests()
     try await checkLoginFlow()
@@ -1163,4 +1164,10 @@ extension AstraTestDates {
         formatter.formatOptions = [.withInternetDateTime]
         return formatter.string(from: date)
     }
+}
+
+/// A break opportunity after each separator, and nothing else changes.
+private func checkIdentifierText() throws {
+    try expectEqual(IdentifierText.breakable("relay-fra-1.example.org"), "relay-\u{200B}fra-\u{200B}1.\u{200B}example.\u{200B}org", "breaks after hyphens and dots")
+    try expectEqual(IdentifierText.breakable("expiring_within_14d").replacingOccurrences(of: "\u{200B}", with: ""), "expiring_within_14d", "removing the breaks gives the identifier back")
 }

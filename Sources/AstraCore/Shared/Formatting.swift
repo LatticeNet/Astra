@@ -86,3 +86,17 @@ public enum UptimeFormatter {
         return "\(total)s"
     }
 }
+
+/// Hostnames, paths, keys and ids inside rows and sentences. At large text
+/// sizes the text system would otherwise hyphenate "relay-fra-1" mid-word;
+/// a zero-width space after each separator gives it a better place to break.
+public enum IdentifierText {
+    public static func breakable(_ identifier: String) -> String {
+        var out = ""
+        for character in identifier {
+            out.append(character)
+            if ".:/-_".contains(character) { out.append("\u{200B}") }
+        }
+        return out
+    }
+}

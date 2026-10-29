@@ -37,7 +37,7 @@ struct PluginDetailScreen: View {
         let style = StatusStyle.platformPlugin(row)
         List {
             Section {
-                StatusRow(style: style, title: row.name, detail: PlatformFormat.breakable(row.id), reason: runtimeReason(row),
+                StatusRow(style: style, title: row.name, detail: IdentifierText.breakable(row.id), reason: runtimeReason(row),
                           accessibilityPhrase: "\(row.name), \(style.word)")
                 PlatformRefreshError(state: store.registered, noun: "the plugin") { Task { await store.refresh() } }
                 lifecycleAction(row)
@@ -160,13 +160,13 @@ struct PluginDetailScreen: View {
             Section {
                 ForEach(contract.methods, id: \.name) { method in
                     let scopes = contract.scopes(for: method.name)
-                    DetailRow(label: PlatformFormat.breakable(method.name),
+                    DetailRow(label: IdentifierText.breakable(method.name),
                               value: scopes.isEmpty ? "No scope" : scopes.joined(separator: ", "),
                               secondary: method.effect.isEmpty ? nil : method.effect.platformCapitalized,
                               copyable: false)
                 }
             } header: {
-                Text(PlatformFormat.breakable(contract.service))
+                Text(IdentifierText.breakable(contract.service))
                     .textCase(nil)
                     .accessibilityLabel("Interface \(contract.service)")
             } footer: {

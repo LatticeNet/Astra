@@ -41,7 +41,7 @@ struct BindingDetailScreen: View {
         let style = StatusStyle.platformRoute(binding.enabled ? .serving : .disabled)
         List {
             Section {
-                StatusRow(style: style, title: PlatformFormat.breakable(label(binding)), detail: "\(kind.title) binding", titleIsIdentifier: true,
+                StatusRow(style: style, title: IdentifierText.breakable(label(binding)), detail: "\(kind.title) binding", titleIsIdentifier: true,
                           accessibilityPhrase: "\(label(binding)), \(style.word)")
             }
             Section("Route") {

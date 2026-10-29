@@ -514,7 +514,7 @@ struct PlatformRouteRow: View {
         let label = PlatformPublishing.routeLabel(record)
         let target = PlatformPublishing.originTargetLabel(record, shareSlugs: shareSlugs)
         let detail = detailLine(target: target)
-        StatusRow(style: style, title: PlatformFormat.breakable(label), detail: detail, titleIsIdentifier: true,
+        StatusRow(style: style, title: IdentifierText.breakable(label), detail: detail, titleIsIdentifier: true,
                   accessibilityPhrase: "\(label.replacingOccurrences(of: "*", with: "any host")), \(style.word), \(detail)")
     }
 
@@ -637,7 +637,7 @@ struct PlatformBucketRow: View {
         let detail = entry.reserved
             ? "Server-owned; no scope can read it"
             : [displayName?.isEmpty == false ? displayName : nil, owner.sentence, count, entry.registered ? nil : "not registered"].compactMap { $0 }.joined(separator: " · ")
-        StatusRow(style: .platformBucket(entry), title: PlatformFormat.breakable(entry.name), detail: detail, titleIsIdentifier: true,
+        StatusRow(style: .platformBucket(entry), title: IdentifierText.breakable(entry.name), detail: detail, titleIsIdentifier: true,
                   accessibilityPhrase: "\(entry.name), \(detail)")
     }
 }
