@@ -197,3 +197,14 @@ Agents cannot tap, swipe or rotate a simulator, and they cannot run VoiceOver, V
 - Transcript by link: `lattice://terminal/term_demo_x9other` reads "Another operator's session" and `lattice://terminal/term_demo_gone` reads "Session not found", each with Your sessions; neither shows a blank screen.
 - No control on either screen accepts typing into a shell: there is no keyboard except the find field.
 - Voice Control "Show names": More, New session on web, Latest output, Close session, Audit trail and Open on web have names.
+
+## M14 App Intents
+
+- Shortcuts action list: in the Shortcuts app, Add Action, search "Lattice" lists exactly two actions, Open Node and Review Approval, with the navy tile; the App Shortcuts section under Lattice shows the same two with the phrases "Open a node in Lattice" and "Review an approval in Lattice". No action approves, rejects or dismisses.
+- Open Node: the Node parameter lists the fleet worst state first, each row with its honesty word and symbol; typing "fra" narrows it to the Frankfurt nodes; running it opens Fleet on that node's Overview, and an open sheet is dismissed first.
+- Review Approval: the Approval parameter lists only approvals that need a person, newest first, each with the node, "needs you" and its age, and no seal; running it opens Review over the current tab, and nothing is decided until Face ID in Review.
+- Siri: "Open a node in Lattice" asks "Which node?" and opens the chosen node; "Review an approval in Lattice" asks "Which approval?". On a locked iPhone Siri asks to unlock before it lists or opens anything.
+- A saved shortcut whose node or approval no longer exists still opens the screen, which then shows the server's answer ("Not found, or not visible to this token" for an approval).
+- While a confirmation or decision is in progress, running either shortcut waits and opens after it finishes; during the welcome flow it opens after connecting.
+- With "Require Face ID to open" on and the lock interval passed, either shortcut shows the lock before the screen.
+- VoiceOver in the Shortcuts parameter picker reads each node as name, state, place, and each approval as title, node, state, age.
