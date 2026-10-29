@@ -307,9 +307,9 @@ public enum TerminalOpener: Sendable, Equatable {
 
     public var phrase: String {
         switch self {
-        case .thisToken: "opened with this token"
-        case .otherToken(let id): "opened with token \(id)"
-        case .signedInSession: "opened from a browser"
+        case .thisToken: "with this token"
+        case .otherToken(let id): "with token \(id)"
+        case .signedInSession: "from a browser"
         }
     }
 }

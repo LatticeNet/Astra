@@ -192,7 +192,7 @@ private func checkTerminalDerivations() throws {
     // Who opened it.
     try expectEqual(TerminalOpener.of(terminalSession("open"), currentTokenID: "tok_phone"), .signedInSession, "no token: a browser")
     try expectEqual(TerminalOpener.of(terminalSession("open", token: "tok_phone"), currentTokenID: "tok_phone"), .thisToken, "this token")
-    try expectEqual(TerminalOpener.of(terminalSession("open", token: "tok_cli"), currentTokenID: "tok_phone").phrase, "opened with token tok_cli", "another token")
+    try expectEqual(TerminalOpener.of(terminalSession("open", token: "tok_cli"), currentTokenID: "tok_phone").phrase, "with token tok_cli", "another token")
 
     // Lists.
     let sessions = [
