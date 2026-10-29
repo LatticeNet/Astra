@@ -14,6 +14,7 @@ struct SystemScreen: View {
     @Environment(Router.self) private var router
     @Environment(\.timeZoneMode) private var mode
     @Environment(\.locale) private var locale
+    @Environment(NetworkMonitor.self) private var network
 
     @SceneStorage(SystemScreen.rangeKey) private var range = "24h"
     @State private var model = PlatformSystemModel()
@@ -101,15 +102,20 @@ struct SystemScreen: View {
 
     @ViewBuilder
     private func overviewSection(_ health: PlatformSystemHealth) -> some View {
+        // Stale, failed or offline data must not keep claiming the plane is up.
+        let doubt = PlatformConfidence.doubt(model.health, offline: !network.isSatisfied, now: Date(), mode: mode, locale: locale)
         Section {
             if let process = health.process {
-                StatusRow(style: StatusStyle(word: "up \(UptimeFormatter.string(seconds: UInt64(max(process.uptimeSeconds, 0))))", symbol: "checkmark.circle.fill", tone: .ok),
+                let uptime = UptimeFormatter.string(seconds: UInt64(max(process.uptimeSeconds, 0)))
+                let style = doubt == nil ? StatusStyle(word: "up \(uptime)", symbol: "checkmark.circle.fill", tone: .ok) : PlatformConfidence.style
+                StatusRow(style: style,
                           title: "Control plane \(process.version)", detail: process.commit.isEmpty ? nil : "commit \(process.commit)",
-                          accessibilityPhrase: "Control plane \(process.version), up \(UptimeFormatter.string(seconds: UInt64(max(process.uptimeSeconds, 0))))")
+                          reason: doubt,
+                          accessibilityPhrase: "Control plane \(process.version), \(style.word)")
             }
             if let probe = health.probe {
                 if probe.available {
-                    StatusRow(style: StatusStyle(word: "available", symbol: "dot.radiowaves.left.and.right", tone: .ok),
+                    StatusRow(style: doubt == nil ? StatusStyle(word: "available", symbol: "dot.radiowaves.left.and.right", tone: .ok) : PlatformConfidence.style,
                               title: "Probe \(probe.probeVersion)",
                               detail: "\(probe.engine) \(probe.coreVersion) · \(probe.targets) targets · \(probe.inflight) of \(probe.maxInflight) in flight")
                 } else {

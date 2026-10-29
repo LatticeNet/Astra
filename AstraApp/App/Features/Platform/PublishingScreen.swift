@@ -24,6 +24,8 @@ struct PublishingScreen: View {
     @Environment(\.verticalSizeClass) private var verticalSizeClass
     @Environment(\.dynamicTypeSize) private var typeSize
     @Environment(\.locale) private var locale
+    @Environment(\.timeZoneMode) private var mode
+    @Environment(NetworkMonitor.self) private var network
 
     @State private var selected = PlatformPublishingView.overview
     @State private var lens = PlatformPublishingLens.all
@@ -142,13 +144,15 @@ struct PublishingScreen: View {
                 lens = lensValue
                 selected = .routes
             } label: {
+                    let doubt = recordsDoubt(now: now)
                 let style = records.isEmpty
                     ? StatusStyle(word: "no routes", symbol: originSymbol(origin), tone: .quiet)
                     : (off > 0
                         ? StatusStyle(word: "\(off) not serving", symbol: "exclamationmark.triangle.fill", tone: .warn)
-                        : StatusStyle(word: "all serving", symbol: "checkmark.circle.fill", tone: .ok))
+                        : (doubt == nil ? StatusStyle(word: "all serving", symbol: "checkmark.circle.fill", tone: .ok) : PlatformConfidence.style))
                 StatusRow(style: style, title: title,
                           detail: records.isEmpty ? nil : (records.count == 1 ? "1 route" : "\(records.count) routes"),
+                          reason: off == 0 && !records.isEmpty ? doubt : nil,
                           accessibilityPhrase: "\(title), \(style.word), \(serving) of \(records.count) serving")
             }
             .tint(.primary)
@@ -159,6 +163,10 @@ struct PublishingScreen: View {
                 ScopeDeniedRow(scope: origin == "plugin" ? "proxy:admin" : "\(origin):read")
             }
         }
+    }
+
+    private func recordsDoubt(now: Date) -> String? {
+        PlatformConfidence.doubt(store.records, offline: !network.isSatisfied, now: now, mode: mode, locale: locale)
     }
 
     private func originSymbol(_ origin: String) -> String {
@@ -176,14 +184,28 @@ struct PublishingScreen: View {
             let state = PlatformShareState.of(share, now: now)
             return state == .expiring || state == .expired || PlatformRenderBudgetTone.of(share.renderBudget) == .exhausted || !share.fleetFeedNow.isEmpty
         }
+        // The all-clear needs both reads fresh; a blank or stale section must
+        // never read as healthy.
+        let doubt = recordsDoubt(now: now)
+            ?? PlatformConfidence.doubt(store.shares, offline: !network.isSatisfied, now: now, mode: mode, locale: locale)
         Section {
             if case .denied = store.shares {
                 ScopeDeniedRow(scope: store.shareMissing ?? "proxy:admin")
+            } else if store.shares.value == nil {
+                PlatformSectionState(state: store.shares, noun: "shares") { Task { await store.refresh() } }
+            } else {
+                PlatformRefreshError(state: store.shares, noun: "shares") { Task { await store.refresh() } }
             }
             if expiredRoutes.isEmpty, attentionShares.isEmpty, store.shares.value != nil {
-                Label("Nothing needs attention", systemImage: "checkmark.circle")
-                    .foregroundStyle(.secondary)
-                    .frame(minHeight: Spacing.minimumTarget)
+                if let doubt {
+                    Label(doubt, systemImage: PlatformConfidence.style.symbol)
+                        .foregroundStyle(.secondary)
+                        .frame(minHeight: Spacing.minimumTarget)
+                } else {
+                    Label("Nothing needs attention", systemImage: "checkmark.circle")
+                        .foregroundStyle(.secondary)
+                        .frame(minHeight: Spacing.minimumTarget)
+                }
             }
             ForEach(attentionShares) { share in
                 NavigationLink(value: AppRoute.platform(.share(id: share.id))) {

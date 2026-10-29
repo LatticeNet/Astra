@@ -173,6 +173,30 @@ struct PlatformSectionState<Value: Sendable>: View {
     }
 }
 
+/// Sections 5.0 and 6.11: while the data behind a verdict is stale, failed
+/// or offline, the verdict stops claiming health and says why it cannot.
+enum PlatformConfidence {
+    static let style = StatusStyle(word: "cannot confirm", symbol: "questionmark.circle", tone: .quiet)
+
+    /// Nil when the data is fresh enough to claim health; otherwise the
+    /// sentence that replaces the claim.
+    static func doubt<Value>(_ state: ResourceState<Value>, offline: Bool, now: Date, interval: TimeInterval = 60,
+                             mode: TimeZoneMode, locale: Locale) -> String? {
+        if offline {
+            return state.loadedAt.map { "Cannot confirm. Offline since \(TimeDisplay.clock($0, mode: mode, locale: locale))." } ?? "Cannot confirm. Offline."
+        }
+        switch Freshness.of(state, now: now, interval: interval) {
+        case .fresh:
+            return nil
+        case .stale(let since):
+            if case .failed = state { return "Cannot confirm. The last refresh failed." }
+            return since.map { "Cannot confirm. Last good refresh \(TimeDisplay.duration(now.timeIntervalSince($0), locale: locale)) ago." } ?? "Cannot confirm."
+        case .unknown:
+            return state.value == nil ? "Cannot confirm." : nil
+        }
+    }
+}
+
 /// A menu button that stays visible when the token cannot run it, with the
 /// scope it needs as its second line (section 5.0).
 struct PlatformGatedButton: View {
