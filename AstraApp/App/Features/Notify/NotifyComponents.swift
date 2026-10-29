@@ -295,17 +295,27 @@ struct NotifyDeliveryRow: View {
             detail: detail,
             reason: reason(state),
             trailing: delivery.createdAt.map { NotifyTime.when($0, mode: mode, locale: locale) },
-            accessibilityPhrase: "\(NotifySent.severityWord(delivery)), \(title), \(style.word)"
+            accessibilityPhrase: ([NotifySent.severityWord(delivery), title, style.word] + spokenParts).joined(separator: ", ")
         )
+    }
+
+    private var channel: String {
+        delivery.channelName.isEmpty ? (delivery.channelID.isEmpty ? "no channel" : delivery.channelID) : delivery.channelName
     }
 
     private var detail: String {
         var parts: [String] = []
-        let channel = delivery.channelName.isEmpty ? (delivery.channelID.isEmpty ? "no channel" : delivery.channelID) : delivery.channelName
         parts.append(delivery.role == "fallback" || delivery.role == "test" ? "\(channel), \(delivery.role)" : channel)
         if !delivery.title.isEmpty { parts.append(eventLabel) }
         if let count = NotifySent.occurrences(delivery) { parts.append("\(count) times") }
         return parts.joined(separator: " · ")
+    }
+
+    private var spokenParts: [String] {
+        var parts = [delivery.role == "fallback" ? "via \(channel) as fallback" : (delivery.role == "test" ? "test via \(channel)" : "via \(channel)")]
+        if !delivery.title.isEmpty { parts.append(eventLabel) }
+        if let count = NotifySent.occurrences(delivery) { parts.append("\(count) times") }
+        return parts
     }
 
     private func reason(_ state: NotifySentState) -> String? {
@@ -316,6 +326,61 @@ struct NotifyDeliveryRow: View {
             return NotifySentNote.of(delivery)?.sentence(mode: mode, locale: locale)
         case .sent, .queued:
             return nil
+        }
+    }
+}
+
+/// A StatusRow whose detail is a statement that must be read whole: the
+/// witness attention rows and the webhook's "Who receives it" notice.
+/// StatusRow caps its detail at two lines (section 4.5), which cut these
+/// sentences off before their consequence, so this row wraps every line.
+struct NotifyStatementRow: View {
+    let style: StatusStyle
+    let title: String
+    var detail: String?
+    var reason: String?
+
+    @Environment(\.dynamicTypeSize) private var typeSize
+    @ScaledMetric(relativeTo: .title3) private var glyphWidth: CGFloat = 28
+
+    var body: some View {
+        let accessible = typeSize.isAccessibilitySize
+        HStack(alignment: .firstTextBaseline, spacing: Spacing.m) {
+            if !accessible {
+                StatusGlyph(style: style).frame(width: glyphWidth)
+            }
+            VStack(alignment: .leading, spacing: Spacing.xxs) {
+                Group {
+                    if accessible {
+                        Text("\(Text(Image(systemName: style.symbol)).foregroundStyle(style.tone.glyph)) \(title)")
+                    } else {
+                        Text(title)
+                    }
+                }
+                .textRole(.rowTitle)
+                if let line = statusLine {
+                    line.textRole(.rowDetail)
+                }
+                if let reason {
+                    Text(reason).textRole(.rowReason(style.tone.word))
+                }
+            }
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .frame(minHeight: Spacing.minimumTarget)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel([title, style.word.isEmpty ? nil : style.word, detail, reason].compactMap { $0 }.joined(separator: ", "))
+    }
+
+    private var statusLine: Text? {
+        let word = style.word.isEmpty ? nil : Text(style.word).foregroundStyle(style.tone.word)
+        let detail = detail?.isEmpty == false ? detail : nil
+        switch (word, detail) {
+        case let (word?, detail?): return Text("\(word) · \(detail)")
+        case let (word?, nil): return word
+        case let (nil, detail?): return Text(detail)
+        case (nil, nil): return nil
         }
     }
 }

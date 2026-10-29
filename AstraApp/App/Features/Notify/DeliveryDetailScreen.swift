@@ -252,7 +252,7 @@ struct DeliveryDetailScreen: View {
             detail: detail,
             reason: reason.map { $0.prefix(1).uppercased() + $0.dropFirst() },
             trailing: attempt.at.map { TimeDisplay.clock($0, mode: mode, locale: locale) },
-            accessibilityPhrase: "Attempt \(number), \(style.word)"
+            accessibilityPhrase: "Attempt \(number), \(style.word), \(detail)"
         )
     }
 

@@ -159,9 +159,9 @@ struct NotifyWebhookRow: View {
         return StatusRow(
             style: style,
             title: hook.displayName,
-            detail: style.word == "never called" ? hook.eventType : "\(hook.eventType), \(called)",
+            detail: detail,
             reason: reason,
-            accessibilityPhrase: "Webhook \(hook.displayName), \(style.word)"
+            accessibilityPhrase: "Webhook \(hook.displayName), \(style.word), \(detail)"
         )
     }
 }

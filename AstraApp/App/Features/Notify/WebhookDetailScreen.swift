@@ -182,7 +182,7 @@ struct WebhookDetailScreen: View {
         case .ok: "checkmark.circle.fill"
         default: "questionmark.circle"
         }
-        return StatusRow(style: StatusStyle(word: "", symbol: symbol, tone: tone), title: title, detail: text, accessibilityPhrase: "\(title). \(text)")
+        return NotifyStatementRow(style: StatusStyle(word: "", symbol: symbol, tone: tone), title: title, detail: text)
     }
 
     @ViewBuilder
@@ -237,7 +237,7 @@ struct WebhookDetailScreen: View {
             detail: detail,
             reason: problem && !attempt.reason.isEmpty ? attempt.reason.notifyCapitalized : nil,
             trailing: attempt.createdAt.map { NotifyTime.when($0, mode: mode, locale: locale) },
-            accessibilityPhrase: "\(attempt.test ? "Test attempt" : "Attempt"), \(style.word)"
+            accessibilityPhrase: "\(attempt.test ? "Test attempt" : "Attempt"), \(style.word), \(NotifyWebhookAttempt.detail(attempt))"
         )
     }
 

@@ -111,13 +111,19 @@ struct NotificationsScreen: View {
                     }
                 }
                 ForEach(Array(witness.enumerated()), id: \.offset) { _, item in
-                    StatusRow(
-                        style: item.isFailure ? StatusStyle(word: item.word, symbol: "xmark.octagon.fill", tone: .fail)
-                            : StatusStyle(word: item.word, symbol: "exclamationmark.triangle.fill", tone: .warn),
-                        title: "Witness on \(item.node.nodeName)",
-                        detail: item.claim + " " + item.line.sentence(mode: mode, locale: locale, now: Date()),
-                        accessibilityPhrase: item.claim
-                    )
+                    Button {
+                        openWitness(item.node)
+                    } label: {
+                        NotifyStatementRow(
+                            style: item.isFailure ? StatusStyle(word: item.word, symbol: "xmark.octagon.fill", tone: .fail)
+                                : StatusStyle(word: item.word, symbol: "exclamationmark.triangle.fill", tone: .warn),
+                            title: "Witness on \(item.node.nodeName)",
+                            detail: item.claim + " " + item.line.sentence(mode: mode, locale: locale, now: Date()),
+                            reason: item.kind == .planFailed ? item.node.lastFailed.flatMap { $0.reason.isEmpty ? nil : "Last plan failed: \($0.reason)" } : nil
+                        )
+                    }
+                    .tint(.primary)
+                    .accessibilityHint(witnessHint(item.node))
                 }
             } header: {
                 Text("Needs attention").accessibilityAddTraits(.isHeader)
@@ -301,13 +307,20 @@ struct NotificationsScreen: View {
             facts.append("Runs a different config than the last applied plan")
         }
         let problem = line.tone != .quiet
-        return StatusRow(
-            style: style,
-            title: node.nodeName,
-            detail: (facts.map { $0 + "." } + (problem ? [] : [sentence])).joined(separator: " "),
-            reason: problem ? sentence : nil,
-            accessibilityPhrase: "Witness on \(node.nodeName), \(style.word)"
-        )
+        let detail = facts.map { $0 + "." } + (problem ? [] : [sentence])
+        return Button {
+            openWitness(node)
+        } label: {
+            StatusRow(
+                style: style,
+                title: node.nodeName,
+                detail: detail.joined(separator: " "),
+                reason: problem ? sentence : nil,
+                accessibilityPhrase: (["Witness on \(node.nodeName), \(style.word)"] + detail).joined(separator: ", ")
+            )
+        }
+        .tint(.primary)
+        .accessibilityHint(witnessHint(node))
         .contextMenu {
             if let approval = node.pending ?? node.lastFailed {
                 Button("Review plan", systemImage: "checkmark.seal") { router.present(.review(.single(approval.approvalID))) }
@@ -335,6 +348,23 @@ struct NotificationsScreen: View {
                 }
             }
         }
+    }
+
+    /// A witness row opens the plan behind it when one exists (the two-tap
+    /// guarantee), else its settings, which also hold Remove, else the node.
+    private func openWitness(_ node: NotifyWitnessNode) {
+        if let approval = node.pending ?? node.lastFailed {
+            router.present(.review(.single(approval.approvalID)))
+        } else if store.witnessMissing == nil {
+            witnessSheet = WitnessTarget(nodeID: node.nodeID)
+        } else {
+            router.push(.fleet(.node(id: node.nodeID)))
+        }
+    }
+
+    private func witnessHint(_ node: NotifyWitnessNode) -> String {
+        if node.pending ?? node.lastFailed != nil { return "Opens the plan in Review" }
+        return store.witnessMissing == nil ? "Opens the witness settings" : "Opens the node"
     }
 
     // MARK: Toolbar
@@ -376,13 +406,14 @@ struct NotifyChannelRow: View {
             channel.enabled ? line.cause.map { "Last failure: \($0.sentence)." } : nil
         default: nil
         }
+        // No trailing time: it meant "failing for" on one row and "delivered ago"
+        // on the next; the channel's own screen dates each claim.
         return StatusRow(
             style: style,
             title: channel.displayName,
             detail: detail,
             reason: reason,
-            trailing: line.at.map { RelativeDateFormatter.shortDuration(Date().timeIntervalSince($0)) },
-            accessibilityPhrase: "\(channel.displayName), \(NotifyKind.label(channel.kind)), \(style.word)"
+            accessibilityPhrase: "\(channel.displayName), \(style.word), \(detail)"
         )
     }
 }
@@ -400,6 +431,6 @@ struct NotifyRuleRow: View {
         let to = names.isEmpty ? "no channel" : names.joined(separator: ", ")
         var detail = "\(events) to \(to)"
         if let quiet = NotifyRules.quietHoursText(rule) { detail += ". Quiet \(quiet)" }
-        return StatusRow(style: style, title: rule.displayName, detail: detail, accessibilityPhrase: "Rule \(rule.displayName), \(style.word)")
+        return StatusRow(style: style, title: rule.displayName, detail: detail, accessibilityPhrase: "Rule \(rule.displayName), \(style.word), \(detail)")
     }
 }

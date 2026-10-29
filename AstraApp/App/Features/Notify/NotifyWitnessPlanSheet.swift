@@ -182,6 +182,20 @@ struct NotifyWitnessPlanSheet: View {
             } footer: {
                 Text("Timing, alert level and reference URLs are the server's defaults.")
             }
+
+            if let nodeID, let existing = status.nodes.first(where: { $0.nodeID == nodeID }), existing.configured != nil {
+                Section {
+                    Button(role: .destructive) {
+                        Task { await remove(existing) }
+                    } label: {
+                        Label("Remove the witness", systemImage: "trash")
+                            .frame(minHeight: Spacing.minimumTarget)
+                    }
+                    .disabled(store.witnessMissing != nil || filing || !network.isSatisfied)
+                } footer: {
+                    Text("Files a plan that stops the witness on this node. Nothing changes until it is approved.")
+                }
+            }
         }
         .listStyle(.insetGrouped)
         .scrollDismissesKeyboard(.interactively)
@@ -219,6 +233,14 @@ struct NotifyWitnessPlanSheet: View {
         let outcome = await runner.run(NotifyIntents.planWitness(node: ObjectRef(kind: "node", id: node, name: name), channel: picked,
                                                                  barkURL: barkURL.trimmingCharacters(in: .whitespacesAndNewlines), status: status,
                                                                  healthURL: basis(status).healthURL))
+        filing = false
+        if case .filed = outcome { dismiss() }
+    }
+
+    private func remove(_ existing: NotifyWitnessNode) async {
+        urlFocused = false
+        filing = true
+        let outcome = await runner.run(NotifyIntents.removeWitness(node: ObjectRef(kind: "node", id: existing.nodeID, name: existing.nodeName)))
         filing = false
         if case .filed = outcome { dismiss() }
     }
