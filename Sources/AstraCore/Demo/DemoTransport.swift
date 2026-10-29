@@ -98,7 +98,9 @@ public struct DemoTransport: HTTPTransport {
         if let scope = route.requiredScope, !scopes.allows(scope) {
             return .error(status: 403, code: "forbidden", message: "missing scope \(scope)")
         }
-        let servesEmpty = scenario == .empty && request.method == "GET"
+        // Who is calling is not listed data: Empty still answers /api/me
+        // for the actual caller, so the session and a token override hold.
+        let servesEmpty = scenario == .empty && request.method == "GET" && request.path != "/api/me"
         if servesEmpty, let emptyBody = route.emptyBody {
             return DemoResponse(status: route.status, body: emptyBody)
         }
