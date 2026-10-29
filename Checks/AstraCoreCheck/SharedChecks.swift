@@ -14,6 +14,9 @@ public func checkShared() async throws {
     try checkPathKeysAndSeal()
     try checkDeepLinks()
     try await checkWriteFlowCancel()
+    try await checkRefusalMapping()
+    try await checkGatewayTimeoutIsUnknown()
+    try checkForbiddenClassification()
     try checkIncidentFilters()
     try checkQueryVectors()
     try checkScopeGoldens()
@@ -221,9 +224,9 @@ private func checkLoginFlow() async throws {
             transport: transport
         ).loginTOTP(challengeID: "challenge", code: "000000")
         throw CheckFailure.failed("expected TOTP API error")
-    } catch LatticeAPIError.forbidden(let code, let scope) {
+    } catch LatticeAPIError.forbidden(let code, let message) {
         try expectEqual(code, "forbidden", "TOTP api error code")
-        try expectEqual(scope, nil, "TOTP api error names no scope")
+        try expect(!message.isEmpty, "TOTP api error keeps the server's message")
     }
 }
 
@@ -356,9 +359,9 @@ private func checkErrorMapping() async throws {
     let stepUp = json(#"{"error":{"code":"unauthorized","message":"invalid second factor"}}"#)
     try expectEqual(await LatticeErrorProbe.map(status: 401, body: stepUp), .unauthorized(message: "invalid second factor"), "401 keeps the step-up message")
     let findings = json(#"{"error":"plan blocked by lint findings","findings":[{"code":"lockout","severity":"block","message":"SSH would be closed"}]}"#)
-    try expectEqual(await LatticeErrorProbe.map(status: 409, body: findings), .conflict(code: "conflict", findings: ["SSH would be closed"]), "409 carries findings")
+    try expectEqual(await LatticeErrorProbe.map(status: 409, body: findings), .conflict(code: "conflict", message: "plan blocked by lint findings", findings: ["SSH would be closed"]), "409 carries findings")
     let stale = json(#"{"error":{"code":"approval_stale","message":"plan changed"}}"#)
-    try expectEqual(await LatticeErrorProbe.map(status: 409, body: stale), .conflict(code: "approval_stale", findings: []), "409 keeps the envelope code")
+    try expectEqual(await LatticeErrorProbe.map(status: 409, body: stale), .conflict(code: "approval_stale", message: "plan changed", findings: []), "409 keeps the envelope code")
     try expectEqual(await LatticeErrorProbe.map(status: 404, body: Data()), .notFound, "404 without a body")
     try expectEqual(await LatticeErrorProbe.map(status: 503, body: Data()), .server(status: 503, code: nil, message: ""), "503 without a body")
     try expectEqual(LatticeAPIError(URLError(.timedOut)), .transport(.timedOut), "URLError maps to transport")
@@ -439,6 +442,87 @@ private func checkWriteFlowCancel() async throws {
     let result = await WriteFlow(intent: intent, client: client, authenticator: CancellingAuthenticator()).commit(choices: ConfirmChoices())
     guard case .cancelled = result else { throw CheckFailure.failed("cancelled authentication must end the flow") }
     try expectEqual(await transport.requestURLs.count, 0, "cancelled authentication sends nothing")
+}
+
+/// Server refusals keep their message and reach the refusal code spec 6.4 and 6.7 name.
+private func checkRefusalMapping() async throws {
+    let plainStepUp = try expectUnwrapped(await LatticeErrorProbe.map(status: 403, body: json(#"{"error":{"code":"forbidden","message":"second-factor step-up required","request_id":"req_1"}}"#)), "plain step-up 403")
+    try expect(plainStepUp.isStepUpRequired, "requireStepUpGrant's plain 403 reads as step-up required")
+    guard case .refused(.stepUpRequired, _)? = WriteFlow.refusal(for: plainStepUp) else {
+        throw CheckFailure.failed("plain step-up 403 must map to stepUpRequired")
+    }
+
+    let noTOTP = try expectUnwrapped(await LatticeErrorProbe.map(status: 403, body: json(#"{"error":{"code":"forbidden","message":"an authenticator passcode must be enabled before passcode step-up"}}"#)), "no TOTP 403")
+    try expectEqual(noTOTP.localizedDescription, "an authenticator passcode must be enabled before passcode step-up", "403 keeps the server's message")
+    try expect(!noTOTP.isStepUpRequired, "the no-TOTP refusal is not a step-up retry")
+
+    let version = try expectUnwrapped(await LatticeErrorProbe.map(status: 409, body: json(#"{"error":{"code":"version_conflict","message":"someone saved in between"}}"#)), "version conflict 409")
+    guard case .refused(.versionConflict, let message)? = WriteFlow.refusal(for: version) else {
+        throw CheckFailure.failed("version_conflict must map to versionConflict")
+    }
+    try expectEqual(message, "someone saved in between", "409 keeps the server's message")
+
+    let stale = try expectUnwrapped(await LatticeErrorProbe.map(status: 409, body: json(#"{"error":{"code":"approval_stale","message":"plan changed since review; re-review before approving"}}"#)), "stale 409")
+    guard case .refused(.approvalStale, let staleMessage)? = WriteFlow.refusal(for: stale) else {
+        throw CheckFailure.failed("approval_stale must map to approvalStale")
+    }
+    try expectEqual(staleMessage, "plan changed since review; re-review before approving", "approval_stale keeps the server's message")
+}
+
+private struct ConfirmingAuthenticator: WriteAuthenticator {
+    func authenticate(reason: String) async -> DeviceAuthOutcome { .confirmed }
+}
+
+/// A proxy timeout after the request was sent may hide an applied write, so
+/// the runner verifies instead of reporting a refusal (6.7). A 502 that
+/// carries a Lattice envelope is the server's own refusal.
+private func checkGatewayTimeoutIsUnknown() async throws {
+    let client = LatticeClient(baseURL: URL(string: "https://lattice.example.com")!, transport: MockTransport(responses: [:]))
+    func intent(throwing error: LatticeAPIError) -> WriteIntent {
+        WriteIntent(
+            tier: .t2,
+            verb: "Enable node",
+            object: ObjectRef(kind: "node", id: "n1", name: "edge-tyo-3"),
+            scopes: ["node:admin"],
+            consequence: "edge-tyo-3 can authenticate again.",
+            verify: { _ in "edge-tyo-3 is now enabled." },
+            changes: [.nodes],
+            perform: { _, _ in throw error }
+        )
+    }
+    for status in [504, 524] {
+        let result = await WriteFlow(intent: intent(throwing: .server(status: status, code: nil, message: "")), client: client, authenticator: ConfirmingAuthenticator()).commit(choices: ConfirmChoices())
+        guard case .finished(.unknown(let message)) = result else {
+            throw CheckFailure.failed("HTTP \(status) after sending must be unknown")
+        }
+        try expectEqual(message, "Could not confirm. edge-tyo-3 is now enabled.", "HTTP \(status) runs verify")
+    }
+    let refusal = await WriteFlow(intent: intent(throwing: .server(status: 502, code: "bad_gateway", message: "agent artifact upstream failed")), client: client, authenticator: ConfirmingAuthenticator()).commit(choices: ConfirmChoices())
+    guard case .finished(.refused) = refusal else {
+        throw CheckFailure.failed("a Lattice 502 envelope is a refusal")
+    }
+}
+
+/// Only scope refusals turn a screen into the denied state; the scope comes
+/// from the caller because the envelope never names one.
+private func checkForbiddenClassification() throws {
+    let state = ResourceState<Int>.loaded(1, at: Date())
+    guard case .denied(let scope) = state.failing(.forbidden(code: "forbidden", message: "missing node:read"), surface: "Nodes", missingScope: "node:read") else {
+        throw CheckFailure.failed("a plain 403 is a scope denial")
+    }
+    try expectEqual(scope, "node:read", "denied names the caller's missing scope")
+    for error in [
+        LatticeAPIError.forbidden(code: "forbidden", message: "invalid csrf token"),
+        .forbidden(code: "mfa_required", message: "two-factor enrollment required"),
+        .forbidden(code: "step_up_required", message: "second-factor step-up required"),
+        .forbidden(code: "forbidden", message: "second-factor step-up required"),
+    ] {
+        guard case .failed(let failure, let last, _) = state.failing(error, surface: "Nodes", missingScope: "node:read") else {
+            throw CheckFailure.failed("\(error) is not a missing scope")
+        }
+        try expectEqual(failure, error, "the refusal keeps its message")
+        try expect(last == nil, "a 403 drops the stale value")
+    }
 }
 
 private func checkIncidentFilters() throws {

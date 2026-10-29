@@ -227,7 +227,7 @@ struct LatticeErrorEnvelope: Decodable {
             error = body
         } else {
             let message = try container.decode(String.self, forKey: .error)
-            error = LatticeAPIErrorBody(code: "", message: message, requestID: nil, scope: nil)
+            error = LatticeAPIErrorBody(code: "", message: message, requestID: nil)
         }
         if let objects = try? container.decodeIfPresent([Finding].self, forKey: .findings) {
             findings = objects.map { $0.message ?? $0.code ?? "" }.filter { !$0.isEmpty }
@@ -241,7 +241,7 @@ struct LatticeErrorEnvelope: Decodable {
         if let envelope = try? JSONDecoder().decode(LatticeErrorEnvelope.self, from: body) {
             return envelope.error.asAPIError(statusCode: status, findings: envelope.findings)
         }
-        return LatticeAPIErrorBody(code: "", message: "", requestID: nil, scope: nil)
+        return LatticeAPIErrorBody(code: "", message: "", requestID: nil)
             .asAPIError(statusCode: status, findings: [])
     }
 }
@@ -250,20 +250,17 @@ struct LatticeAPIErrorBody: Decodable {
     var code: String
     var message: String
     var requestID: String?
-    var scope: String?
 
     enum CodingKeys: String, CodingKey {
         case code
         case message
         case requestID = "request_id"
-        case scope
     }
 
-    init(code: String, message: String, requestID: String?, scope: String?) {
+    init(code: String, message: String, requestID: String?) {
         self.code = code
         self.message = message
         self.requestID = requestID
-        self.scope = scope
     }
 
     init(from decoder: Decoder) throws {
@@ -271,7 +268,6 @@ struct LatticeAPIErrorBody: Decodable {
         code = try container.decodeIfPresent(String.self, forKey: .code) ?? ""
         message = try container.decodeIfPresent(String.self, forKey: .message) ?? ""
         requestID = try container.decodeIfPresent(String.self, forKey: .requestID)
-        scope = try container.decodeIfPresent(String.self, forKey: .scope)
     }
 
     /// Maps the envelope to a `LatticeAPIError`. A nil status is an envelope
@@ -286,11 +282,11 @@ struct LatticeAPIErrorBody: Decodable {
         case 401:
             return .unauthorized(message: messageForDisplay)
         case 403:
-            return .forbidden(code: codeOrNil ?? "forbidden", scope: scope)
+            return .forbidden(code: codeOrNil ?? "forbidden", message: messageForDisplay)
         case 404:
             return .notFound
         case 409:
-            return .conflict(code: codeOrNil ?? "conflict", findings: findings)
+            return .conflict(code: codeOrNil ?? "conflict", message: messageForDisplay, findings: findings)
         default:
             return .server(status: statusCode ?? 0, code: codeOrNil, message: messageForDisplay)
         }

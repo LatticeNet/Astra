@@ -164,7 +164,7 @@ struct SessionSignInForm: View {
         switch error {
         case .forbidden(let code, _) where code == "mfa_required":
             return "Two-factor enrollment is required. Enroll on the web first."
-        case .forbidden:
+        case .forbidden(_, let message) where message.isEmpty:
             return "This account has no authenticator code. Set one up on the web first."
         case .unauthorized:
             return "Wrong username, password or code."

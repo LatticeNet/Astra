@@ -39,17 +39,33 @@ public enum ResourceState<Value: Sendable>: Sendable {
         .loading(previous: value, previousAt: loadedAt)
     }
 
-    /// The state after `error`, keeping the last good value. A 403 drops the
-    /// value so nothing stale looks current (6.7), and an undecodable body
-    /// reads as companion behind for `surface`.
-    public func failing(_ error: LatticeAPIError, surface: String) -> ResourceState<Value> {
+    /// The state after `error`, keeping the last good value. A scope refusal
+    /// drops the value so nothing stale looks current (6.7), and an undecodable
+    /// body reads as companion behind for `surface`.
+    ///
+    /// The server's 403 envelope never names a scope, so `missingScope` is the
+    /// one the caller's requirement lacks (`scopes.missing(requirement).first`).
+    /// Step-up, enrollment and CSRF refusals are not missing scopes; they fail
+    /// with the server's message so the screen can show its explicit state.
+    public func failing(_ error: LatticeAPIError, surface: String, missingScope: String? = nil) -> ResourceState<Value> {
         switch error {
-        case .forbidden(_, let scope):
-            .denied(scope: scope ?? "")
+        case .forbidden where Self.isScopeRefusal(error):
+            .denied(scope: missingScope ?? "")
+        case .forbidden:
+            .failed(error, last: nil, lastAt: nil)
         case .invalidResponse:
             .companionBehind(surface: surface)
         default:
             .failed(error, last: value, lastAt: loadedAt)
+        }
+    }
+
+    private static func isScopeRefusal(_ error: LatticeAPIError) -> Bool {
+        guard case .forbidden(let code, let message) = error, !error.isStepUpRequired else { return false }
+        switch code {
+        case "capability_denied", "secret_reveal_scope_required": return true
+        case "forbidden": return !message.localizedCaseInsensitiveContains("csrf")
+        default: return false
         }
     }
 }

@@ -84,7 +84,7 @@ public struct WriteFlow: Sendable {
     /// The outcome for an error thrown by `perform`. A lost answer becomes
     /// `.unknown` with the intent's verification sentence; it is never retried.
     func outcome(after error: LatticeAPIError) async -> WriteOutcome {
-        if case .transport(let code) = error, !Self.failedBeforeSending(code) {
+        if Self.answerLostAfterSending(error) {
             guard let verify = intent.verify else {
                 return .unknown("Could not confirm \(intent.title). Check its state before trying again.")
             }
@@ -104,22 +104,44 @@ public struct WriteFlow: Sendable {
     public static func refusal(for error: LatticeAPIError) -> WriteOutcome? {
         let message = error.localizedDescription
         switch error {
-        case .forbidden(let code, let scope):
-            switch code {
-            case "step_up_required": return .refused(.stepUpRequired, message)
-            case "secret_reveal_scope_required": return .refused(.secretRevealScopeRequired, message)
-            default: return .refused(.forbidden(scope: scope), message)
-            }
-        case .conflict(let code, let findings):
+        case .forbidden(let code, _):
+            if error.isStepUpRequired { return .refused(.stepUpRequired, message) }
+            if code == "secret_reveal_scope_required" { return .refused(.secretRevealScopeRequired, message) }
+            // The envelope never names a scope; the caller knows which one it asked for.
+            return .refused(.forbidden(scope: nil), message)
+        case .conflict(let code, _, let findings):
             if !findings.isEmpty { return .refused(.conflict(findings: findings), message) }
-            if code == "approval_stale" { return .refused(.approvalStale, message) }
-            return .refused(.validation(message), message)
+            switch code {
+            case "approval_stale": return .refused(.approvalStale, message)
+            case "version_conflict": return .refused(.versionConflict, message)
+            default: return .refused(.validation(message), message)
+            }
         case .notFound:
             return .refused(.notFound, message)
         case .transport(let code):
             return failedBeforeSending(code) ? .refused(.notSent(message), message) : nil
         case .unauthorized, .server, .invalidResponse, .invalidURL, .missingSessionCookie, .totpRequired:
             return .refused(.validation(message), message)
+        }
+    }
+
+    /// True when the request left the phone but its answer did not come back:
+    /// a lost connection or timeout, or a proxy that gave up waiting for the
+    /// server. The write may already have been applied, so it is verified,
+    /// never refused or retried. A 502 or 503 that carries a Lattice envelope
+    /// code is the server's own refusal.
+    public static func answerLostAfterSending(_ error: LatticeAPIError) -> Bool {
+        switch error {
+        case .transport(let code):
+            !failedBeforeSending(code)
+        case .server(let status, let code, _):
+            switch status {
+            case 504, 522, 524: true
+            case 502, 503: code == nil
+            default: false
+            }
+        default:
+            false
         }
     }
 

@@ -6,13 +6,14 @@ import Foundation
 public enum LatticeAPIError: Error, Sendable, Equatable, LocalizedError {
     /// 401. A 401 from `/api/security/step-up` is a wrong code, and its caller maps it (6.4).
     case unauthorized(message: String)
-    /// 403 with the envelope's code: `step_up_required`, `secret_reveal_scope_required`,
-    /// `mfa_required` or `forbidden`.
-    case forbidden(code: String, scope: String?)
+    /// 403 with the envelope's code (`step_up_required`, `secret_reveal_scope_required`,
+    /// or `forbidden` for the server's plain errors) and its message. The server's
+    /// envelope names no scope, so callers take the missing scope from what they asked for.
+    case forbidden(code: String, message: String)
     /// 404.
     case notFound
-    /// 409 with the envelope's code and any lint findings, one message each.
-    case conflict(code: String, findings: [String])
+    /// 409 with the envelope's code, its message, and any lint findings, one message each.
+    case conflict(code: String, message: String, findings: [String])
     /// Any other non-2xx status.
     case server(status: Int, code: String?, message: String)
     /// Timeout, offline, TLS. Whether the request was sent is recorded by the runner.
@@ -25,6 +26,17 @@ public enum LatticeAPIError: Error, Sendable, Equatable, LocalizedError {
     case missingSessionCookie
     /// `/api/login` asked for a second factor; continue with `loginTOTP`.
     case totpRequired(challengeID: String)
+
+    /// The plain-error refusal of `requireStepUpGrant` (server_stepup.go). It
+    /// guards passkey and sing-box writes with code `forbidden`, so its message
+    /// is the only way to tell it from a scope refusal.
+    static let stepUpRequiredMessage = "second-factor step-up required"
+
+    /// A 403 that asks for a fresh step-up grant, coded or plain.
+    public var isStepUpRequired: Bool {
+        guard case .forbidden(let code, let message) = self else { return false }
+        return code == "step_up_required" || message.hasPrefix(Self.stepUpRequiredMessage)
+    }
 
     /// Maps a thrown error to a Lattice error, so callers handle one type.
     public init(_ error: any Error) {
@@ -44,12 +56,12 @@ public enum LatticeAPIError: Error, Sendable, Equatable, LocalizedError {
         switch self {
         case .unauthorized(let message):
             message.isEmpty ? "Lattice credentials are unauthorized or expired." : message
-        case .forbidden(let code, let scope):
-            if let scope, !scope.isEmpty { "Forbidden: needs \(scope)." } else { "Forbidden (\(code))." }
+        case .forbidden(let code, let message):
+            message.isEmpty ? "Forbidden (\(code))." : message
         case .notFound:
             "Not found."
-        case .conflict(let code, let findings):
-            findings.isEmpty ? "Conflict (\(code))." : findings.joined(separator: "\n")
+        case .conflict(let code, let message, let findings):
+            if !findings.isEmpty { findings.joined(separator: "\n") } else if !message.isEmpty { message } else { "Conflict (\(code))." }
         case .server(let status, let code, let message):
             Self.describe(status: status, code: code, message: message)
         case .transport(let code):

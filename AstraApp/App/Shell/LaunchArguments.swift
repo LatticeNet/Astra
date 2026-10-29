@@ -206,7 +206,7 @@ enum FoundationDemoIntents: DemoHooks {
                 perform: { _, choices in
                     try await Task.sleep(for: .milliseconds(300))
                     guard choices.isAccepted("accept_findings") else {
-                        throw LatticeAPIError.conflict(code: "conflict", findings: [
+                        throw LatticeAPIError.conflict(code: "conflict", message: "plan blocked by lint findings", findings: [
                             "Port 7443 is already bound by another service on edge-tyo-3.",
                             "The NetGuard zone for edge-tyo-3 does not admit beacon traffic yet.",
                         ])

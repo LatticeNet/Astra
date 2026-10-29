@@ -14,6 +14,8 @@ final class StepUpCoordinator {
         case waitForNextCode(secondsLeft: Int)
         /// 401 from step-up. Never signs the session out.
         case wrongCode
+        /// 403 from step-up: the account has no authenticator code (F-06).
+        case noAuthenticator
         case refused(String)
 
         var errorDescription: String? {
@@ -22,6 +24,7 @@ final class StepUpCoordinator {
             case .noSession: "Reveals need a signed-in session."
             case .waitForNextCode: "Wait for the next code."
             case .wrongCode: "Wrong code. If you just used this code elsewhere, wait for the next one."
+            case .noAuthenticator: "This account has no authenticator code. Set one up on the web first."
             case .refused(let message): message
             }
         }
@@ -66,6 +69,8 @@ final class StepUpCoordinator {
         } catch {
             switch LatticeAPIError(error) {
             case .unauthorized: throw Failure.wrongCode
+            case .forbidden(_, let message) where message.hasPrefix("an authenticator passcode must be enabled"):
+                throw Failure.noAuthenticator
             case let other: throw Failure.refused(other.localizedDescription)
             }
         }

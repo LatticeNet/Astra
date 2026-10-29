@@ -79,6 +79,7 @@ final class RevealFlowModel {
             switch failure {
             case .waitForNextCode: updateWait(stepUp)
             case .noSession: step = .needsSession
+            case .noAuthenticator: step = .failed(failure.localizedDescription)
             default: break
             }
             codeMessage = failure.localizedDescription
@@ -96,14 +97,14 @@ final class RevealFlowModel {
             step = .value(try await intent.perform(client, grant))
         } catch {
             switch LatticeAPIError(error) {
-            case .forbidden(code: "step_up_required", _) where !retriedAfterStepUpRequired:
+            case let refusal where refusal.isStepUpRequired && !retriedAfterStepUpRequired:
                 retriedAfterStepUpRequired = true
                 stepUp.invalidate()
                 code = ""
                 codeMessage = "Confirm with a new code."
                 step = .code
-            case .forbidden(code: "secret_reveal_scope_required", let scope):
-                step = .failed("This session lacks \(scope ?? "the scope for this secret").")
+            case .forbidden(code: "secret_reveal_scope_required", _):
+                step = .failed("This credential lacks secrets:reveal.")
             case let other:
                 step = .failed(other.localizedDescription)
             }
