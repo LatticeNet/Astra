@@ -157,10 +157,11 @@ public struct MachineProfile: Identifiable, Codable, Equatable, Hashable, Sendab
         return cents > 0 ? cents / 100 : nil
     }
 
+    /// Whole UTC days from today to the renewal day, as the server and the
+    /// console count them; negative once past.
     public func daysUntilRenewal(now: Date = Date()) -> Int? {
-        guard let nextRenewal else { return nil }
-        let seconds = nextRenewal.timeIntervalSince(now)
-        return Int((seconds / 86_400).rounded(.towardZero))
+        guard let renewalDay else { return nil }
+        return InventoryDay(date: now).days(until: renewalDay)
     }
 
     /// The renewal date as a UTC day; Go's zero time (year 1) is no date.

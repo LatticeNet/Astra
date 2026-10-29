@@ -602,7 +602,8 @@ private func checkFleetLogic() throws {
     let derived = try capability(#"{"capability":"vpn","enforced":true,"allowed":true,"source":"derived","state":""}"#)
     try expectEqual(FleetCapabilityState.word(derived), "In scope", "derived allowance reads in scope")
 
-    let renews = Date().addingTimeInterval(12 * 86_400 + 3_600)
+    // Renewal days are UTC days, so the fixture sits twelve UTC days ahead.
+    let renews = InventoryDay(date: Date()).adding(days: 12).date.addingTimeInterval(3_600)
     let machine = MachineProfile(id: "m1", nodeID: "n1", vendor: "Northwind Cloud", priceCents: 900, currency: "EUR", renewalCycleRaw: "monthly", nextRenewal: renews)
     let line = FleetMachineLine.detail(machine)
     try expect(line.hasPrefix("Northwind Cloud, ") && line.contains("a month") && line.hasSuffix("renews in 12 days"), "machine row line: \(line)")
