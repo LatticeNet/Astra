@@ -46,7 +46,7 @@ extension PlatformRoute: DemoHooks {
         case "refreshShare":
             return demoShare(argument).map { PlatformIntents.refreshShare(id: $0.id, slug: $0.slug, sink: PlatformRefreshSink()) }
         case "rotateShare":
-            return demoShare(argument).map { PlatformIntents.rotateShare(id: $0.id, slug: $0.slug) }
+            return demoShare(argument).map { PlatformIntents.rotateShare(id: $0.id, slug: $0.slug, rotatedBefore: nil) }
         case "deleteShare":
             return demoShare(argument).map { PlatformIntents.deleteShare(id: $0.id, slug: $0.slug) }
         default:

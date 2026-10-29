@@ -114,7 +114,9 @@ enum PlatformIntents {
     }
 
     /// A new token: the old URL stops working for every client holding it.
-    static func rotateShare(id: String, slug: String) -> WriteIntent {
+    /// `rotatedBefore` is the share's rotation stamp as last read, so the
+    /// verify compares server stamps, never the phone clock.
+    static func rotateShare(id: String, slug: String, rotatedBefore: Date?) -> WriteIntent {
         let ref = shareRef(id: id, slug: slug)
         return WriteIntent(
             tier: .t3,
@@ -126,7 +128,8 @@ enum PlatformIntents {
             verify: { client in
                 let share = try await client.platformShares().first { $0.id == id }
                 guard let rotated = share?.rotatedAt else { return "\(slug) shows no rotation." }
-                return Date().timeIntervalSince(rotated) < 120 ? "\(slug) was rotated just now." : "\(slug) was not rotated."
+                if let rotatedBefore, rotated <= rotatedBefore { return "\(slug) was not rotated." }
+                return "\(slug) was rotated."
             },
             changes: [.publishing],
             perform: { client, _ in

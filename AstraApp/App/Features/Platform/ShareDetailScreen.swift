@@ -91,7 +91,7 @@ struct ShareDetailScreen: View {
 
             Section {
                 PlatformActionRow(title: "Rotate share \(share.slug)", systemImage: "arrow.triangle.2.circlepath", note: "The current URL stops working at once", missing: missing) {
-                    Task { await runner.run(PlatformIntents.rotateShare(id: share.id, slug: share.slug)) }
+                    Task { await runner.run(PlatformIntents.rotateShare(id: share.id, slug: share.slug, rotatedBefore: share.rotatedAt)) }
                 }
                 WebLinkRow(title: "Edit expiry or interval on web", path: .share(id: share.id))
                 PlatformActionRow(title: "Delete share \(share.slug)", systemImage: "trash", note: "Its URL stops answering at once", missing: missing, role: .destructive) {
@@ -236,7 +236,7 @@ struct ShareDetailScreen: View {
                         PlatformGatedButton(title: "Refresh", systemImage: "arrow.clockwise", missing: missing) { Task { await refresh(share) } }
                     }
                     PlatformGatedButton(title: "Rotate", systemImage: "arrow.triangle.2.circlepath", missing: missing) {
-                        Task { await runner.run(PlatformIntents.rotateShare(id: share.id, slug: share.slug)) }
+                        Task { await runner.run(PlatformIntents.rotateShare(id: share.id, slug: share.slug, rotatedBefore: share.rotatedAt)) }
                     }
                     Section {
                         Button("Copy link", systemImage: "link") { PlatformCopy.copy(PlatformCopy.shareLink(id)) }
