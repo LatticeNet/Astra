@@ -88,8 +88,10 @@ struct SSHGuardCountdown: View {
     var prominent = false
 
     var body: some View {
-        TimelineView(.explicit([deadline])) { context in
-            if context.date < deadline {
+        // The wall clock, not context.date: an explicit schedule can hand the
+        // first render its next entry, which read as "passed" minutes early.
+        TimelineView(.explicit([deadline.addingTimeInterval(0.1)])) { _ in
+            if Date() < deadline {
                 ViewThatFits(in: .horizontal) {
                     HStack(spacing: Spacing.xs) { parts }
                     VStack(alignment: .leading, spacing: Spacing.xxs) { parts }

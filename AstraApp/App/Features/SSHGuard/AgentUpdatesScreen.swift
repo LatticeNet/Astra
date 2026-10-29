@@ -51,15 +51,6 @@ struct AgentUpdatesScreen: View {
                 if verticalSizeClass == .compact, store.missingGate == nil {
                     ToolbarItem(placement: .topBarTrailing) { toolbarPicker.frame(maxWidth: 320) }
                 }
-                // A bottom bar in portrait: in the top bar the text button squeezed out the
-                // title, entirely on iPhone SE. Compact height moves it up (section 4.11).
-                if selected == .nodes, store.missingGate == nil {
-                    if verticalSizeClass == .compact {
-                        ToolbarItem(placement: .topBarTrailing) { planAllButton }
-                    } else {
-                        ToolbarItem(placement: .bottomBar) { planAllButton }
-                    }
-                }
                 ToolbarItem(placement: .topBarTrailing) { menu }
             }
             .onAppear(perform: applyLink)
@@ -218,6 +209,7 @@ struct AgentUpdatesScreen: View {
                     let current = rows.filter { $0.standing == .current || $0.standing == .ahead }.count
                     DetailRow(label: "Latest stable", value: latest, monospaced: true, copyable: false)
                     DetailRow(label: "On it or newer", value: "\(current) of \(rows.count)", copyable: false)
+                    planAllButton
                     if case .failed(let error, _, _) = store.policies {
                         Label("Policies could not be read: \(error.localizedDescription)", systemImage: "exclamationmark.triangle")
                             .foregroundStyle(Color.statusWarnText)
@@ -225,12 +217,6 @@ struct AgentUpdatesScreen: View {
                 } else {
                     LoadingRows(label: "Loading the latest release", count: 1)
                 }
-            }
-        } footer: {
-            if let reason = store.planBlockReason() {
-                Text("Plans need \(reason.replacingOccurrences(of: "Needs ", with: "")).")
-            } else {
-                Text("Plan update files an approval per node; nothing changes until it is approved.")
             }
         }
     }
@@ -272,17 +258,20 @@ struct AgentUpdatesScreen: View {
         }
     }
 
+    /// In the summary, not the top bar: there the text button squeezed out the
+    /// title, entirely on iPhone SE, and a bottom bar sits under the tab bar.
     private var planAllButton: some View {
         let targets = store.bulk.plan
+        let note = store.planBlockReason()
+            ?? (targets.isEmpty ? "No node is behind with an update policy." : "Files one plan per node, one after another. Nothing changes until each is approved.")
         return Button {
             let refs = targets.map { ObjectRef(kind: "node", id: $0.nodeID, name: $0.name) }
             Task { await runner.run(AgentUpdatesPlanning.planAllBehind(refs)) }
         } label: {
-            Text("Plan all behind (\(targets.count))")
+            SSHGuardActionLabel(title: "Plan all behind (\(targets.count))", symbol: "arrow.down.circle", note: note)
         }
         .disabled(targets.isEmpty || store.planBlockReason() != nil)
-        .accessibilityLabel(targets.count == 1 ? "Plan all behind, 1 node" : "Plan all behind, \(targets.count) nodes")
-        .accessibilityHint(targets.isEmpty ? "No node is behind with a policy" : "Files one plan per node")
+        .accessibilityLabel("\(targets.count == 1 ? "Plan all behind, 1 node" : "Plan all behind, \(targets.count) nodes"). \(note)")
     }
 
     private func plan(_ row: AgentUpdatesNodeRow, force: Bool) {
