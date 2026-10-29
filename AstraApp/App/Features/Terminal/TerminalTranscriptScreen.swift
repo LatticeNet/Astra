@@ -129,6 +129,10 @@ struct TerminalTranscriptScreen: View {
             .navigationSubtitle(subtitle)
             .toolbar { toolbar }
             .polling(cadence, version: changes.version(.terminal)) {
+                // A refused or forgotten session answers the same way every
+                // time, and the server audits each refusal as a deny, so the
+                // screen stops asking. Retry and pull to refresh still ask.
+                guard model.gone == nil else { return true }
                 await nodes.refreshIfOlder(than: 60)
                 return await model.load(id: sessionID, session: session)
             }
