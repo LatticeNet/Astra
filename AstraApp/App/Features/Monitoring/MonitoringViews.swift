@@ -386,3 +386,36 @@ struct MonitoringStateHeader: View {
         .accessibilityAddTraits(.isHeader)
     }
 }
+
+/// ResourceView, plus the offline state of section 6.11 for a screen that
+/// has nothing loaded yet: without a network path no request is made, so
+/// placeholders would never resolve.
+struct MonitoringResource<Value: Sendable, Content: View>: View {
+    let state: ResourceState<Value>
+    let noun: String
+    let retry: () -> Void
+    @ViewBuilder let content: (Value) -> Content
+
+    @Environment(NetworkMonitor.self) private var network
+
+    var body: some View {
+        if !network.isSatisfied, state.value == nil, !isTerminal {
+            WholeScreenState {
+                ContentUnavailableView {
+                    Label("Offline", systemImage: "wifi.slash")
+                } description: {
+                    Text("No connection, and no \(noun) were loaded before it dropped. They load when the connection returns.")
+                }
+            }
+        } else {
+            ResourceView(state: state, noun: noun, retry: retry, content: content)
+        }
+    }
+
+    private var isTerminal: Bool {
+        switch state {
+        case .denied, .companionBehind: true
+        default: false
+        }
+    }
+}

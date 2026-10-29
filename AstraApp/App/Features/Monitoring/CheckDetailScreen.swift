@@ -53,7 +53,7 @@ struct CheckDetailScreen: View {
                 }
             }
         } else {
-            ResourceView(state: store.monitors, noun: "the check", retry: { Task { await store.refreshChecks() } }) { _ in EmptyView() }
+            MonitoringResource(state: store.monitors, noun: "the check", retry: { Task { await store.refreshChecks() } }) { _ in EmptyView() }
         }
     }
 

@@ -19,7 +19,7 @@ struct PathMatrixScreen: View {
     @SceneStorage(PathMatrixScreen.listKey) private var asList = false
 
     var body: some View {
-        ResourceView(state: store.paths, noun: "paths", retry: refresh) { _ in
+        MonitoringResource(state: store.paths, noun: "paths", retry: refresh) { _ in
             let items = MonitoringPaths.visible(store.pathItems { nodes.nodes[$0]?.displayName }, showUnmeasured: false)
             let matrix = MonitoringMatrix(items: items)
             if matrix.rows.isEmpty {

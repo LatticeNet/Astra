@@ -19,7 +19,7 @@ struct ChecksScreen: View {
     @State private var showGenerated = false
 
     var body: some View {
-        ResourceView(state: store.monitors, noun: "checks", retry: refresh) { _ in
+        MonitoringResource(state: store.monitors, noun: "checks", retry: refresh) { _ in
             list
         }
         .searchable(text: $query, prompt: "type:, node:, state:")

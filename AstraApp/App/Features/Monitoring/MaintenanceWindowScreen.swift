@@ -59,7 +59,7 @@ struct MaintenanceWindowScreen: View {
                 }
             }
         } else {
-            ResourceView(state: store.windows, noun: "the window", retry: { Task { await store.refreshIncidents() } }) { _ in EmptyView() }
+            MonitoringResource(state: store.windows, noun: "the window", retry: { Task { await store.refreshIncidents() } }) { _ in EmptyView() }
         }
     }
 

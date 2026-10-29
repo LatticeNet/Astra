@@ -52,7 +52,7 @@ struct CheckResultsScreen: View {
     private static let allOutcomes = "All outcomes"
 
     var body: some View {
-        ResourceView(state: model.results, noun: "results", retry: reload) { results in
+        MonitoringResource(state: model.results, noun: "results", retry: reload) { results in
             let rows = results.filter { outcome == Self.allOutcomes || $0.outcome.rawValue == outcome }
             List {
                 MonitoringRefreshError(state: model.results, noun: "results", retry: reload)

@@ -45,7 +45,7 @@ struct IncidentsScreen: View {
     @State private var stable = MonitoringStableList<MonitoringIncidentItem>()
 
     var body: some View {
-        ResourceView(state: store.incidents, noun: "incidents", retry: refresh) { _ in
+        MonitoringResource(state: store.incidents, noun: "incidents", retry: refresh) { _ in
             list
         }
         .searchable(text: $query, prompt: "kind:, node:, state:")

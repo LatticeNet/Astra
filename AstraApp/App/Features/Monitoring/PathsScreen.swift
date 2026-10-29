@@ -70,7 +70,7 @@ struct MonitoringPathsList: View {
         if view == .chains {
             MonitoringChainsList()
         } else {
-            ResourceView(state: store.paths, noun: "paths", retry: refresh) { _ in
+            MonitoringResource(state: store.paths, noun: "paths", retry: refresh) { _ in
                 list
             }
         }
@@ -155,7 +155,7 @@ struct MonitoringPathsList: View {
         } actions: {
             Button("Latency plan on web") { router.openOnWeb(.monitoring(view: "topology")) }
         }
-        Section {
+        Section {} footer: {
             MonitoringFreshness(state: store.paths, cadence: .paths)
         }
     }
@@ -235,7 +235,7 @@ struct MonitoringChainsList: View {
             }
             .listStyle(.insetGrouped)
         default:
-            ResourceView(state: store.chains, noun: "line chains", retry: { Task { await store.refreshChains() } }) { rows in
+            MonitoringResource(state: store.chains, noun: "line chains", retry: { Task { await store.refreshChains() } }) { rows in
                 let chains = MonitoringChain.compose(rows)
                 let items = store.pathItems { nodes.nodes[$0]?.displayName }
                 List {

@@ -120,7 +120,7 @@ struct PathDetailScreen: View {
                 }
             }
         default:
-            ResourceView(state: store.paths, noun: "the path", retry: { Task { await store.refreshPaths(window: appState.monitorWindow) } }) { _ in
+            MonitoringResource(state: store.paths, noun: "the path", retry: { Task { await store.refreshPaths(window: appState.monitorWindow) } }) { _ in
                 EmptyView()
             }
         }

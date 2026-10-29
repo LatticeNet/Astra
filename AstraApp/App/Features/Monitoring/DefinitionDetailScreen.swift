@@ -70,7 +70,7 @@ struct DefinitionDetailScreen: View {
                 }
             }
         } else {
-            ResourceView(state: model.definition, noun: "the definition", retry: reload) { definition in
+            MonitoringResource(state: model.definition, noun: "the definition", retry: reload) { definition in
                 detail(definition)
             }
         }

@@ -56,7 +56,7 @@ struct ChainDetailScreen: View {
                 ContentUnavailableView("Chain not found", systemImage: "link", description: Text("No line chain starts at \(id) now."))
             }
         } else {
-            ResourceView(state: store.chains, noun: "the chain", retry: { Task { await store.refreshChains() } }) { _ in EmptyView() }
+            MonitoringResource(state: store.chains, noun: "the chain", retry: { Task { await store.refreshChains() } }) { _ in EmptyView() }
         }
     }
 

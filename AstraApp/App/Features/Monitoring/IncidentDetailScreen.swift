@@ -96,7 +96,7 @@ struct IncidentDetailScreen: View {
                 }
             }
         } else {
-            ResourceView(state: store.incidents, noun: "the incident", retry: { Task { await store.refreshIncidents() } }) { _ in EmptyView() }
+            MonitoringResource(state: store.incidents, noun: "the incident", retry: { Task { await store.refreshIncidents() } }) { _ in EmptyView() }
         }
     }
 

@@ -13,7 +13,7 @@ struct MonitorOverviewScreen: View {
     @Environment(\.locale) private var locale
 
     var body: some View {
-        ResourceView(state: store.paths, noun: "monitoring", retry: refresh) { response in
+        MonitoringResource(state: store.paths, noun: "monitoring", retry: refresh) { response in
             let items = MonitoringPaths.visible(store.pathItems(nodeName: nodeName), showUnmeasured: false)
             List {
                 MonitoringRefreshError(state: store.paths, noun: "paths", retry: refresh)
