@@ -46,10 +46,13 @@ enum MonitoringStyle {
         }
     }
 
-    /// "238 ms · 6.2%": the row's trailing figures, nil when nothing is measured now.
+    /// "238 ms · 6.2% loss": the row's trailing figures, nil when nothing is
+    /// measured now. Loss carries its word, so a down path's "100% loss"
+    /// never reads as availability.
     static func figures(_ item: MonitoringPathItem) -> String? {
         guard item.measuresNow else { return nil }
-        let parts = [item.path.p50Ms.map(MonitoringFormat.milliseconds), item.path.loss.map(MonitoringFormat.percent)].compactMap { $0 }
+        let loss = item.path.loss.map { $0 >= 1 ? "100% loss" : "\(MonitoringFormat.percent($0)) loss" }
+        let parts = [item.path.p50Ms.map(MonitoringFormat.milliseconds), loss].compactMap { $0 }
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 }
@@ -69,19 +72,26 @@ struct MonitoringPathListRow: View {
             title: "\(item.sourceName) → \(item.targetName)",
             detail: detail,
             reason: item.reason?.sentence,
-            trailing: MonitoringStyle.figures(item),
+            trailing: noReplies ? nil : MonitoringStyle.figures(item),
             accessibilityPhrase: phrase(style)
         )
     }
 
+    /// A path that lost every run and has no latency says so in words
+    /// beside its method, leaving the title the full width.
+    private var noReplies: Bool {
+        item.measuresNow && item.path.p50Ms == nil && (item.path.loss ?? 0) >= 1
+    }
+
     private var detail: String {
-        item.display.measure == .skipped ? "\(item.path.method), unmeasured" : item.path.method
+        if item.display.measure == .skipped { return "\(item.path.method), unmeasured" }
+        return noReplies ? "\(item.path.method), no replies" : item.path.method
     }
 
     private func phrase(_ style: StatusStyle) -> String {
         let since = item.path.degraded?.since.map { TimeDisplay.clock($0, mode: mode, locale: locale) }
         switch item.display {
-        case .down: return "\(item.spokenTitle), down" + (item.path.lastAt.map { " since \(TimeDisplay.clock($0, mode: mode, locale: locale))" } ?? "")
+        case .down: return "\(item.spokenTitle), down" + (item.path.lastAt.map { " since \(TimeDisplay.clock($0, mode: mode, locale: locale))" } ?? "") + (noReplies ? ", no replies" : "")
         case .degraded: return "\(item.spokenTitle), degraded" + (since.map { ", since \($0)" } ?? "")
         default: return "\(item.spokenTitle), \(style.word), \(item.path.method)"
         }
@@ -92,16 +102,42 @@ struct MonitoringPathListRow: View {
 struct MonitoringCheckRow: View {
     let item: MonitoringCheckItem
 
+    @Environment(NodeDirectory.self) private var nodes
+    @Environment(MonitoringStore.self) private var store
+    @Environment(\.locale) private var locale
+
     var body: some View {
         let style = MonitoringStyle.check(item.health)
+        let short = shortTitle
         StatusRow(
             style: style,
-            title: item.monitor.displayName,
-            detail: "\(item.monitor.typeWord), \(item.monitor.target)",
+            title: short ?? item.monitor.displayName,
+            detail: detail(short: short != nil),
             reason: reason,
             trailing: trailing,
             accessibilityPhrase: "\(item.monitor.displayName), \(style.word), \(item.monitor.typeWord) check"
         )
+    }
+
+    /// "relay-fra-2 from edge-tyo-1" for a generated check on one source and
+    /// a target node: its name repeats the definition first and puts the
+    /// part that tells two checks apart last, where a capped title cuts it.
+    private var shortTitle: String? {
+        let monitor = item.monitor
+        guard monitor.isGenerated, !monitor.targetNode.isEmpty else { return nil }
+        let sources = monitor.nodeIDs.filter { !$0.isEmpty }
+        let target = nodes.name(for: monitor.targetNode)
+        return sources.count == 1 ? "\(target) from \(nodes.name(for: sources[0]))" : target
+    }
+
+    private func detail(short: Bool) -> String {
+        let monitor = item.monitor
+        let base = "\(monitor.typeWord), \(monitor.target)"
+        guard short else { return base }
+        let origin = monitor.checkDefinitionID.isEmpty
+            ? "\(monitor.managedBy) probes"
+            : store.definitions.value?.definitions.first { $0.id == monitor.checkDefinitionID }?.displayName ?? "Definition"
+        return "\(origin) · \(base)"
     }
 
     private var reason: String? {
@@ -113,7 +149,7 @@ struct MonitoringCheckRow: View {
         case .unmeasured(_, let reason, _):
             return reason.isEmpty ? "Sources measure nothing" : PathReason.sentence(for: reason).capitalizedFirst
         case .stale(let at):
-            return "No result since \(RelativeDateFormatter.string(from: at))"
+            return "No result for \(TimeDisplay.duration(Date().timeIntervalSince(at), locale: locale))"
         default:
             return nil
         }
