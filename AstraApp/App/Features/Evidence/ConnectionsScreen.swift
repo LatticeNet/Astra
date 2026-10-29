@@ -28,6 +28,7 @@ struct ConnectionsScreen: View {
     @State private var shown: [EvidenceConnRecord] = []
     @State private var pending = 0
     @State private var shownQuestion: EvidenceConnectionsQuestion?
+    @State private var idle = EvidenceListIdle()
 
     var body: some View {
         content
@@ -53,6 +54,7 @@ struct ConnectionsScreen: View {
             .onAppear(perform: seed)
             .onChange(of: store.connections.loadedAt) { offer(force: false) }
             .onChange(of: question) { offer(force: true) }
+            .onChange(of: idle.settled) { if pending > 0 { offer(force: false) } }
             .polling(.standard, version: ConnectionsPollKey.of(changes.version([.evidence]), question)) {
                 await nodes.refreshIfOlder(than: 15)
                 await store.refreshSessionsIfNeeded()
@@ -250,10 +252,11 @@ struct ConnectionsScreen: View {
         return (answer?.records ?? []).filter { words.matchesText($0, nodeName: nodes.name(for: $0.nodeID)) }
     }
 
-    /// While VoiceOver runs, a poll's new rows wait behind a row that says so (section 5.0).
+    /// A poll's new rows apply only while the list is still; until then, and
+    /// always while VoiceOver runs, they wait behind a row that says so (section 5.0).
     private func offer(force: Bool) {
         let next = filtered
-        if force || !voiceOver || shownQuestion != question || shown.isEmpty {
+        if force || (!voiceOver && idle.isIdle) || shownQuestion != question || shown.isEmpty {
             shown = next
             pending = 0
             shownQuestion = question
@@ -317,6 +320,7 @@ struct ConnectionsScreen: View {
             }
         }
         .listStyle(.insetGrouped)
+        .onScrollPhaseChange { _, phase in idle.note(phase) }
         .refreshable {
             await store.refreshConnections(question)
             offer(force: true)
