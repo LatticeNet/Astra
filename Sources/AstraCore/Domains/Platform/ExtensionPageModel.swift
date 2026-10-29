@@ -344,9 +344,15 @@ private struct PlatformJSONParser {
                 case UInt8(ascii: "u"):
                     var code = try hex4()
                     if (0xD800...0xDBFF).contains(code), index + 1 < bytes.count, bytes[index] == UInt8(ascii: "\\"), bytes[index + 1] == UInt8(ascii: "u") {
+                        // Pair only with a real low surrogate. Anything else leaves
+                        // the high half as U+FFFD and the next escape is read on its own.
+                        let mark = index
                         index += 2
-                        let low = try hex4()
-                        code = 0x10000 + ((code - 0xD800) << 10) + (low - 0xDC00)
+                        if let low = try? hex4(), (0xDC00...0xDFFF).contains(low) {
+                            code = 0x10000 + ((code - 0xD800) << 10) + (low - 0xDC00)
+                        } else {
+                            index = mark
+                        }
                     }
                     scalars.append(Unicode.Scalar(code) ?? "\u{FFFD}")
                 default: scalars.append(Unicode.Scalar(escape))

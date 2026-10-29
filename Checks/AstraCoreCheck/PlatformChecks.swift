@@ -385,7 +385,18 @@ private func checkPlatformExtensionPages() throws {
     try expectEqual(ExtensionPageModel.page(plugin: plugin, route: "add")?.kind, .web, "forms open on the web")
     try expect(ExtensionPageModel.page(plugin: plugin, route: "missing") == nil, "an unknown route has no page")
 
-    for bad in ["{", #"{"a":}"#, "[1,]", #"{"a":1} x"#, #""\u12""#] {
+    let lone: [(String, String)] = [
+        (#""\ud800A""#, "\u{FFFD}A"),
+        (#""\ud800x""#, "\u{FFFD}x"),
+        (#""\ud800𐀀""#, "\u{FFFD}\u{10000}"),
+        (#""\ud800A""#, "\u{FFFD}A"),
+        (#""\udc00""#, "\u{FFFD}"),
+    ]
+    for (text, expected) in lone {
+        try expectEqual(try PlatformJSONValue.parse(json(text)), .string(expected), "a lone surrogate in \(text) becomes U+FFFD without trapping")
+    }
+
+    for bad in ["{", #"{"a":}"#, "[1,]", #"{"a":1} x"#, #""\u12""#, #""\ud800\u12""#] {
         do {
             _ = try PlatformJSONValue.parse(json(bad))
             throw CheckFailure.failed("malformed JSON \(bad) must not parse")
