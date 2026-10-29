@@ -670,6 +670,16 @@ public enum NotifyWitness {
         public var node: NotifyWitnessNode
         public var line: NotifyWitnessLine
 
+        /// The state word of the attention row.
+        public var word: String {
+            switch kind {
+            case .pushFailed: "push failed"
+            case .planFailed: "plan failed"
+            case .differs: "config differs"
+            default: line.word
+            }
+        }
+
         public var claim: String {
             let name = node.nodeName
             switch kind {
