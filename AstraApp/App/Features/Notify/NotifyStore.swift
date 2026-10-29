@@ -78,7 +78,13 @@ final class NotifyStore {
             if sent.value != nil { sent = .loading(previous: nil, previousAt: nil) }
             sentFilters = filters
         }
-        let s = Task { await self.load(\.sent, surface: "The Sent log") { try await $0.fetchDeliveries(query: filters.query()) } }
+        // A read for an earlier question keeps running after the filter
+        // changes (unstructured tasks do not inherit cancellation), so its
+        // answer is dropped unless the question is still the one asked.
+        let asked = filters
+        let s = Task {
+            await self.load(\.sent, surface: "The Sent log", accept: { self.sentFilters == asked }) { try await $0.fetchDeliveries(query: asked.query()) }
+        }
         let c = Task { await self.load(\.channels, surface: "Notification channels") { try await $0.listNotifyChannels() } }
         let k = Task { await self.loadCatalogueIfNeeded() }
         let results = [await s.value, await c.value, await k.value]
@@ -118,6 +124,7 @@ final class NotifyStore {
     private func load<Value: Sendable>(
         _ keyPath: ReferenceWritableKeyPath<NotifyStore, ResourceState<Value>>,
         surface: String,
+        accept: () -> Bool = { true },
         fetch: @Sendable (LatticeClient) async throws -> Value
     ) async -> Bool {
         if isConfined { return true }
@@ -130,9 +137,11 @@ final class NotifyStore {
         self[keyPath: keyPath] = before.reloading
         do {
             let value = try await fetch(client)
+            guard accept() else { return true }
             self[keyPath: keyPath] = .loaded(value, at: Date())
             return true
         } catch {
+            guard accept() else { return true }
             if Self.isCancellation(error) {
                 self[keyPath: keyPath] = before
                 return true

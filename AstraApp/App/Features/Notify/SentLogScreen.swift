@@ -24,6 +24,8 @@ struct SentLogScreen: View {
     @SceneStorage(SentLogScreen.channelKey) private var channelID = ""
     @SceneStorage(SentLogScreen.eventKey) private var eventType = ""
     @State private var stable = NotifyStableList<NotifyDelivery>()
+    /// The filters the shown rows answer; a different question applies at once.
+    @State private var shownQuestion: NotifySentFilters?
 
     init() {}
 
@@ -38,10 +40,15 @@ struct SentLogScreen: View {
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) { filterMenu }
         }
-        .onAppear(perform: consumeQuery)
+        .onAppear {
+            consumeQuery()
+            // The store may already hold the log (another Sent view, or offline).
+            offer(force: true)
+        }
         .onChange(of: appState.pendingQuery) { consumeQuery() }
         .onChange(of: store.sent.loadedAt) { offer(force: false) }
         .onChange(of: query) { offer(force: true) }
+        .onChange(of: filters) { offer(force: true) }
         .polling(.standard, version: NotifyPollKey.of(changes.version([.notify, .webhooks]), filters)) {
             await store.refreshSent(filters: filters)
         }
@@ -138,19 +145,28 @@ struct SentLogScreen: View {
         LatticeQueryEngine.compile(query, provider: NotifySentQueryFields.self)
     }
 
+    /// The stored log, when it answers the filters on screen.
+    private var answer: NotifyDeliveriesResponse? {
+        store.sentFilters == filters ? store.sent.value : nil
+    }
+
     private func offer(force: Bool) {
-        let rows = store.sent.value?.deliveries ?? []
+        let rows = answer?.deliveries ?? []
         let filtered: [NotifyDelivery] = switch compiled {
         case .success(let q): LatticeQueryEngine.apply(q, to: rows, now: Date())
         case .failure: rows
         }
-        stable.offer(filtered, voiceOver: voiceOver, force: force)
+        // Only polls of the same question are held (section 5.0).
+        stable.offer(filtered, voiceOver: voiceOver, force: force || shownQuestion != filters)
+        if answer != nil { shownQuestion = filters }
     }
 
     private func list(_ response: NotifyDeliveriesResponse) -> some View {
         let rows = stable.shown
+        let answering = answer != nil && shownQuestion == filters
+        let calendar = displayCalendar
         let days = Dictionary(grouping: rows) { delivery in
-            Calendar.current.startOfDay(for: delivery.createdAt ?? .distantPast)
+            delivery.createdAt.map { calendar.startOfDay(for: $0) } ?? .distantPast
         }
         let order = days.keys.sorted(by: >)
         return List {
@@ -176,7 +192,11 @@ struct SentLogScreen: View {
                 Section { PendingUpdatesRow(count: stable.pendingCount) { stable.showHeld() } }
             }
             if rows.isEmpty {
-                emptyState(serverEmpty: response.deliveries.isEmpty)
+                if answering {
+                    emptyState(serverEmpty: response.deliveries.isEmpty)
+                } else {
+                    LoadingRows(label: "Loading the Sent log", count: 3)
+                }
             }
             ForEach(order, id: \.self) { day in
                 Section {
@@ -192,12 +212,14 @@ struct SentLogScreen: View {
                         }
                     }
                 } header: {
-                    Text(dayTitle(day)).accessibilityAddTraits(.isHeader)
+                    Text(dayTitle(day, calendar: calendar)).accessibilityAddTraits(.isHeader)
                 }
             }
             Section {} footer: {
                 VStack(alignment: .leading, spacing: Spacing.xs) {
-                    Text(storageLine(response)).textRole(.footnote)
+                    if answering {
+                        Text(storageLine(response)).textRole(.footnote)
+                    }
                     NotifyFreshness(state: store.sent)
                 }
             }
@@ -235,15 +257,26 @@ struct SentLogScreen: View {
         let kept = response.durable
             ? "kept on disk, the last \(response.max)"
             : "History is lost on restart: the outbox is kept in memory only"
-        let page = shown < response.stored ? "Showing the newest \(shown) that match. " : ""
+        // The server stops at the page limit; below it every match is shown.
+        let page = shown >= NotifySentFilters.limit ? "Showing the newest \(shown) that match. " : ""
         return response.durable ? "\(page)\(stored), \(kept)." : "\(page)\(stored). \(kept)."
     }
 
-    private func dayTitle(_ day: Date) -> String {
+    /// Days in the zone the row times use, so UTC mode groups by UTC days.
+    private var displayCalendar: Calendar {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = mode.timeZone
+        calendar.locale = locale
+        return calendar
+    }
+
+    private func dayTitle(_ day: Date, calendar: Calendar) -> String {
         if day == .distantPast { return "Undated" }
-        if Calendar.current.isDateInToday(day) { return "Today" }
-        if Calendar.current.isDateInYesterday(day) { return "Yesterday" }
-        return day.formatted(.dateTime.weekday(.wide).month(.abbreviated).day().locale(locale))
+        if calendar.isDateInToday(day) { return "Today" }
+        if calendar.isDateInYesterday(day) { return "Yesterday" }
+        var style = Date.FormatStyle.dateTime.weekday(.wide).month(.abbreviated).day().locale(locale)
+        style.timeZone = mode.timeZone
+        return day.formatted(style)
     }
 
     private func queryProblem(_ error: LatticeQueryError) -> String {
@@ -259,6 +292,10 @@ struct SentLogScreen: View {
     /// the rest is search text.
     private func consumeQuery() {
         guard let pending = appState.consumeQuery(ActivityScope.sent.rawValue) else { return }
+        // A link states the whole question, so filters left from earlier do not narrow it.
+        outcomeRaw = NotifySentOutcomeFilter.all.rawValue
+        channelID = ""
+        eventType = ""
         var text: [String] = []
         for word in pending.split(whereSeparator: \.isWhitespace).map(String.init) {
             let parts = word.split(separator: ":", maxSplits: 1).map(String.init)
