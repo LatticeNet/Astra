@@ -15,6 +15,9 @@ final class TasksStore {
     private(set) var total = 0
     private(set) var isLoadingMore = false
     private(set) var loadMoreError: LatticeAPIError?
+    /// Bumped when Load more appends a page. The appended rows keep the
+    /// list's stamp, so the screen watches this to show them.
+    private(set) var appendedPages = 0
     private(set) var counts: ResourceState<TaskCounts> = .idle
     /// Results per task id for the rows on screen.
     private(set) var results: [String: [TasksResultRow]] = [:]
@@ -66,6 +69,7 @@ final class TasksStore {
             runs = .loaded(rows + added, at: runs.loadedAt ?? Date())
             total = page.total
             loadMoreError = nil
+            appendedPages += 1
             await loadResults()
             await loadApprovals()
         } catch {

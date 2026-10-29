@@ -39,6 +39,8 @@ struct TasksScreen: View {
         .onAppear(perform: consumeQuery)
         .onChange(of: appState.pendingQuery) { consumeQuery() }
         .onChange(of: store.runs.loadedAt) { offer(force: false) }
+        // Rows appended at the end move nothing already on screen.
+        .onChange(of: store.appendedPages) { offer(force: true) }
         .onChange(of: filter) { offer(force: true) }
         .polling(.standard, version: changes.version([.tasks]) &* 31 &+ filter.hashValue % 31) {
             await nodes.refreshIfOlder(than: 60)
