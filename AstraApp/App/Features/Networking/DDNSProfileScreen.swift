@@ -109,7 +109,7 @@ struct DDNSProfileScreen: View {
             } header: {
                 Label("Run now writes, computed on this iPhone", systemImage: "iphone")
             } footer: {
-                Text("From the node's reported address. The server sweeps every minute on its own and writes only when the address moved.")
+                Text("From the node's reported address. The server runs this profile every \(TimeDisplay.duration(Double(profile.effectiveIntervalSeconds), locale: locale)) on its own and writes only when the address moved.")
             }
 
             Section {

@@ -75,6 +75,14 @@ struct OutboundPolicyScreen: View {
         }
         ToolbarItem(placement: .topBarTrailing) {
             NetworkingMoreMenu(link: nil, web: webPath) {
+                if selected == .matrix {
+                    // Here too, so the direction can change while the matrix shows an error.
+                    Picker("Direction", systemImage: "arrow.left.arrow.right", selection: $direction) {
+                        Text("Egress").tag("egress")
+                        Text("Ingress").tag("ingress")
+                    }
+                    .pickerStyle(.menu)
+                }
                 NetworkingGatedButton(title: "Plan all outbound policies", systemImage: "doc.badge.gearshape", blocked: planAllBlocked) { planAll() }
             }
         }

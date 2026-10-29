@@ -207,13 +207,14 @@ struct NetworkingActionRow: View {
         Button(role: role, action: action) {
             Label {
                 VStack(alignment: .leading, spacing: Spacing.xxs) {
-                    Text(title)
+                    // A disabled row in a list keeps a primary title; dim it as Settings does.
+                    if blocked != nil { Text(title).foregroundStyle(.secondary) } else { Text(title) }
                     if let note = blocked ?? detail {
                         Text(note).textRole(.footnote)
                     }
                 }
             } icon: {
-                Image(systemName: systemImage)
+                if blocked != nil { Image(systemName: systemImage).foregroundStyle(.tertiary) } else { Image(systemName: systemImage) }
             }
             .frame(maxWidth: .infinity, minHeight: Spacing.minimumTarget, alignment: .leading)
         }

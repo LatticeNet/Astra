@@ -78,7 +78,7 @@ public enum NetworkingIntents {
         let shown = body.name.map { "outbound policy \"\($0)\"" } ?? "an outbound policy named after \(node.name)"
         return WriteIntent(
             tier: .t3,
-            verb: "Convert the manual policy of",
+            verb: "Convert",
             object: node,
             scopes: [policyAdmin],
             consequence: "Creates \(shown) directly, targeting \(node.name) with the same rules, then files a plan for \(node.name). The new policy stays even if the plan is rejected.",
@@ -107,7 +107,7 @@ public enum NetworkingIntents {
     public static func planDNS(_ deployment: ObjectRef, node: ObjectRef) -> WriteIntent {
         WriteIntent(
             tier: .plan,
-            verb: "Plan DNS deployment",
+            verb: "Plan",
             object: deployment,
             scopes: dnsPlanScopes,
             consequence: "Renders the CoreDNS config of \(deployment.name) and the firewall chain it needs on \(node.name), and files them for approval. The plan replaces the node's whole lattice_guard input chain, so the server checks it for lockout first.",
@@ -155,7 +155,7 @@ public enum NetworkingIntents {
         let nodeID = deployment.nodeID
         return WriteIntent(
             tier: .t3,
-            verb: "Publish the addresses of",
+            verb: "Publish",
             object: ObjectRef(kind: "DNS deployment", id: id, name: name),
             scopes: publishScopes,
             consequence: "Writes the node's current address to the DNS provider for \(host). Resolvers see the new record within its TTL. This changes a record outside Lattice.",
