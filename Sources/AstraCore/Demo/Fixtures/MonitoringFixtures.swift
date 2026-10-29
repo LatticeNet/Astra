@@ -166,7 +166,8 @@ public enum MonitoringFixtures {
             "expect_status": check.expectStatus.isEmpty ? nil : .string(check.expectStatus),
             "dns_name": check.dnsName.isEmpty ? nil : .string(check.dnsName),
             "dns_type": check.dnsName.isEmpty ? nil : "A",
-            "managed_by": check.managedBy.isEmpty ? nil : .string(check.managedBy),
+            // The server stamps every monitor a definition expands to `check:<id>`.
+            "managed_by": !check.managedBy.isEmpty ? .string(check.managedBy) : check.definition.isEmpty ? nil : .string("check:\(check.definition)"),
             "check_definition_id": check.definition.isEmpty ? nil : .string(check.definition),
             "alert": .string(check.alert),
             "alert_after": 2,
