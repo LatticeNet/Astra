@@ -9,6 +9,7 @@ struct CorrelationTraceScreen: View {
     @Environment(ChangeLog.self) private var changes
     @Environment(NodeDirectory.self) private var nodes
     @Environment(Router.self) private var router
+    @Environment(TasksStore.self) private var tasksStore
     @Environment(\.timeZoneMode) private var mode
     @Environment(\.locale) private var locale
 
@@ -58,7 +59,15 @@ struct CorrelationTraceScreen: View {
                         .textRole(.rowDetail)
                 }
             }
-            if trace.events.isEmpty {
+            if trace.events.isEmpty, trace.scanStopped {
+                ContentUnavailableView {
+                    Label("Trace not reached", systemImage: "point.3.connected.trianglepath.dotted")
+                } description: {
+                    Text("The server stopped scanning before it reached the start of the log, so this trace may be older than what it read.")
+                } actions: {
+                    Button("Open on web") { router.openOnWeb(.trace(correlationID: correlationID)) }
+                }
+            } else if trace.events.isEmpty {
                 ContentUnavailableView {
                     Label("No events in this trace", systemImage: "point.3.connected.trianglepath.dotted")
                 } description: {
@@ -79,6 +88,8 @@ struct CorrelationTraceScreen: View {
                 } footer: {
                     if trace.truncated {
                         Text("The trace is longer than this iPhone reads at once. Open it on the web for the rest.")
+                    } else if trace.scanStopped {
+                        Text("The server stopped scanning before the start of the log, so older events of this trace may be missing.")
                     }
                 }
             }
@@ -88,10 +99,11 @@ struct CorrelationTraceScreen: View {
                         Button {
                             router.present(.review(.single(id)))
                         } label: {
+                            // A reference, not a request for a decision: no Needs-you hand.
                             Label {
                                 Text(id).font(TextRole.identifierInDetail.font)
                             } icon: {
-                                Image(systemName: "hand.raised").foregroundStyle(Color.accentText)
+                                Image(systemName: "doc.text").foregroundStyle(.secondary)
                             }
                             .frame(minHeight: Spacing.minimumTarget)
                         }
@@ -100,14 +112,19 @@ struct CorrelationTraceScreen: View {
                     }
                     ForEach(tasks, id: \.self) { id in
                         NavigationLink(value: AppRoute.activity(.task(id: id))) {
-                            Label {
-                                Text(id).font(TextRole.identifierInDetail.font)
-                            } icon: {
-                                Image(systemName: "terminal").foregroundStyle(.secondary)
+                            // The shared row when the run is on the Runs list, so a failed run reads as failed.
+                            if let task = tasksStore.task(id: id) {
+                                TaskRow(task: task, progress: nil)
+                            } else {
+                                Label {
+                                    Text(id).font(TextRole.identifierInDetail.font)
+                                } icon: {
+                                    Image(systemName: "terminal").foregroundStyle(.secondary)
+                                }
+                                .frame(minHeight: Spacing.minimumTarget)
+                                .accessibilityLabel("Task \(id)")
                             }
-                            .frame(minHeight: Spacing.minimumTarget)
                         }
-                        .accessibilityLabel("Task \(id)")
                     }
                 } header: {
                     Text("What this request touched").accessibilityAddTraits(.isHeader)
@@ -207,6 +224,8 @@ struct ActivityTraceRow: View {
 struct ActivityTrace: Sendable {
     var events: [AuditEvent]
     var truncated: Bool
+    /// The server's scan cap stopped the search before the log's start.
+    var scanStopped = false
 }
 
 @MainActor @Observable
@@ -224,7 +243,7 @@ final class ActivityTraceModel {
         trace = before.reloading
         do {
             let answer = try await client.auditTrace(correlationID: correlationID)
-            trace = .loaded(ActivityTrace(events: answer.events, truncated: answer.truncated), at: Date())
+            trace = .loaded(ActivityTrace(events: answer.events, truncated: answer.truncated, scanStopped: answer.scanStopped), at: Date())
             return true
         } catch {
             if TasksStore.isCancellation(error) { trace = before; return true }

@@ -132,15 +132,19 @@ public extension LatticeClient {
     }
 
     /// Every event sharing a correlation id, oldest first, up to `maxPages` pages.
-    func auditTrace(correlationID: String, maxPages: Int = 5) async throws -> (events: [AuditEvent], truncated: Bool) {
+    func auditTrace(correlationID: String, maxPages: Int = 5) async throws -> (events: [AuditEvent], truncated: Bool, scanStopped: Bool) {
         var events: [AuditEvent] = []
         var offset = 0
+        // The server stops at auditScanCap records and says complete=false:
+        // events older than that are not missing, they were never read.
+        var scanStopped = false
         for _ in 0..<maxPages {
             let page = try await auditPage(AuditQuery(correlationID: correlationID, limit: AuditModel.maxPageSize, offset: offset))
             events += page.events
             offset += page.events.count
-            if page.events.isEmpty || offset >= page.total { return (AuditModel.orderTimeline(events), false) }
+            scanStopped = scanStopped || page.isPartial
+            if page.events.isEmpty || offset >= page.total { return (AuditModel.orderTimeline(events), false, scanStopped) }
         }
-        return (AuditModel.orderTimeline(events), true)
+        return (AuditModel.orderTimeline(events), true, scanStopped)
     }
 }
