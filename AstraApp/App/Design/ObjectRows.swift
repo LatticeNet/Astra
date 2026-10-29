@@ -129,19 +129,23 @@ struct ApprovalRow: View {
                 accessibilityPhrase: phrase(style)
             )
             if !approval.id.isEmpty, !planHash.isEmpty {
-                SealLabel(sha256: planHash, state: approval.hasPlanBody ? .unverified : .noBody)
-                    // At accessibility sizes StatusRow drops the glyph column.
-                    .padding(.leading, typeSize.isAccessibilitySize ? 0 : glyphWidth + Spacing.m)
+                HStack(alignment: .firstTextBaseline, spacing: Spacing.m) {
+                    // The plugin glyph (section 4.12) sits in StatusRow's glyph
+                    // column, under the status symbol; inline at accessibility sizes.
+                    Image(systemName: ApprovalEvents.pluginSymbol(approval.plugin))
+                        .textRole(.sealInRow)
+                        .frame(width: typeSize.isAccessibilitySize ? nil : glyphWidth)
+                        .accessibilityHidden(true)
+                    SealLabel(sha256: planHash, state: approval.hasPlanBody ? .unverified : .noBody)
+                }
             }
         }
         .accessibilityElement(children: .combine)
         .modifier(OptionalSealContent(sha256: planHash))
     }
 
-    private var title: String {
-        let action = approval.action.split(separator: ":").first.map(String.init) ?? approval.action
-        return "\(ApprovalVisibility.displayName(plugin: approval.plugin)): \(action)"
-    }
+    /// The console's kind title ("Confirm the SSH Guard arm"), with its fallback.
+    private var title: String { ApprovalEvents.title(for: approval) }
 
     private var detail: String {
         var parts: [String] = []
