@@ -130,6 +130,11 @@ struct AuditEventScreen: View {
             } else if model.approvalUnreadable {
                 Text("This token cannot read the approval, so its plan seal is not shown.")
                     .textRole(.footnote)
+            } else if let error = model.approvalError {
+                ErrorRow(message: "Could not read the approval: \(error.localizedDescription)") {
+                    guard let client = session.client else { return }
+                    Task { await model.loadApproval(approvalID, client: client) }
+                }
             }
         } header: {
             Text("Plan").accessibilityAddTraits(.isHeader)
@@ -172,6 +177,8 @@ final class ActivityAuditEventModel {
     private(set) var event: ResourceState<AuditEvent> = .idle
     private(set) var approval: Approval?
     private(set) var approvalUnreadable = false
+    /// A read that failed for another reason than scope, kept with Retry.
+    private(set) var approvalError: LatticeAPIError?
     private(set) var notFound = false
 
     func load(id: String, hint: AuditEvent?, session: SessionStore) async {
@@ -200,10 +207,21 @@ final class ActivityAuditEventModel {
             }
         }
         if let value = event.value, let approvalID = AuditModel.approvalID(of: value), approval == nil {
-            do {
-                approval = try await client.fetchApproval(id: approvalID)
-            } catch {
-                approvalUnreadable = true
+            await loadApproval(approvalID, client: client)
+        }
+    }
+
+    func loadApproval(_ approvalID: String, client: LatticeClient) async {
+        do {
+            approval = try await client.fetchApproval(id: approvalID)
+            approvalUnreadable = false
+            approvalError = nil
+        } catch {
+            if TasksStore.isCancellation(error) { return }
+            let apiError = LatticeAPIError(error)
+            switch apiError {
+            case .forbidden, .notFound: approvalUnreadable = true
+            default: approvalError = apiError
             }
         }
     }
