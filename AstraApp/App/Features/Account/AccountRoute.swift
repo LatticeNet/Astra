@@ -32,7 +32,9 @@ extension AccountRoute: DemoHooks {
               let fixture = AccessFixtures.tokens.first(where: { $0.id == parts[2] }) else { return nil }
         let token = LatticeToken(id: fixture.id, name: fixture.name, actorID: fixture.actorID, scopes: fixture.scopes,
                                  serverAllowlist: fixture.allowlist, revokedAt: fixture.revoked == nil ? nil : Date())
-        let ownership = AccessTokens.ownership(token, credentialIsToken: session.credentialKind == .token, identity: session.primaryIdentity)
+        var ownership = AccessTokens.ownership(token, credentialIsToken: session.credentialKind == .token, identity: session.primaryIdentity)
+        // A launch presents before /api/me lands; the demo phone token's id is fixed.
+        if ownership == .unknown { ownership = token.id == AccessFixtures.phoneTokenID ? .own : .other }
         switch parts[1] {
         case "revokeToken": return AccessIntents.revokeToken(token, ownership: ownership)
         case "deleteToken": return AccessIntents.deleteToken(token, ownership: ownership)

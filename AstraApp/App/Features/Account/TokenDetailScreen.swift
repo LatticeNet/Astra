@@ -59,7 +59,8 @@ struct TokenDetailScreen: View {
             if !risks.isEmpty {
                 Section {
                     ForEach(risks, id: \.scope) { risk in
-                        AccountNoticeRow(text: "\(risk.scope == "*" ? "Full administrator" : risk.scope): \(risk.sentence)")
+                        // Scope ids carry colons, so the id gets its own line.
+                        AccountNoticeRow(text: "\(risk.scope == "*" ? "Full administrator" : risk.scope)\n\(risk.sentence)")
                     }
                 } header: {
                     Text("Sensitive scopes").accessibilityAddTraits(.isHeader)
