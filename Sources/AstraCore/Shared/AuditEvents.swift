@@ -63,15 +63,22 @@ public struct AuditQueryResponse: Decodable, Sendable {
     public var total: Int
     public var limit: Int
     public var offset: Int
+    /// Records the server examined for `total`.
+    public var scanned: Int?
+    /// False when the server's scan cap stopped the walk: `total` then counts
+    /// only the newest `scanned` events. Nil from a server that does not say.
+    public var complete: Bool?
 
-    public init(events: [AuditEvent] = [], total: Int = 0, limit: Int = 0, offset: Int = 0) {
+    public init(events: [AuditEvent] = [], total: Int = 0, limit: Int = 0, offset: Int = 0, scanned: Int? = nil, complete: Bool? = nil) {
         self.events = events
         self.total = total
         self.limit = limit
         self.offset = offset
+        self.scanned = scanned
+        self.complete = complete
     }
 
-    enum CodingKeys: String, CodingKey { case events, total, limit, offset }
+    enum CodingKeys: String, CodingKey { case events, total, limit, offset, scanned, complete }
 
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
@@ -79,6 +86,8 @@ public struct AuditQueryResponse: Decodable, Sendable {
         total = try container.decodeIfPresent(Int.self, forKey: .total) ?? 0
         limit = try container.decodeIfPresent(Int.self, forKey: .limit) ?? 0
         offset = try container.decodeIfPresent(Int.self, forKey: .offset) ?? 0
+        scanned = try container.decodeIfPresent(Int.self, forKey: .scanned)
+        complete = try container.decodeIfPresent(Bool.self, forKey: .complete)
     }
 }
 
@@ -168,15 +177,22 @@ public extension LatticeClient {
     /// so the NDJSON export writes the server's bytes, not a re-encoding.
     func fetchAudit(query: AuditQuery) async throws -> AuditQueryResponse {
         let data = try await performData(path: "/api/audit", query: query.queryItems)
+        return try AuditQueryResponse.decode(data, query: query)
+    }
+}
+
+public extension AuditQueryResponse {
+    /// Either answer of `GET /api/audit`: the envelope with its scan facts,
+    /// or the bare array an unfiltered read gets. Each event keeps its raw
+    /// JSON slice.
+    static func decode(_ data: Data, query: AuditQuery) throws -> AuditQueryResponse {
+        let decoder = JSONDecoder()
         var response: AuditQueryResponse
-        do {
-            if let events = try? JSONDecoder().decode([AuditEvent].self, from: data) {
-                response = AuditQueryResponse(events: events, total: events.count, limit: query.limit, offset: query.offset)
-            } else {
-                response = try JSONDecoder().decode(AuditQueryResponse.self, from: data)
-            }
-        } catch {
-            throw LatticeAPIError.invalidResponse
+        if let events = try? decoder.decode([AuditEvent].self, from: data) {
+            response = AuditQueryResponse(events: events, total: events.count, limit: query.limit, offset: query.offset)
+        } else {
+            guard let decoded = try? decoder.decode(AuditQueryResponse.self, from: data) else { throw LatticeAPIError.invalidResponse }
+            response = decoded
         }
         if let slices = JSONArraySlicer.elements(of: data, key: "events"), slices.count == response.events.count {
             for index in response.events.indices {

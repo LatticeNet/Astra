@@ -79,29 +79,13 @@ public struct AuditPage: Sendable {
     /// True when the scan stopped early.
     public var isPartial: Bool { complete == false }
 
-    private struct Meta: Decodable {
-        var scanned: Int?
-        var complete: Bool?
+    public init(_ response: AuditQueryResponse) {
+        self.init(events: response.events, total: response.total, limit: response.limit, offset: response.offset, scanned: response.scanned, complete: response.complete)
     }
 
     /// Decodes events (each keeping its raw JSON slice) and the scan facts.
     public static func decode(_ data: Data, query: AuditQuery) throws -> AuditPage {
-        let decoder = JSONDecoder()
-        var response: AuditQueryResponse
-        var meta = Meta()
-        if let events = try? decoder.decode([AuditEvent].self, from: data) {
-            response = AuditQueryResponse(events: events, total: events.count, limit: query.limit, offset: query.offset)
-        } else {
-            guard let decoded = try? decoder.decode(AuditQueryResponse.self, from: data) else { throw LatticeAPIError.invalidResponse }
-            response = decoded
-            meta = (try? decoder.decode(Meta.self, from: data)) ?? Meta()
-        }
-        if let slices = JSONArraySlicer.elements(of: data, key: "events"), slices.count == response.events.count {
-            for index in response.events.indices {
-                response.events[index].rawJSON = String(decoding: slices[index], as: UTF8.self)
-            }
-        }
-        return AuditPage(events: response.events, total: response.total, limit: response.limit, offset: response.offset, scanned: meta.scanned, complete: meta.complete)
+        AuditPage(try AuditQueryResponse.decode(data, query: query))
     }
 }
 
@@ -110,12 +94,9 @@ public extension LatticeClient {
         try await perform(AuditChainStatus.self, path: "/api/audit/verify")
     }
 
-    /// `GET /api/audit` keeping `scanned` and `complete`, which the Shared
-    /// `fetchAudit(query:)` drops.
-    /// yagni: folds into Shared `fetchAudit(query:)` at the next integration window.
+    /// One page of `GET /api/audit` with its scan facts.
     func auditPage(_ query: AuditQuery) async throws -> AuditPage {
-        let data = try await performData(path: "/api/audit", query: query.queryItems)
-        return try AuditPage.decode(data, query: query)
+        AuditPage(try await fetchAudit(query: query))
     }
 
     /// One event by id. `/api/audit` has no id filter, so this pages the
