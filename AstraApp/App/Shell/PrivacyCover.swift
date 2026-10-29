@@ -45,6 +45,12 @@ final class ShieldController {
         if model.locked || (DeviceLockSettings.requireFaceID && intervalPassed) {
             model.locked = true
             window.isHidden = false
+            // The keyboard sits above every app window, so a field focused
+            // under the lock (the reveal code) would stay on screen and keep
+            // taking input. End editing in the windows below first.
+            for other in window.windowScene?.windows ?? [] where other !== window {
+                other.endEditing(true)
+            }
             unlock()
         } else {
             window.isHidden = true
