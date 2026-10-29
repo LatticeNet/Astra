@@ -78,9 +78,15 @@ final class ConfirmFlowModel {
         return false
     }
 
-    var visibleToggles: [ConfirmToggle] {
-        if case .findings = step { return intent.toggles }
-        return intent.toggles.filter { !$0.revealedByConflict }
+    /// Toggles shown from the start.
+    var standingToggles: [ConfirmToggle] {
+        intent.toggles.filter { !$0.revealedByConflict }
+    }
+
+    /// Acceptance toggles, shown only once the server returned findings.
+    var findingsToggles: [ConfirmToggle] {
+        guard case .findings = step else { return [] }
+        return intent.toggles.filter(\.revealedByConflict)
     }
 
     /// Why the primary action is off, or nil when it may run.
@@ -263,22 +269,14 @@ private struct ConfirmStepView: View {
                     } footer: {
                         Text("Nothing was filed. Accept the findings below to file the plan anyway.")
                     }
+                    .id(Self.findingsID)
+                    // The acceptance sits right under what it accepts, so the
+                    // findings and the only way forward read as one step.
+                    toggleSection(model.findingsToggles)
                 }
                 blastRadius(intent)
                 dryRunSection
-                if !model.visibleToggles.isEmpty {
-                    Section {
-                        ForEach(model.visibleToggles, id: \.id) { toggle in
-                            Toggle(isOn: binding(for: toggle.id)) {
-                                VStack(alignment: .leading, spacing: Spacing.xxs) {
-                                    Text(toggle.label)
-                                    Text(toggle.consequence).textRole(.footnote)
-                                }
-                            }
-                        }
-                    }
-                    .id(Self.togglesID)
-                }
+                toggleSection(model.standingToggles)
                 if let phrase = intent.confirmPhrase {
                     Section {
                         TextField("Type \(phrase)", text: $model.typedPhrase)
@@ -304,18 +302,34 @@ private struct ConfirmStepView: View {
                 withAnimation { proxy.scrollTo(Self.noticeID, anchor: .top) }
                 AccessibilityNotification.Announcement(notice).post()
             }
-            // The findings push the acceptance toggle below the pinned button;
-            // bring it into view, since it is the only way forward.
+            // Findings arrive after a tap on the pinned button, usually with
+            // the list scrolled down; start the operator at the first finding.
             .onChange(of: model.isShowingFindings) { _, showing in
                 guard showing else { return }
-                withAnimation { proxy.scrollTo(Self.togglesID, anchor: .bottom) }
+                withAnimation { proxy.scrollTo(Self.findingsID, anchor: .top) }
             }
         }
     }
 
-    private static let togglesID = "confirm.toggles"
+    private static let findingsID = "confirm.findings"
     private static let phraseID = "confirm.phrase"
     private static let noticeID = "confirm.notice"
+
+    @ViewBuilder
+    private func toggleSection(_ toggles: [ConfirmToggle]) -> some View {
+        if !toggles.isEmpty {
+            Section {
+                ForEach(toggles, id: \.id) { toggle in
+                    Toggle(isOn: binding(for: toggle.id)) {
+                        VStack(alignment: .leading, spacing: Spacing.xxs) {
+                            Text(toggle.label)
+                            Text(toggle.consequence).textRole(.footnote)
+                        }
+                    }
+                }
+            }
+        }
+    }
 
     @ViewBuilder
     private func blastRadius(_ intent: WriteIntent) -> some View {
@@ -449,15 +463,25 @@ private struct ConfirmResultView: View {
             }
             failures(failed)
         case .filed(let ids, let refused, let notes):
+            // What needs the operator comes first: the refusals, then the
+            // server's notes, then one row for everything that was filed,
+            // which Done opens in Review. The headline already shows notes[0].
             Section { headline(outcome.message, tone: refused.isEmpty ? .quiet : .warn) }
-            Section("Filed for approval") {
-                ForEach(ids, id: \.self) { id in
-                    Text(id).textRole(.identifierInRow)
-                }
-            }
             failures(refused)
-            if !notes.isEmpty {
-                Section("Notes") { ForEach(notes, id: \.self) { Text($0) } }
+            if notes.count > 1 {
+                Section("Notes") { ForEach(notes.dropFirst(), id: \.self) { Text($0) } }
+            }
+            if !ids.isEmpty {
+                Section {
+                    Button(action: model.complete) {
+                        Label(ids.count == 1 ? "Review the filed plan" : "Review the \(ids.count) filed plans", systemImage: "doc.text.magnifyingglass")
+                    }
+                    .tint(Color.accentText)
+                } header: {
+                    Text("Filed for approval")
+                } footer: {
+                    Text(ids.count == 1 ? "1 plan waits for approval." : "\(ids.count) plans wait for approval.")
+                }
             }
         case .refused(_, let message):
             Section { headline(message, tone: .fail) }
