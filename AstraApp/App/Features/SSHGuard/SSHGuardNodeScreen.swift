@@ -221,16 +221,22 @@ struct SSHGuardNodeScreen: View {
                 }
             }
             .frame(minHeight: Spacing.minimumTarget, alignment: .leading)
+            // Text only: in a list the label icon takes the fill's tint and
+            // vanishes, yet still pushes the title off center.
             Button {
                 confirm(row)
             } label: {
-                Label(target == .file ? "Confirm" : "Open confirm approval", systemImage: "checkmark.shield")
+                Text(target == .file ? "Confirm" : "Open confirm approval")
                     .fontWeight(.semibold)
+                    .multilineTextAlignment(.center)
                     .frame(maxWidth: .infinity, minHeight: Spacing.minimumTarget - 8)
             }
             .buttonStyle(.borderedProminent)
+            .buttonBorderShape(.roundedRectangle)
             .tint(Color.accentFill)
-            .disabled(!store.canPlan)
+            .dynamicTypeSize(...DynamicTypeSize.accessibility2)
+            // Opening a waiting approval only presents Review, which gates the decision itself.
+            .disabled(target == .file && !store.canPlan)
             .listRowInsets(EdgeInsets(top: Spacing.s, leading: Spacing.l, bottom: Spacing.s, trailing: Spacing.l))
         } footer: {
             VStack(alignment: .leading, spacing: Spacing.xs) {
