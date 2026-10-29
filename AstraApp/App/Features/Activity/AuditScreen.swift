@@ -219,7 +219,7 @@ struct AuditScreen: View {
                     .disabled(store.export.isRunning || store.page.value == nil)
             }
             Section {
-                Button("Export audit head", systemImage: "seal") { export(.head) }
+                Button("Export audit head", systemImage: "doc.badge.arrow.up") { export(.head) }
                     .disabled(store.export.isRunning)
                 Button("Verify chain", systemImage: "checkmark.shield") { verifying = true }
             }
@@ -310,7 +310,7 @@ struct AuditScreen: View {
                 Text("A broken chain names the first record that does not match. The result is kept on this iPhone only until the app closes.")
             }
             Section {
-                Button("Export audit head", systemImage: "seal") { export(.head) }
+                Button("Export audit head", systemImage: "doc.badge.arrow.up") { export(.head) }
                     .frame(minHeight: Spacing.minimumTarget)
                     .disabled(store.export.isRunning)
             } header: {
