@@ -39,6 +39,11 @@ final class InventoryStore {
 
     var adminMissing: String? { missing(Self.adminScope) }
 
+    /// The reveal runs on the signed-in session (S tier), so only the
+    /// session's scopes gate it. Without a session the reveal flow offers
+    /// sign in, so nothing is missing yet.
+    var revealMissing: String? { missing(Self.adminScope, on: .session) }
+
     var allowlist: [String] { session.primaryIdentity?.serverAllowlist ?? [] }
     var isConfined: Bool { session.primaryIdentity?.scopeSet.isConfined ?? false }
 

@@ -209,7 +209,7 @@ struct MachineDetailScreen: View {
     private func linkRow(_ machine: MachineProfile, kind: InventoryLinkKind) -> some View {
         let stored = kind == .console ? machine.hasConsoleURL : machine.hasDetailURL
         let title = kind == .console ? "Reveal console link" : "Reveal detail link"
-        let missing = store.missing(InventoryStore.adminScope, on: .session) ?? store.adminMissing
+        let missing = store.revealMissing
         if stored {
             Button {
                 Task { await runner.reveal(InventoryIntents.revealLink(machine, kind: kind)) }
@@ -217,7 +217,7 @@ struct MachineDetailScreen: View {
                 Label {
                     VStack(alignment: .leading, spacing: Spacing.xxs) {
                         Text(title)
-                        Text(session.revealClient == nil ? "Needs a signed-in session and your code" : "Asks for your authenticator code")
+                        Text(revealNote(missing: missing))
                             .textRole(.footnote)
                     }
                 } icon: {
@@ -229,6 +229,11 @@ struct MachineDetailScreen: View {
         } else {
             DetailRow(label: kind == .console ? "Console link" : "Detail link", value: "Not stored", copyable: false)
         }
+    }
+
+    private func revealNote(missing: String?) -> String {
+        if let missing { return "Needs \(missing) on the signed-in account" }
+        return session.revealClient == nil ? "Needs a signed-in session and your code" : "Asks for your authenticator code"
     }
 
     private func deleteProfile(_ machine: MachineProfile) async {
@@ -284,7 +289,7 @@ struct MachineDetailScreen: View {
                         }
                     }
                     if machine.hasConsoleURL {
-                        InventoryGatedButton(title: "Reveal console link", systemImage: "terminal", missing: missing) {
+                        InventoryGatedButton(title: "Reveal console link", systemImage: "terminal", missing: store.revealMissing) {
                             Task { await runner.reveal(InventoryIntents.revealLink(machine, kind: .console)) }
                         }
                     }
