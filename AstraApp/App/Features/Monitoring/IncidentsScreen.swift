@@ -114,6 +114,9 @@ struct IncidentsScreen: View {
             if scope != .active {
                 FilterStateRow(text: "Showing \(scope.title.lowercased()) incidents") { scope = .active }
             }
+            if !query.trimmingCharacters(in: .whitespaces).isEmpty {
+                FilterStateRow(text: "Showing incidents matching \(query)") { query = "" }
+            }
             if let queryError { Section { MonitoringQueryErrorRow(message: queryError) } }
             if stable.held != nil {
                 Section { PendingUpdatesRow(count: stable.pendingCount) { stable.showHeld() } }

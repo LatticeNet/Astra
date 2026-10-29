@@ -77,6 +77,10 @@ struct ChecksScreen: View {
         let types = MonitorType.allCases.map(\.rawValue).filter { byType[$0] != nil } + byType.keys.filter { MonitorType(rawValue: $0) == nil }.sorted()
         return List {
             MonitoringRefreshError(state: store.monitors, noun: "checks", retry: refresh)
+            // The query persists across launches, so a filtered list always says so.
+            if !query.trimmingCharacters(in: .whitespaces).isEmpty {
+                FilterStateRow(text: "Showing checks matching \(query)") { query = "" }
+            }
             if let queryError { Section { MonitoringQueryErrorRow(message: queryError) } }
             if stable.held != nil {
                 Section {

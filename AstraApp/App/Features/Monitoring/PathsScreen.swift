@@ -50,7 +50,6 @@ struct MonitoringPathsList: View {
 
     var body: some View {
         content
-            .searchable(text: query, prompt: "source:, target:, state:, method:")
             .navigationSubtitle(subtitle)
             .toolbar {
                 ToolbarItem(placement: isRoot ? .topBarLeading : .topBarTrailing) { viewMenu }
@@ -68,11 +67,13 @@ struct MonitoringPathsList: View {
     @ViewBuilder
     private var content: some View {
         if view == .chains {
+            // The query filters paths only; Chains shows no field that would filter nothing.
             MonitoringChainsList()
         } else {
             MonitoringResource(state: store.paths, noun: "paths", retry: refresh) { _ in
                 list
             }
+            .searchable(text: query, prompt: "source:, target:, state:, method:")
         }
     }
 
@@ -95,6 +96,10 @@ struct MonitoringPathsList: View {
         let groups = MonitoringPaths.groups(filtered.rows)
         return List {
             MonitoringRefreshError(state: store.paths, noun: "paths", retry: refresh)
+            // The query persists across launches, so a filtered list always says so.
+            if !query.wrappedValue.trimmingCharacters(in: .whitespaces).isEmpty {
+                FilterStateRow(text: "Showing paths matching \(query.wrappedValue)") { query.wrappedValue = "" }
+            }
             if let error = filtered.error {
                 Section { MonitoringQueryErrorRow(message: error) }
             }
