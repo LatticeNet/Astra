@@ -29,7 +29,7 @@ struct SettingsScreen: View {
                 }
                 Section {
                     NavigationLink(value: SettingsRoute.page(.connection)) {
-                        SettingsRow(title: session.hostName, symbol: "server.rack", value: connectionSummary)
+                        SettingsRow(title: session.hostName, symbol: "server.rack", value: connectionSummary, titleIsIdentifier: true)
                     }
                     NavigationLink(value: SettingsRoute.page(.session)) {
                         SettingsRow(title: "Session for reveals", symbol: "person.badge.key", value: sessionSummary)
@@ -97,6 +97,9 @@ private struct SettingsRow: View {
     let title: String
     let symbol: String
     var value: String?
+    /// A host name wraps by character, never with an inserted hyphen, which
+    /// is a legal host name character and would show a different host (4.5).
+    var titleIsIdentifier = false
 
     @Environment(\.dynamicTypeSize) private var typeSize
 
@@ -107,7 +110,8 @@ private struct SettingsRow: View {
         layout {
             // At accessibility sizes the icon would squeeze the title into hyphenated fragments.
             if typeSize.isAccessibilitySize {
-                Text(title)
+                Text(titleIsIdentifier ? DetailRow.breakable(title) : title)
+                    .accessibilityLabel(title)
             } else {
                 Label(title, systemImage: symbol)
                 Spacer(minLength: Spacing.s)
