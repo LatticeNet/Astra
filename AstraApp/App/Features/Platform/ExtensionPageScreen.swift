@@ -152,7 +152,7 @@ struct ExtensionPageScreen: View {
                 ContentUnavailableView("Nothing to show", systemImage: "list.bullet.rectangle", description: Text("\(page.pluginName) returned no fields."))
             }
             ForEach(Array(cells.enumerated()), id: \.offset) { _, cell in
-                DetailRow(label: cell.label, value: cell.text.isEmpty ? "None" : TimeDisplay.localizingStamps(in: cell.text, mode: mode, locale: locale),
+                DetailRow(label: PlatformFormat.breakable(cell.label), value: cell.text.isEmpty ? "None" : TimeDisplay.localizingStamps(in: cell.text, mode: mode, locale: locale),
                           monospaced: cell.isCode, copyable: !cell.isSecret && !cell.text.isEmpty)
             }
         }
@@ -185,7 +185,7 @@ struct PlatformExtensionRowView: View {
 
     var body: some View {
         let title = row.title
-        let rest = row.cells.filter { $0.text != title || $0.isSecret }
+        let rest = row.otherCells
         VStack(alignment: .leading, spacing: Spacing.xs) {
             Text(PlatformFormat.breakable(title)).textRole(.rowTitle).lineLimit(typeSize.isAccessibilitySize ? nil : 2)
             ForEach(Array(rest.enumerated()), id: \.offset) { _, cell in
@@ -207,11 +207,11 @@ struct PlatformExtensionRowView: View {
             .foregroundStyle(.primary)
         if typeSize.isAccessibilitySize {
             VStack(alignment: .leading, spacing: 0) {
-                Text(cell.label).font(.subheadline).foregroundStyle(.secondary)
+                Text(PlatformFormat.breakable(cell.label)).font(.subheadline).foregroundStyle(.secondary)
                 valueText
             }
         } else {
-            Text("\(Text(cell.label).foregroundStyle(.secondary).font(.subheadline))  \(valueText)")
+            Text("\(Text(PlatformFormat.breakable(cell.label)).foregroundStyle(.secondary).font(.subheadline))  \(valueText)")
                 .lineLimit(2)
         }
     }

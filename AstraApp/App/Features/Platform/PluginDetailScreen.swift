@@ -160,13 +160,13 @@ struct PluginDetailScreen: View {
             Section {
                 ForEach(contract.methods, id: \.name) { method in
                     let scopes = contract.scopes(for: method.name)
-                    DetailRow(label: method.name,
+                    DetailRow(label: PlatformFormat.breakable(method.name),
                               value: scopes.isEmpty ? "No scope" : scopes.joined(separator: ", "),
                               secondary: method.effect.isEmpty ? nil : method.effect.platformCapitalized,
                               copyable: false)
                 }
             } header: {
-                Text(contract.service)
+                Text(PlatformFormat.breakable(contract.service))
                     .textCase(nil)
                     .accessibilityLabel("Interface \(contract.service)")
             } footer: {

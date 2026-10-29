@@ -6,14 +6,37 @@ import SwiftUI
 struct ExtensionsScreen: View {
     @Environment(PlatformStore.self) private var store
     @Environment(ChangeLog.self) private var changes
+    @Environment(Router.self) private var router
+
+    @State private var query = ""
 
     var body: some View {
         PlatformListState(state: store.contributions, noun: "plugin pages", retry: { Task { await store.refreshContributions() } }) { plugins in
             list(plugins.filter { !PlatformPluginPages.pages(pluginID: $0.id, ui: $0.ui).isEmpty })
         }
         .navigationTitle("Extensions")
+        .searchable(text: $query, prompt: "Search pages or plugins")
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Menu {
+                    Button("Open on web", systemImage: "safari") { router.openOnWeb(.platformPlugins) }
+                } label: {
+                    Label("More", systemImage: "ellipsis")
+                }
+            }
+        }
         .refreshable { await store.refreshContributions() }
         .polling(.standard, version: changes.version(.plugins)) { await store.refreshContributions() }
+    }
+
+    /// The plugin's pages that match the search: all of them when the
+    /// plugin's name or id matches, else those whose title does.
+    private func pages(of plugin: PlatformPlugin) -> [PlatformPluginPage] {
+        let all = PlatformPluginPages.pages(pluginID: plugin.id, ui: plugin.ui)
+        let text = query.trimmingCharacters(in: .whitespaces)
+        guard !text.isEmpty else { return all }
+        if plugin.name.localizedCaseInsensitiveContains(text) || plugin.id.localizedCaseInsensitiveContains(text) { return all }
+        return all.filter { $0.title.localizedCaseInsensitiveContains(text) }
     }
 
     @ViewBuilder
@@ -29,9 +52,13 @@ struct ExtensionsScreen: View {
         } else {
             List {
                 PlatformRefreshError(state: store.contributions, noun: "plugin pages") { Task { await store.refreshContributions() } }
-                ForEach(plugins.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }) { plugin in
+                let matching = plugins.filter { !pages(of: $0).isEmpty }
+                if matching.isEmpty {
+                    Section { ContentUnavailableView.search(text: query) }
+                }
+                ForEach(matching.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }) { plugin in
                     Section {
-                        ForEach(PlatformPluginPages.pages(pluginID: plugin.id, ui: plugin.ui)) { page in
+                        ForEach(pages(of: plugin)) { page in
                             if page.isNative {
                                 NavigationLink(value: AppRoute.platform(.extensionPage(pluginID: plugin.id, route: page.route))) {
                                     PlatformPageLabel(page: page)

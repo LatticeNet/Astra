@@ -43,9 +43,19 @@ public enum ExtensionPageModel {
         public var id: String
         public var cells: [Cell]
 
-        /// The first non-secret value, used as the row title.
+        /// The cell used as the row title: the first non-secret value.
+        public var titleIndex: Int? {
+            cells.firstIndex { !$0.isSecret && !$0.text.isEmpty }
+        }
+
         public var title: String {
-            cells.first { !$0.isSecret && !$0.text.isEmpty }?.text ?? id
+            titleIndex.map { cells[$0].text } ?? id
+        }
+
+        /// Every cell but the title cell. A column whose value equals the
+        /// title's still shows.
+        public var otherCells: [Cell] {
+            cells.enumerated().filter { $0.offset != titleIndex }.map(\.element)
         }
     }
 

@@ -359,6 +359,9 @@ private func checkPlatformExtensionPages() throws {
     try expectEqual(second[2].text, "••••••", "a secret without a scheme is fully masked")
     try expectEqual(second[4].text, "", "a null shows nothing")
     try expectEqual(table.rows[0].title, "status.example.net", "the row title is the first non-secret value")
+    let twinView = PlatformViewContribution(route: "t", title: "T", kind: "table", columns: [PlatformViewColumn(key: "name", label: "Name"), PlatformViewColumn(key: "host", label: "Host")])
+    let twin = ExtensionPageModel.tableRows(view: twinView, data: try PlatformJSONValue.parse(json(#"[{"name":"edge","host":"edge"}]"#)), now: now, locale: Locale(identifier: "en_US"))
+    try expectEqual(twin.rows.first?.otherCells.map(\.label), ["Host"], "only the title cell drops, not a column with the same value")
 
     let derived = ExtensionPageModel.columns(view: PlatformViewContribution(route: "r", title: "R", kind: "table"), rows: rows)
     try expectEqual(derived.first?.key, "id", "undeclared columns come from the first row's keys")
