@@ -14,6 +14,7 @@ public func checkDemo() async throws {
     try await checkSessionTaskWrites()
     try await checkExpiringFixture()
     try await checkCapabilityRecords()
+    try await checkDDNSFollowsWrites()
 }
 
 private let pinned = DemoClock(pinned: "2026-10-28T12:00:00Z")!
@@ -381,6 +382,22 @@ private func checkCapabilityRecords() async throws {
     await state.setValue("", for: "fleet.cap.\(DemoWorld.node("edge-sin-1").id).sshguard")
     let cleared = try await client.sshGuardCapabilityRecords()
     try expectEqual(cleared[DemoWorld.node("edge-sin-1").id], nil, "clearing removes a standing record")
+}
+
+/// The shared DDNS list follows what the phone did: a profile run from the
+/// phone reads current, a deleted one is gone.
+private func checkDDNSFollowsWrites() async throws {
+    let state = DemoState()
+    let client = demoClient(state: state)
+    let before = try await client.listDDNS()
+    try expectEqual(before.first { $0.id == "ddns_d03" }?.lastIPv4, "192.0.2.10", "home starts on its old address")
+    await state.insert("ddns_d03", into: "networking.ddns.ran")
+    await state.insert("ddns_d02", into: "networking.ddns.deleted")
+    let after = try await client.listDDNS()
+    try expectEqual(after.first { $0.id == "ddns_d03" }?.lastIPv4, DemoWorld.node("home-router").ipv4, "a run moves home to the node's address")
+    try expect(after.first { $0.id == "ddns_d03" }?.lastError.isEmpty == true, "and clears its error")
+    try expect(!after.contains { $0.id == "ddns_d02" }, "a deleted profile leaves the list")
+    try expectEqual(after.count, before.count - 1, "nothing else changes")
 }
 
 /// `expect` for a value computed with `await`, which an autoclosure cannot hold.

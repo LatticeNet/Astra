@@ -612,7 +612,7 @@ public enum NetworkingFixtures {
                     return .error(status: 502, code: "upstream_error", message: "cloudflare: HTTP 403: [{\"code\":10000,\"message\":\"Authentication error\"}]")
                 }
                 await state.insert(profileID, into: "networking.ddns.ran")
-                return .json(ranProfile(profile, id: profileID))
+                return .json(SharedFixtures.ranDDNSProfile(profile))
             }.requiring("ddns:admin"),
             DemoRoute(method: "POST", pathPattern: "/api/ddns/delete") { request, state in
                 guard let profileID = request.bodyStrings["id"] else { return .error(status: 400, code: "bad_request", message: "id is required") }
@@ -620,22 +620,6 @@ public enum NetworkingFixtures {
                 return .json(#"{"ok":true}"#)
             }.requiring("ddns:admin"),
         ]
-    }
-
-    /// The profile after a run: the node's current address, run now, no error.
-    static func ranProfile(_ profile: DemoJSON, id: String) -> String {
-        guard case .object(var pairs) = profile else { return profile.text }
-        let nodeID = pairs.first { $0.0 == "node_id" }.flatMap { if case .string(let value) = $0.1 { value } else { nil } } ?? ""
-        let node = DemoWorld.node(id: nodeID)
-        pairs.removeAll { $0.0 == "last_error" }
-        for index in pairs.indices {
-            switch pairs[index].0 {
-            case "last_run_at", "updated_at": pairs[index].1 = .time()
-            case "last_ipv4": pairs[index].1 = .string(node?.ipv4 ?? "")
-            default: break
-            }
-        }
-        return DemoJSON.object(pairs).text
     }
 
     // MARK: - Geo-Routing

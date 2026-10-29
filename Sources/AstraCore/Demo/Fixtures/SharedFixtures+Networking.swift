@@ -4,8 +4,15 @@ import Foundation
 extension SharedFixtures {
     static var networkingRoutes: [DemoRoute] {
         [
-            DemoRoute(pathPattern: "/api/ddns", body: DemoJSON.array(ddnsProfiles).text) { request, _ in
-                .json(DemoJSON.array(request.scenario == .quiet ? quietDDNSProfiles : ddnsProfiles).text)
+            DemoRoute(pathPattern: "/api/ddns", body: DemoJSON.array(ddnsProfiles).text) { request, state in
+                let profiles = request.scenario == .quiet ? quietDDNSProfiles : ddnsProfiles
+                let ran = await state.members(of: "networking.ddns.ran")
+                let deleted = await state.members(of: "networking.ddns.deleted")
+                let current = profiles.compactMap { profile -> String? in
+                    guard let id = ddnsID(profile), !deleted.contains(id) else { return nil }
+                    return ran.contains(id) ? ranDDNSProfile(profile) : profile.text
+                }
+                return .json("[" + current.joined(separator: ",") + "]")
             }.requiring("ddns:admin"),
             DemoRoute(pathPattern: "/api/sshguard/status", body: sshGuardBody(request: nil), emptyBody: #"{"ok":true,"nodes":[]}"#) { request, _ in
                 .json(sshGuardBody(request: request))
@@ -34,6 +41,28 @@ extension SharedFixtures {
         ddns(id: "ddns_d03", name: "home", node: "home-router", domains: ["home.example.net"], lastIPv4: DemoWorld.node("home-router").ipv4, lastRun: "-2h"),
         ddns(id: "ddns_d04", name: "status page", node: "edge-fra-3", domains: ["status.example.org"], lastIPv4: "", lastRun: "-5m", cname: "status-example.cdn.example.com"),
     ]
+
+    /// The profile after a run from the phone (the networking.ddns.ran state
+    /// set): the node's current address, run now, no error.
+    static func ranDDNSProfile(_ profile: DemoJSON) -> String {
+        guard case .object(var pairs) = profile else { return profile.text }
+        let nodeID = pairs.first { $0.0 == "node_id" }.flatMap { if case .string(let value) = $0.1 { value } else { nil } } ?? ""
+        let node = DemoWorld.node(id: nodeID)
+        pairs.removeAll { $0.0 == "last_error" }
+        for index in pairs.indices {
+            switch pairs[index].0 {
+            case "last_run_at", "updated_at": pairs[index].1 = .time()
+            case "last_ipv4": pairs[index].1 = .string(node?.ipv4 ?? "")
+            default: break
+            }
+        }
+        return DemoJSON.object(pairs).text
+    }
+
+    private static func ddnsID(_ profile: DemoJSON) -> String? {
+        guard case .object(let pairs) = profile, case .string(let id)? = pairs.first(where: { $0.0 == "id" })?.1 else { return nil }
+        return id
+    }
 
     private static func ddns(id: String, name: String, node nodeName: String, domains: [String], lastIPv4: String, lastRun: String, error: String = "", cname: String = "") -> DemoJSON {
         let node = DemoWorld.node(nodeName)
