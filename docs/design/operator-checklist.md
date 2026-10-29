@@ -57,3 +57,16 @@ Agents cannot tap, swipe or rotate a simulator, and they cannot run VoiceOver, V
 - No location: Locate all asks once with the count; per-row Resolve is a swipe listed once in the actions rotor.
 - Capability gate: Turn on runs a ConfirmSheet that lists the nodes it would refuse, then Face ID; with a token that has a node allowlist the button stays off with "Needs a token without a node allowlist".
 - Voice Control "Show names": the Group menu, Select, Map options, Map or List (in landscape the single Show list or Show map button) and More buttons all have names.
+
+## M3 Monitoring
+
+- Overview: each health row opens its segment (Paths, Checks, Incidents) with the matching query; a recently degraded path pushes its detail.
+- Paths: the view menu switches Problems, All and Chains and opens the Matrix; "Show unmeasured" brings back skipped pairs; Up stays collapsed in Problems until Show; a path row's context menu shows the glance preview and Open source node.
+- Matrix: portrait and landscape keep the source column and target row pinned while the grid scrolls both ways; tapping a source name or a target name pushes Paths filtered to it; Fit to width fills the screen; with VoiceOver on, the grid is replaced by the per-source list and the "Problem paths" rotor jumps between sources with down or degraded paths.
+- Path detail: long press then drag on the latency chart scrubs with a selection tick at each sample, while a plain vertical swipe still scrolls and the edge swipe still goes back; gaps in the line stay gaps; Audio Graphs is offered on both charts; Compare previous window draws the dashed previous line; Plan beacon replan files a plan and opens it in Review.
+- Checks: Pause or Resume swipe asks once with the check named and monitor:admin stated; a generated check offers no swipe and its detail shows only the definition link; Delete on an operator check asks for Face ID; pausing a check another device just changed shows "changed since you opened it" and the current state.
+- Definition: Delete lists every check that goes with the definition before Face ID and needs the definition name typed.
+- Incidents: the search scopes switch Active, Acknowledged, Snoozed, Pending, Resolved and All; the Acknowledge swipe is listed once in the actions rotor; Snooze opens one dialog that names the incident; a poll that reorders the list while you scroll or while VoiceOver runs waits behind "n updates. Show" and focus stays put.
+- Incident detail: the Acknowledge, Snooze and Start maintenance bar replaces the tab bar in portrait (the tab bar returns on back); in landscape Acknowledge and Snooze sit in the navigation bar and Start maintenance in its menu; a failed acknowledge stays on screen with Retry; pending and resolved incidents show no actions.
+- Start maintenance: the node picker, name, presets and Until picker are reachable at AX5 with the keyboard up; Start asks once naming the node and the end time; the window appears under Incidents > Maintenance.
+- Maintenance window: End now and Delete each ask once naming the window.

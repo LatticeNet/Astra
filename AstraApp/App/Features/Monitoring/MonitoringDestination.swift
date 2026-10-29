@@ -7,6 +7,7 @@ struct MonitoringDestination: View {
     var body: some View {
         switch route {
         case .path(let key): PathDetailScreen(key: key)
+        case .pathCheck(let key, let monitor): PathDetailScreen(key: key, monitor: monitor)
         case .matrix: PathMatrixScreen()
         case .chain(let id): ChainDetailScreen(id: id)
         case .check(let id): CheckDetailScreen(id: id)
@@ -14,6 +15,10 @@ struct MonitoringDestination: View {
         case .definition(let id): DefinitionDetailScreen(id: id)
         case .incident(let id): IncidentDetailScreen(id: id)
         case .maintenanceWindow(let id): MaintenanceWindowScreen(id: id)
+        case .paths(let query):
+            MonitoringPathsList(initialQuery: query)
+                .navigationTitle("Paths")
+                .navigationBarTitleDisplayMode(.inline)
         }
     }
 }
