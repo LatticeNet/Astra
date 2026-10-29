@@ -379,8 +379,10 @@ struct SSHGuardArmSheet: View {
             }
             if let knock = model.knock {
                 Section {
+                    let shape = knock.portCount.map { "\($0) ports, opens for \(knock.openFor.isEmpty ? "12h" : knock.openFor)" }
                     StatusRow(style: StatusStyle(word: SSHGuardKnockWords.word(knock.knowledge), symbol: SSHGuardKnockWords.symbol(knock.knowledge), tone: .quiet),
-                              title: "Current sequence", detail: knock.portCount.map { "\($0) ports, opens for \(knock.openFor.isEmpty ? "12h" : knock.openFor)" })
+                              title: "Current sequence", detail: shape,
+                              accessibilityPhrase: ["Current sequence, \(SSHGuardKnockWords.word(knock.knowledge))", shape].compactMap { $0 }.joined(separator: ", "))
                     if let port = model.rotationPort {
                         DetailRow(label: "SSH port", value: port == 0 || port == 22 ? "Keeps the current port" : String(port), copyable: false)
                     }
@@ -433,8 +435,9 @@ struct SSHGuardArmSheet: View {
         Section {
             if let status = model.status {
                 let posture = StatusStyle.posture(status.postureState)
-                StatusRow(style: posture, title: model.name, detail: status.sshd.map { "sshd on \($0.ports.map(String.init).joined(separator: ", "))" },
-                          accessibilityPhrase: "\(model.name), \(posture.word)")
+                let sshd = status.sshd.map { "sshd on \($0.ports.map(String.init).joined(separator: ", "))" }
+                StatusRow(style: posture, title: model.name, detail: sshd,
+                          accessibilityPhrase: ["\(model.name), \(posture.word)", sshd].compactMap { $0 }.joined(separator: ", "))
             }
         } footer: {
             Text(rotate

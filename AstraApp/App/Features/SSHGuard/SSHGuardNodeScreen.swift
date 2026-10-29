@@ -318,7 +318,9 @@ struct SSHGuardNodeScreen: View {
     @ViewBuilder
     private func knockRows(_ knock: SSHGuardKnockState) -> some View {
         let style = StatusStyle(word: SSHGuardKnockWords.word(knock.knowledge), symbol: SSHGuardKnockWords.symbol(knock.knowledge), tone: .quiet)
-        StatusRow(style: style, title: "Sequence", detail: knock.gatePresent.map { $0 ? "gate on the node now" : "no gate on the node" })
+        let gate = knock.gatePresent.map { $0 ? "gate on the node now" : "no gate on the node" }
+        StatusRow(style: style, title: "Sequence", detail: gate,
+                  accessibilityPhrase: ["Sequence, \(style.word)", gate].compactMap { $0 }.joined(separator: ", "))
         if let count = knock.portCount {
             DetailRow(label: "Shape", value: "\(count) ports within \(knock.seqTimeoutSec ?? 15) s, opens for \(knock.openFor.isEmpty ? "12h" : knock.openFor)", copyable: false)
         }
