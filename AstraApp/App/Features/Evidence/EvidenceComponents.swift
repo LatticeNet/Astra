@@ -196,16 +196,25 @@ struct EvidenceNodeRow: View {
 
     @Environment(\.timeZoneMode) private var mode
     @Environment(\.locale) private var locale
+    @Environment(\.dynamicTypeSize) private var typeSize
+    @ScaledMetric(relativeTo: .title3) private var glyphWidth: CGFloat = 28
 
     var body: some View {
         let style = StatusStyle.evidenceNode(row.state)
-        StatusRow(
-            style: style,
-            title: row.name,
-            detail: detail,
-            reason: row.state.reason,
-            accessibilityPhrase: "\(row.name), \(style.word), \(detail)"
-        )
+        // The reason is the one line that says what to fix, and nothing else
+        // shows it, so it wraps in full under the row instead of in
+        // StatusRow's two-line reason slot.
+        VStack(alignment: .leading, spacing: Spacing.xxs) {
+            StatusRow(style: style, title: row.name, detail: detail)
+            if let reason = row.state.reason {
+                Text(TimeDisplay.localizingStamps(in: reason, mode: mode, locale: locale))
+                    .textRole(.rowReason(style.tone.word))
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.leading, typeSize.isAccessibilitySize ? 0 : glyphWidth + Spacing.m)
+            }
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel([row.name, style.word, detail, row.state.reason].compactMap { $0 }.joined(separator: ", "))
     }
 
     private var detail: String {
