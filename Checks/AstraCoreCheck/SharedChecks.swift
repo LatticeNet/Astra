@@ -137,6 +137,14 @@ private func checkURLAndRequests() throws {
         "http://192.168.1.20:8088",
         "service URL trims and keeps explicit http scheme"
     )
+    // The PAT rides every request, so cleartext is for local servers only.
+    for local in ["http://localhost:8088", "http://10.0.0.5", "http://172.20.1.1:80", "http://nas.local", "http://[fd00::5]:8088", "http://127.0.0.1"] {
+        try expect(AstraURLNormalizer.serviceURL(from: local) != nil, "\(local) is a local server and may use http")
+    }
+    for remote in ["http://lattice.example.com", "http://203.0.113.10", "http://172.32.0.1", "http://192.169.0.1", "ftp://lattice.example.com"] {
+        try expectEqual(AstraURLNormalizer.serviceURL(from: remote), nil, "\(remote) is refused in cleartext")
+    }
+    try expect(AstraURLNormalizer.serviceURL(from: "https://203.0.113.10") != nil, "https is allowed anywhere")
     try expectEqual(
         AstraURLNormalizer.latticeDashboardURL(from: "https://lattice.example.com/api/nodes?x=1#top")?.absoluteString,
         "https://lattice.example.com",

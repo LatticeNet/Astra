@@ -120,6 +120,7 @@ final class SessionStore {
         }
         network.use(SystemPathSource())
         guard let raw = UserDefaults.standard.string(forKey: Key.serverURL), let url = URL(string: raw),
+              AstraURLNormalizer.isAllowedServerURL(url),
               let token = KeychainStore.loadPAT() else { return }
         serverURL = url
         credentialKind = .token

@@ -142,6 +142,8 @@ private struct ServerStepView: View {
 
     static func describe(_ error: LatticeAPIError, address: String) -> String {
         switch error {
+        case .invalidURL where address.trimmingCharacters(in: .whitespaces).lowercased().hasPrefix("http://"):
+            return "Plain http is allowed only for a server on your local network, because the token would travel unencrypted. Use https."
         case .invalidURL:
             return "Enter a server address like lattice.example.net."
         case .transport(let code):
@@ -180,6 +182,11 @@ private struct CredentialStepView: View {
             Section {
                 LabeledContent("Server", value: server.host() ?? server.absoluteString)
                 LabeledContent("Build", value: build.isEmpty ? "unknown" : build)
+            } footer: {
+                if server.scheme?.lowercased() == "http" {
+                    Label("This connection is not encrypted. Anyone on this network can read the credential. Use it only on a network you trust.", systemImage: "exclamationmark.triangle.fill")
+                        .foregroundStyle(Color.statusWarnText)
+                }
             }
             Section {
                 Picker("Credential", selection: $method) {

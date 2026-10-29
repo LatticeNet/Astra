@@ -73,6 +73,7 @@ enum BackgroundRefresh {
     /// sets it. Without `monitor:read` the badge counts approvals only.
     static func refreshBadge() async -> Bool {
         guard let raw = UserDefaults.standard.string(forKey: Key.serverURL), let url = URL(string: raw),
+              AstraURLNormalizer.isAllowedServerURL(url),
               let token = KeychainStore.loadPAT() else {
             record("No API token on this iPhone")
             return false

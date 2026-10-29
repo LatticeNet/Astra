@@ -36,12 +36,40 @@ public enum AstraURLNormalizer {
         return components.url
     }
 
+    /// Whether the app may talk to this server URL. The PAT and the session
+    /// cookie travel with every request, so plain http is allowed only for a
+    /// server on the local network; anywhere else it would send them in
+    /// cleartext. Stored URLs are checked again before use.
+    public static func isAllowedServerURL(_ url: URL) -> Bool {
+        guard let scheme = url.scheme?.lowercased(), let host = url.host, !host.isEmpty else { return false }
+        switch scheme {
+        case "https": return true
+        case "http": return isLocalNetworkHost(host)
+        default: return false
+        }
+    }
+
+    /// Loopback, link-local and private addresses, and `.local` names: the
+    /// hosts App Transport Security's local networking exception covers.
+    public static func isLocalNetworkHost(_ rawHost: String) -> Bool {
+        let host = rawHost.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: "[]"))
+        if host == "localhost" || host.hasSuffix(".localhost") || host.hasSuffix(".local") { return true }
+        if host.contains(":") {
+            // IPv6: loopback, link-local fe80::/10, unique local fc00::/7.
+            return host == "::1" || host.hasPrefix("fe8") || host.hasPrefix("fe9") || host.hasPrefix("fea")
+                || host.hasPrefix("feb") || host.hasPrefix("fc") || host.hasPrefix("fd")
+        }
+        let parts = host.split(separator: ".", omittingEmptySubsequences: false)
+        let octets = parts.compactMap { UInt8($0) }
+        guard parts.count == 4, octets.count == 4 else { return false }
+        switch (octets[0], octets[1]) {
+        case (127, _), (10, _), (192, 168), (169, 254), (172, 16...31): return true
+        default: return false
+        }
+    }
+
     private static func validatedHTTPURL(from value: String) -> URL? {
-        guard let url = URL(string: value),
-              let scheme = url.scheme?.lowercased(),
-              scheme == "http" || scheme == "https",
-              url.host?.isEmpty == false
-        else {
+        guard let url = URL(string: value), isAllowedServerURL(url) else {
             return nil
         }
         return url
