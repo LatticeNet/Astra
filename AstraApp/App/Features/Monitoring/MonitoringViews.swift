@@ -419,3 +419,40 @@ struct MonitoringResource<Value: Sendable, Content: View>: View {
         }
     }
 }
+
+/// A node link row with the node's state as symbol and word (4.2), for the
+/// subject and ends of incidents and paths.
+struct MonitoringNodeRow: View {
+    let label: String
+    let id: String
+    let name: String
+
+    @Environment(NodeDirectory.self) private var nodes
+    @Environment(\.dynamicTypeSize) private var typeSize
+
+    var body: some View {
+        let style = nodes.nodes[id].map { StatusStyle.node($0.honesty) }
+        let layout = typeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: Spacing.xxs))
+            : AnyLayout(HStackLayout(alignment: .firstTextBaseline, spacing: Spacing.s))
+        NavigationLink(value: AppRoute.fleet(.node(id: id))) {
+            layout {
+                Text(label)
+                if !typeSize.isAccessibilitySize { Spacer(minLength: Spacing.s) }
+                VStack(alignment: typeSize.isAccessibilitySize ? .leading : .trailing, spacing: Spacing.xxs) {
+                    Text(name).foregroundStyle(typeSize.isAccessibilitySize ? .primary : .secondary)
+                    if let style {
+                        HStack(alignment: .firstTextBaseline, spacing: Spacing.xs) {
+                            StatusGlyph(style: style, font: .footnote)
+                            Text(style.word).foregroundStyle(style.tone.isProblem ? style.tone.word : .secondary)
+                        }
+                        .textRole(.rowDetail)
+                    }
+                }
+            }
+            .frame(minHeight: Spacing.minimumTarget)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("\(label), \(name)" + (style.map { ", \($0.word)" } ?? ""))
+        }
+    }
+}

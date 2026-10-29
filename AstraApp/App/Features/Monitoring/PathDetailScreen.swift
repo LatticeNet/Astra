@@ -314,17 +314,7 @@ struct PathDetailScreen: View {
     }
 
     private func nodeRow(label: String, id: String, name: String) -> some View {
-        NavigationLink(value: AppRoute.fleet(.node(id: id))) {
-            HStack {
-                LabeledContent(label, value: name)
-                if let node = nodes.nodes[id] {
-                    StatusGlyph(style: .node(node.honesty), font: .body)
-                }
-            }
-            .frame(minHeight: Spacing.minimumTarget)
-            .accessibilityElement(children: .combine)
-            .accessibilityLabel("\(label), \(name)" + (nodes.nodes[id].map { ", \(StatusStyle.node($0.honesty).word)" } ?? ""))
-        }
+        MonitoringNodeRow(label: label, id: id, name: name)
     }
 
     /// Beacon replans for either end of the path, as the console's

@@ -53,13 +53,15 @@ struct IncidentDetailScreen: View {
             .navigationBarTitleDisplayMode(.inline)
             .navigationSubtitle(store.incident(id: id).map { style($0).word } ?? "")
             .toolbar { toolbar }
-            .toolbarVisibility(showsBottomBar ? .visible : .automatic, for: .bottomBar)
-            // The bottom toolbar and the floating tab bar share the same edge;
-            // while the actions show, the tab bar steps aside (back returns it).
-            .toolbarVisibility(showsBottomBar ? .hidden : .automatic, for: .tabBar)
+            // A bar of its own above the floating tab bar (4.11): a .bottomBar
+            // toolbar item shares the tab bar's edge and draws under it on
+            // iOS 26, and hiding the tab bar would cost tab switching here.
+            .safeAreaBar(edge: .bottom) {
+                if showsBottomBar, let incident = store.incident(id: id) { actionBar(incident) }
+            }
             .monitoringSnoozeDialog($snoozeTarget)
             .announcing(failure)
-            .polling(.monitoring, version: changes.version([.incidents, .maintenance])) {
+            .polling(.standard, version: changes.version([.incidents, .maintenance])) {
                 await nodes.refreshIfOlder(than: 60)
                 let delivered = Task { await deliveries.load(incidentID: id, session: session) }
                 let ok = await store.refreshIncidents()
@@ -112,6 +114,13 @@ struct IncidentDetailScreen: View {
                 }
             }
             MonitoringRefreshError(state: store.incidents, noun: "the incident") { Task { await store.refreshIncidents() } }
+            if !store.canAdmin, IncidentFilter.isActive(incident), !incident.isDerivedPending {
+                Section {
+                    Label("Acknowledge, snooze and maintenance need monitor:admin", systemImage: "lock")
+                        .textRole(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+            }
             Section {
                 Text(incident.displayTitle)
                     .textRole(.detailHeader)
@@ -180,14 +189,7 @@ struct IncidentDetailScreen: View {
             }
         }
         if !incident.nodeID.isEmpty {
-            NavigationLink(value: AppRoute.fleet(.node(id: incident.nodeID))) {
-                HStack {
-                    LabeledContent("Node", value: incident.nodeName.isEmpty ? nodes.name(for: incident.nodeID) : incident.nodeName)
-                    if let node = nodes.nodes[incident.nodeID] { StatusGlyph(style: .node(node.honesty), font: .body) }
-                }
-                .frame(minHeight: Spacing.minimumTarget)
-                .accessibilityElement(children: .combine)
-            }
+            MonitoringNodeRow(label: "Node", id: incident.nodeID, name: incident.nodeName.isEmpty ? nodes.name(for: incident.nodeID) : incident.nodeName)
         }
     }
 
@@ -226,7 +228,8 @@ struct IncidentDetailScreen: View {
                     truthRow(delivery)
                 }
                 if list.isEmpty {
-                    Label(incident.notified.isEmpty ? "No notification went out" : "Notified at \(incident.notifiedAt.map { TimeDisplay.clock($0, mode: mode, locale: locale) } ?? "an unknown time")", systemImage: "bell.slash")
+                    Label(incident.notified.isEmpty ? "No notification went out" : "Notified at \(incident.notifiedAt.map { TimeDisplay.clock($0, mode: mode, locale: locale) } ?? "an unknown time")",
+                          systemImage: incident.notified.isEmpty ? "bell.slash" : "bell")
                         .foregroundStyle(.secondary)
                 }
             } else if !incident.notified.isEmpty, let at = incident.openNotifiedAt ?? incident.notifiedAt {
@@ -360,7 +363,7 @@ struct IncidentDetailScreen: View {
         let available = incident.map { IncidentFilter.isActive($0) && !$0.isDerivedPending } ?? false
         ToolbarItem(placement: .topBarTrailing) {
             Menu {
-                if verticalSizeClass == .compact, available, let incident { maintenanceButton(incident) }
+                if available, let incident { maintenanceButton(incident) }
                 Button("Open on web", systemImage: "safari") {
                     router.openOnWeb(.incident(id: id, query: incident.map { $0.subject.isEmpty ? $0.nodeName : $0.subject } ?? ""))
                 }
@@ -370,44 +373,79 @@ struct IncidentDetailScreen: View {
                 Label("More", systemImage: "ellipsis.circle")
             }
         }
-        if available, let incident {
-            if verticalSizeClass == .compact {
-                ToolbarItemGroup(placement: .topBarTrailing) {
-                    ackButton(incident, actions: actions)
-                    snoozeButton(incident)
-                }
-            } else {
-                ToolbarItemGroup(placement: .bottomBar) {
-                    ackButton(incident, actions: actions)
-                    snoozeButton(incident)
-                }
-                ToolbarSpacer(.flexible, placement: .bottomBar)
-                ToolbarItem(placement: .bottomBar) { maintenanceButton(incident) }
+        if available, let incident, verticalSizeClass == .compact {
+            ToolbarItemGroup(placement: .topBarTrailing) {
+                ackButton(incident, actions: actions)
+                snoozeButton(incident)
             }
         }
     }
 
+    /// Words, not bare glyphs: a T1 write skips its confirmation only because
+    /// its label states what it does (6.5). At accessibility sizes the
+    /// buttons stack rather than truncate.
+    private func actionBar(_ incident: Incident) -> some View {
+        let actions = IncidentActions.of(incident, now: Date(), canAdmin: true)
+        // Maintenance also sits in the More menu, so a narrow screen or a
+        // large text size may leave it out of the bar.
+        return ViewThatFits(in: .horizontal) {
+            HStack(spacing: Spacing.s) {
+                ackButton(incident, actions: actions, titled: true)
+                snoozeButton(incident, titled: true)
+                maintenanceButton(incident, titled: true)
+            }
+            HStack(spacing: Spacing.s) {
+                ackButton(incident, actions: actions, titled: true)
+                snoozeButton(incident, titled: true)
+            }
+            VStack(alignment: .leading, spacing: Spacing.s) {
+                ackButton(incident, actions: actions, titled: true)
+                snoozeButton(incident, titled: true)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .buttonStyle(.bordered)
+        .controlSize(.large)
+        .padding(.horizontal, Spacing.m)
+        .padding(.vertical, Spacing.s)
+    }
+
     @ViewBuilder
-    private func ackButton(_ incident: Incident, actions: IncidentActions) -> some View {
+    private func ackButton(_ incident: Incident, actions: IncidentActions, titled: Bool = false) -> some View {
         if actions.acknowledge {
-            Button("Acknowledge", systemImage: "person.crop.circle.badge.checkmark") { Task { await perform(IncidentRow.acknowledgeIntent(incident)) } }
-                .disabled(!store.canAdmin)
+            actionButton("Acknowledge", symbol: "person.crop.circle.badge.checkmark", titled: titled) { Task { await perform(IncidentRow.acknowledgeIntent(incident)) } }
                 .accessibilityHint("Stops repeat alerts")
         } else if incident.state == "acknowledged" {
-            Button("Unacknowledge", systemImage: "person.crop.circle.badge.xmark") { Task { await perform(IncidentRow.unacknowledgeIntent(incident)) } }
-                .disabled(!store.canAdmin)
+            actionButton("Unacknowledge", symbol: "person.crop.circle.badge.xmark", titled: titled) { Task { await perform(IncidentRow.unacknowledgeIntent(incident)) } }
                 .accessibilityHint("Repeat alerts resume")
         }
     }
 
-    private func snoozeButton(_ incident: Incident) -> some View {
-        Button("Snooze", systemImage: "moon.zzz") { snoozeTarget = incident }
-            .disabled(!store.canAdmin)
+    private func snoozeButton(_ incident: Incident, titled: Bool = false) -> some View {
+        actionButton("Snooze", symbol: "moon.zzz", titled: titled) { snoozeTarget = incident }
+            .accessibilityHint("No repeat alerts until the time you choose")
     }
 
-    private func maintenanceButton(_ incident: Incident) -> some View {
-        Button("Start maintenance", systemImage: "wrench.and.screwdriver") { router.present(.maintenanceStart(nodeID: incident.nodeID.isEmpty ? nil : incident.nodeID)) }
-            .disabled(!store.canAdmin)
+    private func maintenanceButton(_ incident: Incident, titled: Bool = false) -> some View {
+        actionButton(titled ? "Maintenance" : "Start maintenance", symbol: "wrench.and.screwdriver", titled: titled) {
+            router.present(.maintenanceStart(nodeID: incident.nodeID.isEmpty ? nil : incident.nodeID))
+        }
+        .accessibilityLabel("Start maintenance")
+        .accessibilityHint("Holds this node's incidents and sends no alerts for a time you choose")
+    }
+
+    /// A text button in the bottom bar, an icon beside the title elsewhere;
+    /// without monitor:admin it stays visible and disabled, with the reason
+    /// stated at the top of the list.
+    private func actionButton(_ title: String, symbol: String, titled: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            if titled {
+                Text(title)
+            } else {
+                Label(title, systemImage: symbol)
+            }
+        }
+        .disabled(!store.canAdmin)
     }
 
     /// Runs a T1 write; a refusal or lost answer stays on screen with Retry.
