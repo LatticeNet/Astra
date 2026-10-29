@@ -154,7 +154,7 @@ public enum ParityMatrix {
         ParityMatrixRow(page: "Publishing", action: "Create bucket, binding, token", endpoint: "/api/storage/{buckets,bindings,tokens}", scopes: [], modes: [.web]),
         ParityMatrixRow(page: "Store", action: "Put KV entry or static object", endpoint: "POST /api/kv, /api/static", scopes: ["kv:write", "static:write"], modes: [.web]),
         ParityMatrixRow(page: "Store", action: "Delete entry", endpoint: "/api/kv/delete, /api/static/delete", scopes: ["kv:write", "static:write"], modes: [.web]),
-        ParityMatrixRow(page: "Evidence", action: "Start capture session", endpoint: "POST /api/trace/sessions {name, filter, level, ttl_seconds}", scopes: ["log:read"], modes: [.nativeT2]),
+        ParityMatrixRow(page: "Evidence", action: "Start capture session", endpoint: "POST /api/trace/sessions {name, filter, level, ttl_seconds}", scopes: ["log:admin"], modes: [.nativeT2]),
         ParityMatrixRow(page: "Evidence", action: "Stop capture session", endpoint: "POST /api/trace/sessions/stop", scopes: ["log:admin"], modes: [.nativeT2]),
         ParityMatrixRow(page: "Evidence", action: "Trace policy", endpoint: "/api/trace/policy", scopes: ["log:admin"], modes: [.web]),
         ParityMatrixRow(page: "Evidence", action: "Log sources", endpoint: "/api/logs/sources[/delete]", scopes: ["log:admin"], modes: [.web]),

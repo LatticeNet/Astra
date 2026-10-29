@@ -492,7 +492,7 @@ Every page in `console-inventory.md` section 1 and every action in section 2 app
 | Publishing | Create bucket, binding, token | `/api/storage/{buckets,bindings,tokens}` | kv/static write | W | Form; token shown once |
 | Store | Put KV entry or static object | `POST /api/kv`, `/api/static` | kv:write, static:write | W | Long input or file |
 | Store | Delete entry | `/api/kv/delete`, `/api/static/delete` | kv:write, static:write | W | Desk work |
-| Evidence | Start capture session | `POST /api/trace/sessions` `{name, filter, level, ttl_seconds}` | log:read | N-T2 | Name "phone {node} {time}", filter on that node, the console's default level, `ttl_seconds` from the preset; "Records connection metadata for users on {node} for {duration}" |
+| Evidence | Start capture session | `POST /api/trace/sessions` `{name, filter, level, ttl_seconds}` | log:admin | N-T2 | Name "phone {node} {time}", filter on that node, the console's default level, `ttl_seconds` from the preset; "Records connection metadata for users on {node} for {duration}" |
 | Evidence | Stop capture session | `POST /api/trace/sessions/stop` | log:admin | N-T2 | |
 | Evidence | Trace policy | `/api/trace/policy` | log:admin | W | Policy form |
 | Evidence | Log sources | `/api/logs/sources[/delete]` | log:admin | W | Form |
