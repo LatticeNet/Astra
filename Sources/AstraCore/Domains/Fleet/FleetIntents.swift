@@ -59,7 +59,7 @@ public enum FleetIntents {
             consequence: "These nodes can no longer authenticate: they stop reporting and receive no plans or tasks. Services on them keep running.",
             affected: nodes, idempotent: true, changes: [.nodes],
             perform: { client, _ in
-                await bulk(nodes, done: "disabled", client: client) { try await $0.setNodeDisabled(nodeID: $1.id, disabled: true) }
+                await bulk(nodes, done: "disabled", disabled: true, client: client) { try await $0.setNodeDisabled(nodeID: $1.id, disabled: true) }
             }
         )
     }
@@ -71,28 +71,61 @@ public enum FleetIntents {
             consequence: "\(count) can authenticate again and receive plans and tasks.",
             affected: nodes, idempotent: true, changes: [.nodes],
             perform: { client, _ in
-                await bulk(nodes, done: "enabled", client: client) { try await $0.setNodeDisabled(nodeID: $1.id, disabled: false) }
+                await bulk(nodes, done: "enabled", disabled: false, client: client) { try await $0.setNodeDisabled(nodeID: $1.id, disabled: false) }
             }
         )
     }
 
     /// One request per node, in order; each failure is kept with its reason.
-    static func bulk(_ nodes: [ObjectRef], done word: String, client: LatticeClient,
+    /// A node whose answer was lost after sending may already have changed,
+    /// so it is checked against the server and filed by what it now says
+    /// (section 6.7), never reported as "not done" on a guess.
+    static func bulk(_ nodes: [ObjectRef], done word: String, disabled target: Bool, client: LatticeClient,
                      _ write: @Sendable (LatticeClient, ObjectRef) async throws -> Void) async -> WriteOutcome {
         var succeeded: [ObjectRef] = []
         var failed: [ObjectFailure] = []
+        var lost: [ObjectRef] = []
         for node in nodes {
             do {
                 try await write(client, node)
                 succeeded.append(node)
             } catch {
-                failed.append(ObjectFailure(object: node, reason: describe(error)))
+                let api = LatticeAPIError(error)
+                if WriteFlow.answerLostAfterSending(api) {
+                    lost.append(node)
+                } else {
+                    failed.append(ObjectFailure(object: node, reason: api.localizedDescription))
+                }
+            }
+        }
+        var unconfirmed = 0
+        if !lost.isEmpty {
+            let current = try? await client.fetchNodes()
+            for node in lost {
+                guard let current else {
+                    unconfirmed += 1
+                    failed.append(ObjectFailure(object: node, reason: "Could not confirm, and its state could not be read. Check it before trying again."))
+                    continue
+                }
+                guard let now = current.first(where: { $0.id == node.id }) else {
+                    failed.append(ObjectFailure(object: node, reason: "Could not confirm. \(node.name) is no longer listed."))
+                    continue
+                }
+                if (now.honesty == .disabled) == target {
+                    succeeded.append(node)
+                } else {
+                    failed.append(ObjectFailure(object: node, reason: "Could not confirm. \(node.name) is \(target ? "not disabled" : "still disabled")."))
+                }
             }
         }
         if failed.isEmpty {
             return .done(succeeded.count == 1 ? "\(succeeded[0].name) \(word)" : "\(succeeded.count) nodes \(word)")
         }
-        return .partial(succeeded: succeeded, failed: failed, message: "\(succeeded.count) \(word), \(failed.count) not done")
+        let notDone = failed.count - unconfirmed
+        var message = "\(succeeded.count) \(word)"
+        if notDone > 0 { message += ", \(notDone) not done" }
+        if unconfirmed > 0 { message += ", \(unconfirmed) not confirmed" }
+        return .partial(succeeded: succeeded, failed: failed, message: message)
     }
 
     // MARK: Token (N-T3, secret shown once)
@@ -374,7 +407,7 @@ public enum FleetIntents {
             tier: .t3, verb: enforced ? "Turn on gate" : "Turn off gate", object: gate, scopes: ["node:admin"],
             consequence: enforced
                 ? "\(impact.capability) will refuse \(impact.refuseCount) of your nodes immediately and allow \(impact.allowCount). Anything already running against a refused node stops working until it is enrolled."
-                : "\(impact.capability) will be able to act on every node again, including ones you excluded. The change is recorded in the audit log.",
+                : "\(impact.capability) will be able to act on every node nobody has decided about. Nodes you excluded stay refused. The change is recorded in the audit log.",
             affected: enforced ? refused : [gate],
             idempotent: true,
             changes: [.gates, .nodes],

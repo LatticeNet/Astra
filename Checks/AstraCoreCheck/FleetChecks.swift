@@ -330,7 +330,21 @@ private func checkFleetIntentFlows() async throws {
     try expectEqual(succeeded.map(\.id), [node.id], "bulk keeps the node that worked")
     try expectEqual(failed.map(\.object.id), ["n-gone"], "bulk names the node that failed")
 
-    // Rotate returns the token as a one-time secret.
+    // A lost answer is checked against the server, not reported as not done.
+    let a = ObjectRef(kind: "node", id: "n-a", name: "edge-a")
+    let b = ObjectRef(kind: "node", id: "n-b", name: "edge-b")
+    let (lostClient, _) = mockClient([
+        "\(base)/api/nodes/disable?node_id=n-a": (504, Data()),
+        "\(base)/api/nodes/disable?node_id=n-b": (504, Data()),
+        "\(base)/api/nodes": (200, json(#"[{"id":"n-a","name":"edge-a","status":"disabled"},{"id":"n-b","name":"edge-b","status":"online"}]"#)),
+    ])
+    let lost = await WriteFlow(intent: FleetIntents.bulkDisable([a, b]), client: lostClient, authenticator: pass).commit(choices: ConfirmChoices())
+    guard case .finished(.partial(let landed, let unclear, let lostMessage)) = lost else { throw CheckFailure.failed("bulk with lost answers is partial: \(lost)") }
+    try expectEqual(landed.map(\.id), ["n-a"], "a lost answer the server shows landed counts as done")
+    try expectEqual(unclear.first?.reason, "Could not confirm. edge-b is not disabled.", "a lost answer names what the server says")
+    try expectEqual(lostMessage, "1 disabled, 1 not done", "lost answer message")
+
+
     guard case .finished(.done(_, let secret?)) = await WriteFlow(intent: FleetIntents.rotateToken(node), client: client, authenticator: pass).commit(choices: ConfirmChoices()) else {
         throw CheckFailure.failed("rotate returns a secret")
     }
@@ -562,6 +576,21 @@ private func checkFleetLogic() throws {
     try expectEqual(FleetHeader.sentence(nodes, allowlist: []), "6 nodes, 2 online", "header")
     try expectEqual(FleetHeader.sentence(nodes, allowlist: Array(repeating: "n", count: 12)), "Confined to 12 nodes. 2 of 6 visible nodes online", "confined header")
     try expectEqual(FleetHeader.duplicates(1), "1 possible duplicate node", "duplicate singular")
+    try expectEqual(FleetHeader.sentence(nodes, allowlist: ["*"]), "6 nodes, 2 online", "a star allowlist is unconfined")
+
+    func capability(_ json: String) throws -> NodeCapabilityEffective {
+        try JSONDecoder().decode(NodeCapabilityEffective.self, from: Data(json.utf8))
+    }
+    let excludedOpen = try capability(#"{"capability":"sshguard","enforced":false,"allowed":false,"source":"record","state":"excluded","record_reason":"no port forwarding yet"}"#)
+    try expect(!FleetCapabilityState.detail(excludedOpen).contains("not gated"), "an exclusion on an open gate is not called ungated")
+    try expect(FleetCapabilityState.detail(excludedOpen).contains("no port forwarding yet"), "the exclusion reason leads")
+    try expect(FleetCapabilityState.detail(excludedOpen).contains("Refused even while the gate is off"), "an exclusion refuses on an open gate")
+    try expect(!FleetCapabilityState.isDormant(excludedOpen), "an exclusion is not dormant")
+    let undecidedOpen = try capability(#"{"capability":"wireguard","enforced":false,"allowed":true,"source":"not-enforced","state":""}"#)
+    try expect(FleetCapabilityState.isDormant(undecidedOpen), "undecided on an open gate is dormant")
+    try expectEqual(FleetCapabilityState.word(undecidedOpen), "Not decided", "allowed by an open gate is not in scope")
+    let derived = try capability(#"{"capability":"vpn","enforced":true,"allowed":true,"source":"derived","state":""}"#)
+    try expectEqual(FleetCapabilityState.word(derived), "In scope", "derived allowance reads in scope")
 
     try expectEqual(FleetAgentVersion.newer(than: "0.3.8", in: ["0.3.10", "0.3.9", "0.3.9", "0.3.8", nil]), 2, "two newer versions")
     try expectEqual(FleetAgentVersion.newer(than: "0.3.10", in: ["0.3.10", "0.3.9"]), 0, "newest is not behind")
@@ -624,4 +653,5 @@ private func checkFleetMapClusters() throws {
     try expectEqual(MapClusters.unlocated(nodes).map(\.name), ["home-nas", "null-island"], "no geo and the 0,0 sentinel are unlocated")
     try expectEqual(MapClusters.rounded(35.74), 35.5, "rounds to half degrees")
     try expectEqual(MapClusters.rounded(35.76), 36.0, "rounds up past the quarter")
+
 }

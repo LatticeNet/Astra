@@ -37,6 +37,9 @@ final class FleetStore {
 
     var allowlist: [String] { session.primaryIdentity?.serverAllowlist ?? [] }
 
+    /// A node allowlist confines the token; ["*"] does not (ScopeSet.isConfined).
+    var isConfined: Bool { session.primaryIdentity?.scopeSet.isConfined ?? false }
+
     func groupName(_ id: String) -> String? { groups?.name(for: id) }
 
     func record(id: String) -> FleetNodeRecord? { nodes.value?.first { $0.id == id } }

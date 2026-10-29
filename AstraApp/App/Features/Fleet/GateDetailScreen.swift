@@ -31,13 +31,13 @@ struct GateDetailScreen: View {
     }
 
     private func content(_ gate: FleetCapabilityImpact) -> some View {
-        let reason: String? = store.missing("node:admin") ?? (store.allowlist.isEmpty ? nil : "a token without a node allowlist")
+        let reason: String? = store.missing("node:admin") ?? (store.isConfined ? "a token without a node allowlist" : nil)
         return List {
             FleetRefreshError(state: model.state, noun: "the gate") { Task { await model.refresh(session: session) } }
             Section {
                 StatusRow(style: CapabilityGatesScreen.style(gate), title: gate.capability, detail: gate.kindSentence)
                 DetailRow(label: "In scope", value: String(gate.allowCount), copyable: false)
-                DetailRow(label: "Would be refused", value: String(gate.refuseCount), copyable: false)
+                DetailRow(label: gate.enforced ? "Refused" : "Would be refused", value: String(gate.refuseCount), copyable: false)
                 if !gate.derived {
                     Label("Nothing to infer scope from, so every node needs enrolling.", systemImage: "exclamationmark.triangle")
                         .foregroundStyle(Color.statusWarnText)
@@ -48,7 +48,7 @@ struct GateDetailScreen: View {
             }
             Section {
                 if gate.refused.isEmpty {
-                    Text("Turning it on would refuse no node.").foregroundStyle(.secondary).frame(minHeight: Spacing.minimumTarget, alignment: .leading)
+                    Text(gate.enforced ? "Refuses no node." : "Turning it on would refuse no node.").foregroundStyle(.secondary).frame(minHeight: Spacing.minimumTarget, alignment: .leading)
                 }
                 ForEach(gate.refused) { node in
                     NavigationLink(value: AppRoute.fleet(.nodeCapabilities(id: node.nodeID))) {
@@ -72,8 +72,8 @@ struct GateDetailScreen: View {
             } footer: {
                 VStack(alignment: .leading, spacing: Spacing.xs) {
                     Text(gate.enforced
-                         ? "\(gate.capability) would act on every node again, including excluded ones. The change is recorded in the audit log."
-                         : "\(gate.capability) would refuse \(gate.refuseCount) nodes immediately. Anything running against a refused node stops until it is enrolled.")
+                         ? "\(gate.capability) would act on every node nobody has decided about. Excluded nodes stay refused. The change is recorded in the audit log."
+                         : "\(gate.capability) would refuse \(gate.refuseCount == 1 ? "1 node" : "\(gate.refuseCount) nodes") immediately. Anything running against a refused node stops until it is enrolled.")
                     FleetFooter(state: model.state)
                 }
             }

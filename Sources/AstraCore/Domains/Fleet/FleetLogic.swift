@@ -108,7 +108,8 @@ public enum FleetHeader {
     public static func sentence(_ nodes: [LatticeNode], allowlist: [String]) -> String {
         let online = nodes.filter { $0.honesty == .online }.count
         let count = nodes.count == 1 ? "1 node" : "\(nodes.count) nodes"
-        if !allowlist.isEmpty {
+        // "*" in a server allowlist means every node (rbac.Allows), not one node.
+        if !allowlist.isEmpty, !allowlist.contains("*") {
             let confined = allowlist.count == 1 ? "1 node" : "\(allowlist.count) nodes"
             return "Confined to \(confined). \(online) of \(nodes.count) visible nodes online"
         }
@@ -310,28 +311,54 @@ public enum FleetGroupHealth {
     }
 }
 
-/// Short words for the capability states a node row shows (M2-06).
+/// Short words for the capability states a node row shows (M2-06), in the
+/// console's order (capabilityBadge and capabilityNote). An exclusion refuses
+/// whether or not the gate is live (resolveNodeCapability), so the record is
+/// read before enforcement.
 public enum FleetCapabilityState {
     /// "Enrolled", "Excluded", "In scope" (derived from configuration), "Not decided".
     public static func word(_ capability: NodeCapabilityEffective) -> String {
         switch capability.state {
         case "enrolled": return "Enrolled"
         case "excluded": return "Excluded"
-        default: return capability.allowed ? "In scope" : "Not decided"
+        default: return capability.allowed && capability.source == "derived" ? "In scope" : "Not decided"
         }
     }
 
-    /// The explanation the console gives under the word.
+    /// True when nobody has decided and the gate is off: the row refuses nothing.
+    public static func isDormant(_ capability: NodeCapabilityEffective) -> Bool {
+        !capability.enforced && capability.state.isEmpty
+    }
+
+    /// The sentence under the word: the operator's reason first, then the
+    /// stated record, then the derived source, then the open gate.
     public static func detail(_ capability: NodeCapabilityEffective) -> String {
-        if !capability.enforced { return "Recorded, but this capability is not gated yet." }
+        let excludedTail = capability.enforced ? "" : " Refused even while the gate is off."
+        if !capability.recordReason.isEmpty {
+            switch capability.state {
+            case "excluded": return "Excluded: \(ended(capability.recordReason))\(excludedTail)"
+            case "enrolled": return "Enrolled: \(ended(capability.recordReason))"
+            default: return capability.recordReason
+            }
+        }
         switch capability.state {
         case "enrolled": return "Enrolled on this node."
-        case "excluded": return capability.recordReason.isEmpty ? "Excluded from this node." : "Excluded: \(capability.recordReason)"
-        default:
+        case "excluded": return "Excluded from this node.\(excludedTail)"
+        default: break
+        }
+        if capability.source == "derived" {
             return capability.allowed
                 ? "In scope because this node is already configured for it."
-                : "Out of scope: this node is not configured for it."
+                : "Out of scope: this node is not configured for it. Enable it on the node, or enroll the node here."
         }
+        if !capability.enforced { return "Allowed: this capability is not gated yet." }
+        return capability.allowed ? "Allowed." : (capability.reason.isEmpty ? "Refused." : capability.reason)
+    }
+
+    private static func ended(_ text: String) -> String {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let last = trimmed.last, !".!?".contains(last) else { return trimmed }
+        return trimmed + "."
     }
 
     /// Whether the gate would let it act on the node right now.

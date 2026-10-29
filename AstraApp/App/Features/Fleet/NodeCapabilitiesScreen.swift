@@ -21,8 +21,8 @@ struct NodeCapabilitiesScreen: View {
 
     var body: some View {
         FleetListState(state: state, noun: "capabilities", retry: { Task { await load() } }) { capabilities in
-            let gated = capabilities.filter(\.enforced)
-            let open = capabilities.filter { !$0.enforced }
+            let gated = capabilities.filter { !FleetCapabilityState.isDormant($0) }
+            let open = capabilities.filter(FleetCapabilityState.isDormant)
             List {
                 FleetRefreshError(state: state, noun: "capabilities") { Task { await load() } }
                 if capabilities.isEmpty {
@@ -32,9 +32,9 @@ struct NodeCapabilitiesScreen: View {
                     Section {
                         ForEach(gated) { row($0) }
                     } header: {
-                        Text("Gated")
+                        Text("Gated or decided")
                     } footer: {
-                        Text("Anything that changes the node is opt-in where its gate is on.")
+                        Text("Anything that changes the node is opt-in where its gate is on. An exclusion refuses even while its gate is off.")
                     }
                 }
                 if !open.isEmpty {
@@ -43,7 +43,7 @@ struct NodeCapabilitiesScreen: View {
                     } header: {
                         Text("Not gated yet")
                     } footer: {
-                        Text("Decisions are recorded, but these capabilities refuse nothing until their gate is on.")
+                        Text("Nobody has decided about these, and they refuse nothing until their gate is on.")
                     }
                 }
                 Section {
@@ -114,9 +114,10 @@ struct NodeCapabilitiesScreen: View {
         case "excluded": return StatusStyle(word: "excluded", symbol: "minus.circle", tone: .quiet)
         default:
             if !capability.enforced { return StatusStyle(word: "not gated", symbol: "circle.dashed", tone: .quiet) }
-            return capability.allowed
+            if !capability.allowed { return StatusStyle(word: "refused", symbol: "exclamationmark.triangle.fill", tone: .warn) }
+            return capability.source == "derived"
                 ? StatusStyle(word: "in scope", symbol: "checkmark.circle", tone: .ok)
-                : StatusStyle(word: "refused", symbol: "exclamationmark.triangle.fill", tone: .warn)
+                : StatusStyle(word: "allowed", symbol: "checkmark.circle", tone: .ok)
         }
     }
 

@@ -67,7 +67,7 @@ struct CapabilityGatesScreen: View {
         NavigationLink(value: AppRoute.fleet(.gate(id: gate.capability))) {
             StatusRow(style: Self.style(gate), title: gate.capability, detail: gate.kindSentence,
                       reason: gate.enforced && gate.refuseCount > 0 ? "Refuses \(gate.refuseCount) of \(gate.allowCount + gate.refuseCount) nodes" : nil,
-                      trailing: gate.enforced ? nil : "\(gate.refuseCount) if on")
+                      trailing: gate.enforced ? nil : "Would refuse \(gate.refuseCount)")
         }
     }
 
