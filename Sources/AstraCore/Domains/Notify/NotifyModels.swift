@@ -792,20 +792,23 @@ public struct NotifyChannelTestResult: Decodable, Equatable, Sendable {
 }
 
 /// `POST /api/notify/witness/plan`. The phone files a configure plan with
-/// the server's defaults for the watch URL, references, level and timing,
-/// or a removal; the full form stays on the web.
+/// the server's defaults for references, level and timing, or a removal;
+/// the full form stays on the web. A watch URL the operator set on the web
+/// is sent again, because an empty one makes the server watch its default.
 public struct NotifyWitnessPlanRequest: Encodable, Equatable, Sendable {
     public var nodeID: String
     public var remove: Bool
     public var channelID: String
     public var barkURL: String
+    /// Empty watches the server's `<public URL>/readyz`.
+    public var healthURL: String
 
-    public static func configure(nodeID: String, channelID: String, barkURL: String) -> NotifyWitnessPlanRequest {
-        NotifyWitnessPlanRequest(nodeID: nodeID, remove: false, channelID: channelID, barkURL: barkURL)
+    public static func configure(nodeID: String, channelID: String, barkURL: String, healthURL: String = "") -> NotifyWitnessPlanRequest {
+        NotifyWitnessPlanRequest(nodeID: nodeID, remove: false, channelID: channelID, barkURL: barkURL, healthURL: healthURL)
     }
 
     public static func remove(nodeID: String) -> NotifyWitnessPlanRequest {
-        NotifyWitnessPlanRequest(nodeID: nodeID, remove: true, channelID: "", barkURL: "")
+        NotifyWitnessPlanRequest(nodeID: nodeID, remove: true, channelID: "", barkURL: "", healthURL: "")
     }
 
     enum CodingKeys: String, CodingKey {
@@ -813,6 +816,7 @@ public struct NotifyWitnessPlanRequest: Encodable, Equatable, Sendable {
         case nodeID = "node_id"
         case channelID = "channel_id"
         case barkURL = "bark_url"
+        case healthURL = "health_url"
     }
 
     /// Absent fields let the server apply its own defaults, as the console's
@@ -828,6 +832,8 @@ public struct NotifyWitnessPlanRequest: Encodable, Equatable, Sendable {
         var url = barkURL.trimmingCharacters(in: .whitespacesAndNewlines)
         while url.hasSuffix("/") { url.removeLast() }
         try c.encode(url, forKey: .barkURL)
+        let health = healthURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !health.isEmpty { try c.encode(health, forKey: .healthURL) }
     }
 }
 

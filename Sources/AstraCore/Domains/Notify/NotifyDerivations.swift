@@ -747,6 +747,36 @@ public enum NotifyWitness {
         return (url, url != defaultURL)
     }
 
+    /// What a plan filed from the phone carries over from the node's current
+    /// witness. The phone sends no timing or references, so the server would
+    /// put its defaults in their place.
+    public struct ChangeBasis: Equatable, Sendable {
+        /// The operator's watch URL to send again, or empty for the server's default.
+        public var healthURL: String
+        /// The witness runs timing or reference URLs other than the defaults,
+        /// which a plan from the phone would reset; such a change belongs on the web.
+        public var customSettings: Bool
+
+        public init(healthURL: String = "", customSettings: Bool = false) {
+            self.healthURL = healthURL
+            self.customSettings = customSettings
+        }
+    }
+
+    public static func changeBasis(_ node: NotifyWitnessNode?, status: NotifyWitnessStatus) -> ChangeBasis {
+        guard let node, node.configured != nil || node.report != nil else { return ChangeBasis() }
+        let watched = watch(node, defaultURL: status.healthURL)
+        var custom = false
+        if let report = node.report {
+            let d = status.defaults
+            // An agent that predates a field reports zero for it, which says nothing.
+            if report.intervalSeconds > 0 && report.intervalSeconds != d.intervalSeconds { custom = true }
+            if report.holdSeconds > 0 && report.holdSeconds != d.holdSeconds { custom = true }
+            if report.referenceCount > 0 && report.referenceCount != d.referenceURLs.count { custom = true }
+        }
+        return ChangeBasis(healthURL: watched?.custom == true ? watched?.url ?? "" : "", customSettings: custom)
+    }
+
     /// Mirrors the server and the witness: an http(s) base URL on the
     /// node's loopback interface, with no credentials, query or fragment.
     public static func isLoopbackBaseURL(_ raw: String) -> Bool {
@@ -762,10 +792,11 @@ public enum NotifyWitness {
 
     /// What keeps the phone's plan from filing, checked as the server does.
     public enum FormProblem: String, Sendable {
-        case node, channel, barkURL, barkURLLoopback, healthURLRequired
+        case customSettings, node, channel, barkURL, barkURLLoopback, healthURLRequired
 
         public var sentence: String {
             switch self {
+            case .customSettings: "This witness runs timing or reference URLs set on the web. A plan from the phone would reset them to the server's defaults, so change it on the web."
             case .node: "Choose a node."
             case .channel: "Choose a Bark channel."
             case .barkURL: "Enter the local bark-server URL."
@@ -775,8 +806,8 @@ public enum NotifyWitness {
         }
     }
 
-    public static func formProblems(nodeID: String, channelID: String, barkURL: String, defaultHealthURL: String) -> [FormProblem] {
-        var problems: [FormProblem] = []
+    public static func formProblems(nodeID: String, channelID: String, barkURL: String, defaultHealthURL: String, basis: ChangeBasis = ChangeBasis()) -> [FormProblem] {
+        var problems: [FormProblem] = basis.customSettings ? [.customSettings] : []
         if nodeID.isEmpty { problems.append(.node) }
         if channelID.isEmpty { problems.append(.channel) }
         if barkURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -784,7 +815,7 @@ public enum NotifyWitness {
         } else if !isLoopbackBaseURL(barkURL) {
             problems.append(.barkURLLoopback)
         }
-        if defaultHealthURL.isEmpty { problems.append(.healthURLRequired) }
+        if defaultHealthURL.isEmpty && basis.healthURL.isEmpty { problems.append(.healthURLRequired) }
         return problems
     }
 }

@@ -76,15 +76,15 @@ public enum NotifyIntents {
     /// P. Files a configure plan with the server's defaults for everything
     /// but the node, the Bark channel and the local bark-server URL. Nothing
     /// changes on the node until someone approves it.
-    public static func planWitness(node: ObjectRef, channel: NotifyChannel, barkURL: String, status: NotifyWitnessStatus) -> WriteIntent {
+    public static func planWitness(node: ObjectRef, channel: NotifyChannel, barkURL: String, status: NotifyWitnessStatus, healthURL: String = "") -> WriteIntent {
         let d = status.defaults
-        let watches = status.healthURL.isEmpty ? "the URL its plan names" : status.healthURL
+        let watches = !healthURL.isEmpty ? "\(healthURL), the watch URL set on the web," : (status.healthURL.isEmpty ? "the URL its plan names" : status.healthURL)
         return WriteIntent(
             tier: .plan, verb: "Plan witness on", object: node, scopes: witnessScopes,
             consequence: "Files a plan that installs the control-plane witness on \(node.name). Every \(d.intervalSeconds) s it asks \(watches); after \(d.holdSeconds) s of failures it pushes one Bark alert (level \(d.barkLevel)) with \(channel.displayName)'s device key through \(barkURL). Nothing changes on the node until the plan is approved.",
             affected: [node], changes: [.approvals, .notify],
             perform: { client, _ in
-                try await filed(client.notifyPlanWitness(.configure(nodeID: node.id, channelID: channel.id, barkURL: barkURL)))
+                try await filed(client.notifyPlanWitness(.configure(nodeID: node.id, channelID: channel.id, barkURL: barkURL, healthURL: healthURL)))
             }
         )
     }

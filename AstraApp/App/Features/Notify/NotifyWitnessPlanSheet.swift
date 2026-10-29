@@ -3,8 +3,10 @@ import SwiftUI
 /// Plan witness (P), presented from Notifications. The phone asks only for
 /// what the server cannot default: the node, the Bark channel whose device
 /// key the witness pushes with, and the bark-server on that node's loopback
-/// address. The watch URL, references, level and timing are the server's
-/// defaults; changing them is desk work on the web. Continue pushes the plan
+/// address. References, level and timing are the server's defaults, and the
+/// watch URL is the default unless the web set one, which the plan keeps.
+/// A witness running custom timing or references is changed on the web,
+/// because a plan from here would reset them. Continue pushes the plan
 /// confirmation inside this sheet, and the filed approval opens in Review.
 struct NotifyWitnessPlanSheet: View {
     /// The node whose settings change, or nil for a new witness.
@@ -66,18 +68,37 @@ struct NotifyWitnessPlanSheet: View {
         }
     }
 
+    /// What the chosen node's current witness carries into the plan.
+    private func basis(_ status: NotifyWitnessStatus) -> NotifyWitness.ChangeBasis {
+        NotifyWitness.changeBasis(status.nodes.first { $0.nodeID == node }, status: status)
+    }
+
     private func problems(_ status: NotifyWitnessStatus) -> [NotifyWitness.FormProblem] {
-        NotifyWitness.formProblems(nodeID: node, channelID: channel, barkURL: barkURL, defaultHealthURL: status.healthURL)
+        NotifyWitness.formProblems(nodeID: node, channelID: channel, barkURL: barkURL, defaultHealthURL: status.healthURL, basis: basis(status))
     }
 
     @ViewBuilder
     private func form(_ status: NotifyWitnessStatus) -> some View {
         let d = status.defaults
+        let basis = basis(status)
         List {
             Section {
                 Text("Files a plan. Nothing changes on the node until someone approves it.")
                     .foregroundStyle(.secondary)
                     .frame(minHeight: Spacing.minimumTarget, alignment: .leading)
+            }
+
+            if basis.customSettings {
+                Section {
+                    Label {
+                        Text(NotifyWitness.FormProblem.customSettings.sentence)
+                            .foregroundStyle(Color.statusWarnText)
+                            .fixedSize(horizontal: false, vertical: true)
+                    } icon: {
+                        Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(Color.statusWarnFill)
+                    }
+                    WebLinkRow(title: "Change the witness on the web", path: .notifyNotifications(view: "routing"))
+                }
             }
 
             Section {
@@ -140,7 +161,9 @@ struct NotifyWitnessPlanSheet: View {
             }
 
             Section {
-                if status.healthURL.isEmpty {
+                if !basis.healthURL.isEmpty {
+                    DetailRow(label: "Watches", value: basis.healthURL, monospaced: true, secondary: "Set on the web; this plan keeps it")
+                } else if status.healthURL.isEmpty {
                     Text("This server has no public URL, so the witness needs a watch URL of its own.")
                         .foregroundStyle(Color.statusWarnText)
                 } else {
@@ -155,7 +178,9 @@ struct NotifyWitnessPlanSheet: View {
                 }
                 WebLinkRow(title: "Change these on the web", path: .notifyNotifications(view: "routing"))
             } header: {
-                Text("The server's defaults")
+                Text("Watch and timing")
+            } footer: {
+                Text("Timing, alert level and reference URLs are the server's defaults.")
             }
         }
         .listStyle(.insetGrouped)
@@ -192,7 +217,8 @@ struct NotifyWitnessPlanSheet: View {
         urlFocused = false
         filing = true
         let outcome = await runner.run(NotifyIntents.planWitness(node: ObjectRef(kind: "node", id: node, name: name), channel: picked,
-                                                                 barkURL: barkURL.trimmingCharacters(in: .whitespacesAndNewlines), status: status))
+                                                                 barkURL: barkURL.trimmingCharacters(in: .whitespacesAndNewlines), status: status,
+                                                                 healthURL: basis(status).healthURL))
         filing = false
         if case .filed = outcome { dismiss() }
     }

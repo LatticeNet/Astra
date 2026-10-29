@@ -242,19 +242,20 @@ public enum NotifyFixtures {
     static var pendingWitnessBody: String { DemoJSON.object([("approval", SharedFixtures.approvalJSON(pendingWitness, includePlan: true))]).text }
 
     static let healthURL = "https://lattice.example.net/readyz"
+    static let edgeHealthURL = "https://edge-sin.lattice.example.net/readyz"
 
     static var witnessBody: String {
         let home = DemoWorld.node("home-nas")
         let sin = DemoWorld.node("probe-sin-3")
         let ams = DemoWorld.node("probe-ams-3")
         let studio = DemoWorld.node("studio-mac")
-        func approval(_ id: String, action: String, status: String, at: String, reason: String? = nil, channel: Bool = true) -> DemoJSON {
+        func approval(_ id: String, action: String, status: String, at: String, reason: String? = nil, channel: Bool = true, health: String = healthURL) -> DemoJSON {
             .object([
                 "approval_id": .string(id), "action": .string(action), "status": .string(status), "reason": reason.map(DemoJSON.string),
                 "config_sha256": channel ? "4b1f0c2e9a7d3c5b8e6f1a2d4c7b9e0f3a5d8c1b6e9f2a4d7c0b3e5f8a1d4c7b" : nil,
                 "channel_id": channel ? "ch_bark" : nil, "channel_name": channel ? "Phone (Bark)" : nil,
                 "key_sha256_prefix": channel ? "9c41e07a" : nil,
-                "created_at": .time(at), "updated_at": .time(at), "health_url": channel ? .string(healthURL) : nil,
+                "created_at": .time(at), "updated_at": .time(at), "health_url": channel ? .string(health) : nil,
             ])
         }
         let nodes: [DemoJSON] = [
@@ -272,10 +273,11 @@ public enum NotifyFixtures {
             ]),
             .object([
                 "node_id": .string(sin.id), "node_name": .string(sin.name), "capable": true,
-                "configured": approval("approval_nw02", action: "configure", status: "applied", at: "-6d"),
+                // This probe cannot reach the CDN-proxied public name, so the web set an edge watch URL.
+                "configured": approval("approval_nw02", action: "configure", status: "applied", at: "-6d", health: edgeHealthURL),
                 "report": .object([
                     "version": 1, "config_sha256": "4b1f0c2e9a7d3c5b8e6f1a2d4c7b9e0f3a5d8c1b6e9f2a4d7c0b3e5f8a1d4c7b",
-                    "started_at": .time("-6d"), "phase": "failing", "health_url": .string(healthURL), "reference_count": 3,
+                    "started_at": .time("-6d"), "phase": "failing", "health_url": .string(edgeHealthURL), "reference_count": 3,
                     "interval_seconds": 30, "hold_seconds": 180, "last_check_at": .time("-25s"), "last_check_ok": false,
                     "last_check_detail": "http 503", "last_ok_at": .time("-80s"), "failing_since": .time("-75s"),
                     "consecutive_failures": 2, "alerted": false, "last_push_ok": false, "pushes": 0, "relayed_at": .time("-20s"),
@@ -289,7 +291,7 @@ public enum NotifyFixtures {
                 "report": .object([
                     "version": 1, "config_sha256": "4b1f0c2e9a7d3c5b8e6f1a2d4c7b9e0f3a5d8c1b6e9f2a4d7c0b3e5f8a1d4c7b",
                     "started_at": .time("-20d"), "phase": "watching", "health_url": .string(healthURL), "reference_count": 3,
-                    "interval_seconds": 30, "hold_seconds": 180, "last_check_at": .time("-9s"), "last_check_ok": true,
+                    "interval_seconds": 60, "hold_seconds": 300, "last_check_at": .time("-9s"), "last_check_ok": true,
                     "last_ok_at": .time("-9s"), "alerted": false, "last_push_ok": false, "pushes": 0, "relayed_at": .time("-6s"),
                 ]),
                 "reported_at": .time("-6s"), "report_fresh": true, "check_stale": false, "config_matches": true,

@@ -151,6 +151,11 @@ private func checkNotifyRequestBodies() async throws {
     try expectEqual(try bodyObject(await transport.lastBody) as NSDictionary,
                     ["node_id": "n1", "channel_id": "ch_bark", "bark_url": "http://127.0.0.1:8080"] as NSDictionary,
                     "witness configure body golden: the server's defaults for the rest")
+    let (changeClient, changeTransport) = notifyClient(["\(notifyBase)/api/notify/witness/plan": (200, approval)])
+    _ = try await changeClient.notifyPlanWitness(.configure(nodeID: "n1", channelID: "ch_bark", barkURL: "http://127.0.0.1:8080", healthURL: "https://edge.example.com/readyz"))
+    try expectEqual(try bodyObject(await changeTransport.lastBody) as NSDictionary,
+                    ["node_id": "n1", "channel_id": "ch_bark", "bark_url": "http://127.0.0.1:8080", "health_url": "https://edge.example.com/readyz"] as NSDictionary,
+                    "witness change body golden: a watch URL set on the web is sent again")
     let (removeClient, removeTransport) = notifyClient(["\(notifyBase)/api/notify/witness/plan": (200, approval)])
     _ = try await removeClient.notifyPlanWitness(.remove(nodeID: "n1"))
     try expectEqual(try bodyObject(await removeTransport.lastBody) as NSDictionary, ["node_id": "n1", "remove": true] as NSDictionary, "witness remove body golden")
@@ -408,6 +413,24 @@ private func checkNotifyWitness() throws {
     try expectEqual(NotifyWitness.shownNodes(NotifyWitnessStatus(nodes: [NotifyWitnessNode(nodeID: "x", nodeName: "x")] + nodes)).map(\.nodeID), ["1", "2", "3"], "a node with no witness is not listed")
     try expect(NotifyWitness.watch(nodes[0], defaultURL: "https://lattice.example.com/readyz")! == ("https://cdn.example.com/readyz", true), "the plan's own watch URL is custom")
     try expect(NotifyWitness.watch(NotifyWitnessNode(nodeID: "x", nodeName: "x"), defaultURL: "") == nil, "nothing to name")
+    var timed = nodes[0]
+    timed.report?.intervalSeconds = 30
+    timed.report?.holdSeconds = 180
+    timed.report?.referenceCount = 3
+    var basisStatus = NotifyWitnessStatus(nodes: [timed])
+    basisStatus.healthURL = "https://lattice.example.com/readyz"
+    basisStatus.defaults.intervalSeconds = 30
+    basisStatus.defaults.holdSeconds = 180
+    basisStatus.defaults.referenceURLs = Array(repeating: "https://example.com/", count: 3)
+    try expectEqual(NotifyWitness.changeBasis(timed, status: basisStatus), NotifyWitness.ChangeBasis(healthURL: "https://cdn.example.com/readyz", customSettings: false),
+                    "a change keeps the watch URL set on the web")
+    try expectEqual(NotifyWitness.changeBasis(nil, status: basisStatus), NotifyWitness.ChangeBasis(), "a new witness starts from the defaults")
+    try expect(!NotifyWitness.changeBasis(nodes[0], status: basisStatus).customSettings, "an agent that reports no timing claims nothing")
+    basisStatus.defaults.intervalSeconds = 60
+    try expect(NotifyWitness.changeBasis(timed, status: basisStatus).customSettings, "custom timing is noticed")
+    try expectEqual(NotifyWitness.formProblems(nodeID: "n", channelID: "c", barkURL: "http://127.0.0.1:8080", defaultHealthURL: "",
+                                               basis: NotifyWitness.ChangeBasis(healthURL: "https://cdn.example.com/readyz", customSettings: true)),
+                    [.customSettings], "custom settings refuse the phone's plan; a kept watch URL needs no public URL")
     try expectEqual(NotifyWitness.pushLine(pushed, mode: .utc, locale: Locale(identifier: "en_US_POSIX"), now: notifyInstant("2026-10-28T12:00:00Z"))?.hasPrefix("Unreachable alert, not accepted"), true, "push line")
 
     for good in ["http://127.0.0.1:8080", "http://localhost:8080/", "https://[::1]:8443", "http://127.0.0.2"] {
