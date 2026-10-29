@@ -347,3 +347,34 @@ public extension TaskRunState {
         }
     }
 }
+
+/// A task as Browse search sees it: the run and its targets' names.
+public struct TasksSearchRow: Sendable, Hashable {
+    public var task: LatticeTask
+    public var nodeNames: [String]
+
+    public init(task: LatticeTask, nodeNames: [String]) {
+        self.task = task
+        self.nodeNames = nodeNames
+    }
+}
+
+/// The fields Browse search filters tasks with (section 6.14).
+public enum TasksQueryFields: QueryFieldProvider {
+    public typealias Row = TasksSearchRow
+
+    public static var fields: [LatticeQueryField<TasksSearchRow>] {
+        [
+            LatticeQueryField(key: "status", aliases: ["state"], type: .enumeration, values: TasksModel.statuses, valueAliases: ["running": "leased", "canceled": "cancelled"],
+                              get: { .string($0.task.status == "running" ? "leased" : $0.task.status) }),
+            LatticeQueryField(key: "origin", type: .enumeration, values: TasksModel.origins, get: { .string(TasksModel.origin(of: $0.task).word) }),
+            LatticeQueryField(key: "node", aliases: ["target"], type: .list, get: { .strings($0.nodeNames + $0.task.targets) }),
+            LatticeQueryField(key: "approval", type: .string, get: { .string($0.task.approvalID) }),
+            LatticeQueryField(key: "actor", type: .string, get: { .string($0.task.actorID) }),
+        ]
+    }
+
+    public static func text(_ row: TasksSearchRow) -> [String] {
+        [row.task.id, row.task.actorID] + row.nodeNames + row.task.targets
+    }
+}

@@ -256,4 +256,15 @@ public extension LatticeClient {
     func tasksFind(id: String) async throws -> LatticeTask? {
         try await listTasks(query: TaskQuery(limit: TasksModel.lookupLimit)).tasks.first { $0.id == id }
     }
+
+    /// A run seen before, read again on a narrower question that must still
+    /// hold it (its first target, changed since it was queued), so a 3 s poll
+    /// reads one short page (`findTask` with a hint). Falls back to the walk.
+    func tasksFind(id: String, hint: LatticeTask?) async throws -> LatticeTask? {
+        if let hint, hint.id == id, let first = hint.targets.first, let created = hint.createdAt {
+            let narrow = try await listTasks(query: TaskQuery(nodeID: first, since: created, limit: TasksModel.lookupLimit))
+            if let found = narrow.tasks.first(where: { $0.id == id }) { return found }
+        }
+        return try await tasksFind(id: id)
+    }
 }
