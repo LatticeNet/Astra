@@ -47,52 +47,61 @@ public enum ApprovalsDecisionGate {
         "Deciding needs \(VerdictBuilder.listed(missing))"
     }
 
-    /// Why Approve is off, or nil when it may run.
-    public static func approveBlock(_ approval: Approval, hashVerified: Bool, companionBehind: Bool, scopes: ScopeSet?, inFlight: Bool = false) -> String? {
+    /// Why Approve is off, or nil when it may run. A stale row reads as
+    /// stale whether it is still pending or the server already retired it.
+    /// Without this credential's actor the transition cannot be verified
+    /// (step 9), so no decision is offered until `/api/me` has answered.
+    public static func approveBlock(_ approval: Approval, hashVerified: Bool, companionBehind: Bool, scopes: ScopeSet?, identityLoaded: Bool = true, inFlight: Bool = false) -> String? {
         if companionBehind { return "This app is behind the server" }
+        if approval.isStale && (approval.isPending || ApprovalsTransition.isStaleRetirement(approval)) { return "Stale: inspect only" }
         if !approval.isPending { return "No longer pending" }
-        if approval.isStale { return "Stale: inspect only" }
         if !hashVerified || !approval.hasPlanBody { return "Plan does not match its hash" }
         let missing = missingScopes(approval, scopes: scopes)
         if !missing.isEmpty { return scopeSentence(missing) }
+        if !identityLoaded { return "Identity not loaded" }
         if inFlight { return "A decision is in progress" }
         return nil
     }
 
     /// Why Reject is off, or nil. Rejecting a plan the phone cannot verify
     /// is safe, so a mismatch does not block it; a stale row is inspect-only.
-    public static func rejectBlock(_ approval: Approval, companionBehind: Bool, scopes: ScopeSet?, inFlight: Bool = false) -> String? {
+    public static func rejectBlock(_ approval: Approval, companionBehind: Bool, scopes: ScopeSet?, identityLoaded: Bool = true, inFlight: Bool = false) -> String? {
         if companionBehind { return "This app is behind the server" }
+        if approval.isStale && (approval.isPending || ApprovalsTransition.isStaleRetirement(approval)) { return "Stale: inspect only" }
         if !approval.isPending { return "No longer pending" }
-        if approval.isStale { return "Stale: inspect only" }
         let missing = missingScopes(approval, scopes: scopes)
         if !missing.isEmpty { return scopeSentence(missing) }
+        if !identityLoaded { return "Identity not loaded" }
         if inFlight { return "A decision is in progress" }
         return nil
     }
 
-    /// `canDismiss`: the server's `waiting.dismissible` when the row carries
-    /// a waiting record, otherwise the fallback the server enforces (stale,
-    /// or an SSH Guard or agent-update row). Dismissed rows never qualify.
+    /// `canDismiss`, as the server enforces it (`handleDismissApproval`) and
+    /// the console offers it (`canDismissStale`, `canDismissWaiting`): the
+    /// row's `waiting.dismissible` when it carries a waiting record (only
+    /// approved rows do), otherwise a stale agent update. A pending SSH
+    /// Guard row is never dismissible. Dismissed rows never qualify.
     public static func canDismiss(_ approval: Approval) -> Bool {
         if approval.isDismissed { return false }
         if let waiting = approval.waiting { return waiting.dismissible }
-        return approval.isStale || approval.plugin == "sshguard" || approval.plugin == "agentupdate"
+        return approval.isStale && approval.plugin == "agentupdate"
     }
 
     /// A stale agent-update row may be planned again (P tier) from Review.
+    /// The server retires a stale agent update to `rejected` on its next
+    /// listing read, so the status does not matter (console `canReplan`).
     public static func canReplan(_ approval: Approval) -> Bool {
-        approval.isPending && approval.isStale && approval.plugin == "agentupdate" && !approval.nodeID.isEmpty
+        approval.isStale && approval.plugin == "agentupdate" && !approval.nodeID.isEmpty
     }
 
     /// Why a row of a batch is left out of "Approve all", or nil when it is in.
-    public static func batchApproveExclusion(_ approval: Approval, scopes: ScopeSet?) -> String? {
-        approveBlock(approval, hashVerified: approval.planHashMatchesServer, companionBehind: false, scopes: scopes)
+    public static func batchApproveExclusion(_ approval: Approval, scopes: ScopeSet?, identityLoaded: Bool = true) -> String? {
+        approveBlock(approval, hashVerified: approval.planHashMatchesServer, companionBehind: false, scopes: scopes, identityLoaded: identityLoaded)
     }
 
     /// Why a row of a batch is left out of "Reject all", or nil.
-    public static func batchRejectExclusion(_ approval: Approval, scopes: ScopeSet?) -> String? {
-        rejectBlock(approval, companionBehind: false, scopes: scopes)
+    public static func batchRejectExclusion(_ approval: Approval, scopes: ScopeSet?, identityLoaded: Bool = true) -> String? {
+        rejectBlock(approval, companionBehind: false, scopes: scopes, identityLoaded: identityLoaded)
     }
 
     /// The Face ID reason, which Touch ID devices and the passcode fallback
@@ -107,7 +116,8 @@ public enum ApprovalsDecisionGate {
         }
     }
 
-    /// The batch Face ID reason: "Approve 3 plans: Agent update to 0.3.10, 3 plans".
+    /// The batch Face ID reason: "Approve 3 plans: Agent update to 0.3.10".
+    /// `title` is the group's name without a count, so the count is said once.
     public static func batchAuthReason(_ decision: ApprovalsDecision, count: Int, title: String) -> String {
         let plans = count == 1 ? "1 plan" : "\(count) plans"
         return "\(decision.verb) \(plans): \(title)"
@@ -118,15 +128,29 @@ public enum ApprovalsDecisionGate {
 /// server answers 200 with the unchanged view when the approval was already
 /// decided, so the answer alone proves nothing (section 6.1, step 9).
 public enum ApprovalsTransition {
+    /// The transition landed and names `actorID` as its decider. An empty
+    /// actor id proves nothing: callers treat that as unconfirmed, never done.
     public static func verified(_ decision: ApprovalsDecision, before: Approval, after: Approval, actorID: String) -> Bool {
-        let sameActor: (String) -> Bool = { recorded in actorID.isEmpty || recorded == actorID }
+        let sameActor: (String) -> Bool = { recorded in !actorID.isEmpty && recorded == actorID }
+        switch decision {
+        case .approve:
+            return landed(decision, before: before, after: after) && sameActor(after.approvedBy)
+        case .reject:
+            return landed(decision, before: before, after: after) && sameActor(after.rejectedBy)
+        case .dismiss:
+            return landed(decision, before: before, after: after)
+        }
+    }
+
+    /// The transition landed, whoever made it.
+    public static func landed(_ decision: ApprovalsDecision, before: Approval, after: Approval) -> Bool {
         switch decision {
         case .approve:
             // An apply that already ran or already failed still shows who approved it.
-            let landed = after.isApproved || after.status == "applied" || (after.isRejected && after.rejectedBy.isEmpty)
-            return before.isPending && landed && !after.approvedBy.isEmpty && sameActor(after.approvedBy)
+            let state = after.isApproved || after.status == "applied" || (after.isRejected && after.rejectedBy.isEmpty)
+            return before.isPending && state && !after.approvedBy.isEmpty
         case .reject:
-            return before.isPending && after.isRejected && !after.rejectedBy.isEmpty && sameActor(after.rejectedBy)
+            return before.isPending && after.isRejected && !after.rejectedBy.isEmpty
         case .dismiss:
             // The view names no dismisser; the transition is ours when this
             // read saw it undismissed.
@@ -134,8 +158,16 @@ public enum ApprovalsTransition {
         }
     }
 
+    /// The server retired this agent update as stale: it writes `rejected`
+    /// with the stale reason and neither `approved_by` nor `rejected_by`
+    /// (`rejectAgentUpdateApprovalWithReason`). Nobody decided it.
+    public static func isStaleRetirement(_ approval: Approval) -> Bool {
+        approval.isRejected && approval.rejectedBy.isEmpty && approval.approvedBy.isEmpty && approval.isStale
+    }
+
     /// Who decided the approval as it now stands, for "already decided by".
     public static func decider(_ approval: Approval) -> String {
+        if isStaleRetirement(approval) { return "Lattice" }
         if approval.isRejected, !approval.rejectedBy.isEmpty { return approval.rejectedBy }
         if !approval.approvedBy.isEmpty { return approval.approvedBy }
         return "another operator"
@@ -143,7 +175,8 @@ public enum ApprovalsTransition {
 
     /// The status word a person reads ("rejected", "approved", "applied").
     public static func statusWord(_ approval: Approval) -> String {
-        if approval.isRejected && approval.rejectedBy.isEmpty { return "approved, then failed to apply," }
+        if isStaleRetirement(approval) { return "retired as stale (the agent update policy changed)" }
+        if approval.isRejected && approval.rejectedBy.isEmpty && !approval.approvedBy.isEmpty { return "approved, then failed to apply," }
         return approval.status.lowercased()
     }
 
@@ -313,6 +346,9 @@ public struct DecisionFlow: Sendable {
         }
         if ApprovalsTransition.verified(decision, before: before, after: after, actorID: actorID) {
             return (.done(Self.successMessage(decision, after: after)), after)
+        }
+        if actorID.isEmpty, ApprovalsTransition.landed(decision, before: before, after: after) {
+            return (.unknown("Sent; this app could not confirm who decided it. The plan is now \(after.status)."), after)
         }
         return (alreadyDecided(after), after)
     }

@@ -59,6 +59,9 @@ struct ApprovalReviewSheet: View {
         .presentationDetents([.large])
         .interactiveDismissDisabled(model.inFlight)
         .task(id: model.targetID) {
+            // Step 9 compares the recorded decider with this credential's
+            // actor, so decisions wait for `/api/me`.
+            if session.primaryIdentity == nil { await session.refreshIdentity() }
             await model.load(session: session)
             await nodeDirectory.refreshIfOlder(than: 60)
             await model.loadSSHGuardDeadline(session: session)
@@ -305,7 +308,7 @@ struct ApprovalReviewSheet: View {
                     UIPasteboard.general.string = LatticeDeepLink.approval(id: model.targetID).customURL?.absoluteString
                 }
                 Button("Open on web", systemImage: "safari") { router.openOnWeb(.approval(id: model.targetID)) }
-                if let approval = model.approval, ApprovalsDecisionGate.canDismiss(approval), approval.isPending || approval.isApproved {
+                if let approval = model.approval, ApprovalsDecisionGate.canDismiss(approval) {
                     let missing = ApprovalsDecisionGate.missingScopes(approval, scopes: session.tokenScopes)
                     Section {
                         Button(role: .destructive) { model.dismissing = true } label: {
@@ -333,8 +336,9 @@ struct ApprovalReviewSheet: View {
     private func controls(_ approval: Approval) -> InboxDecisionControls {
         let scopes = session.tokenScopes
         let offline = !network.isSatisfied
-        let approveBlock = ApprovalsDecisionGate.approveBlock(approval, hashVerified: model.sealState == .verified, companionBehind: false, scopes: scopes)
-        let rejectBlock = ApprovalsDecisionGate.rejectBlock(approval, companionBehind: false, scopes: scopes)
+        let identityLoaded = actorID != nil
+        let approveBlock = ApprovalsDecisionGate.approveBlock(approval, hashVerified: model.sealState == .verified, companionBehind: false, scopes: scopes, identityLoaded: identityLoaded)
+        let rejectBlock = ApprovalsDecisionGate.rejectBlock(approval, companionBehind: false, scopes: scopes, identityLoaded: identityLoaded)
         let missing = ApprovalsDecisionGate.missingScopes(approval, scopes: scopes)
         var controls = InboxDecisionControls(
             showsToggle: approval.isPending && !approval.isStale && missing.isEmpty && model.sealState == .verified && model.result == nil,
@@ -351,6 +355,7 @@ struct ApprovalReviewSheet: View {
             case "Plan does not match its hash": (controls.reasonSymbol, controls.reasonTone) = ("xmark.seal.fill", .fail)
             case "No connection": (controls.reasonSymbol, controls.reasonTone) = ("wifi.slash", .warn)
             case "No longer pending": (controls.reasonSymbol, controls.reasonTone) = (StatusStyle.approval(approval.displayState).symbol, .quiet)
+            case "Identity not loaded": (controls.reasonSymbol, controls.reasonTone) = ("person.crop.circle.badge.questionmark", .warn)
             default: (controls.reasonSymbol, controls.reasonTone) = ("lock", .quiet)
             }
             if reason == "No longer pending" {
@@ -380,7 +385,7 @@ struct ApprovalReviewSheet: View {
         let flow = DecisionFlow(client: client, authenticator: runner.authenticator, mode: mode, locale: locale)
         let name = nodeName(approval)
         let reason = ApprovalsDecisionGate.authReason(decision, approval: approval, nodeName: name)
-        let result = await flow.decide(decision, on: approval, actorID: session.primaryIdentity?.actorID ?? "", reason: reason)
+        let result = await flow.decide(decision, on: approval, actorID: actorID ?? "", reason: reason)
         let haptic = model.finish(result, decision: decision)
         switch result {
         case .finished(let outcome, _):
@@ -412,6 +417,12 @@ struct ApprovalReviewSheet: View {
     }
 
     // MARK: Helpers
+
+    /// This credential's actor id, or nil until `/api/me` has answered.
+    private var actorID: String? {
+        guard let id = session.primaryIdentity?.actorID, !id.isEmpty else { return nil }
+        return id
+    }
 
     private func nodeName(_ approval: Approval) -> String {
         if approval.plugin == "agentupdate", let name = ApprovalEvents.parseAgentUpdatePlan(approval.plan).nodeName { return name }
@@ -672,7 +683,9 @@ struct InboxReviewHeader: View {
     @Environment(\.locale) private var locale
 
     var body: some View {
-        let style = StatusStyle.approval(approval.displayState)
+        // Shared's displayState reads a stale retirement as "failed"; nobody
+        // approved it, so Review names it stale.
+        let style = StatusStyle.approval(ApprovalsTransition.isStaleRetirement(approval) ? .stale : approval.displayState)
         InboxCard {
             VStack(alignment: .leading, spacing: Spacing.m) {
                 HStack(spacing: Spacing.s) {

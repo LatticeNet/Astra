@@ -403,6 +403,18 @@ private func checkDecisionEligibility() throws {
     try expectEqual(ApprovalsDecisionGate.rejectBlock(stale, companionBehind: false, scopes: operatorScopes), "Stale: inspect only", "stale blocks reject")
     try check(ApprovalsDecisionGate.canReplan(stale), "stale agent update can be replanned")
     try check(!ApprovalsDecisionGate.canReplan(pending), "fresh rows are not replanned")
+    try expectEqual(ApprovalsDecisionGate.approveBlock(pending, hashVerified: true, companionBehind: false, scopes: operatorScopes, identityLoaded: false), "Identity not loaded", "no actor id blocks approve")
+    try expectEqual(ApprovalsDecisionGate.rejectBlock(pending, companionBehind: false, scopes: operatorScopes, identityLoaded: false), "Identity not loaded", "no actor id blocks reject")
+
+    // The server retires a stale agent update on its next listing read:
+    // rejected, the stale reason, and no approved_by or rejected_by. That is
+    // the only stale agent update a client ever receives.
+    let retired = try decoded(approvalView(plugin: "agentupdate", action: "update-agent", plan: plan, status: "rejected", stale: true))
+    try check(ApprovalsTransition.isStaleRetirement(retired), "a rejected stale row with no decider is a stale retirement")
+    try check(ApprovalsDecisionGate.canReplan(retired), "a retired stale agent update can be replanned")
+    try check(ApprovalsDecisionGate.canDismiss(retired), "a retired stale agent update can be dismissed")
+    try expectEqual(ApprovalsDecisionGate.approveBlock(retired, hashVerified: true, companionBehind: false, scopes: operatorScopes), "Stale: inspect only", "a retired stale row reads as stale")
+    try check(!ApprovalsDecisionGate.canReplan(try decoded(approvalView(plugin: "agentupdate", action: "update-agent", node: "", plan: plan, status: "rejected", stale: true))), "a stale row without a node is not replanned")
 
     let approved = try decoded(approvalView(plan: plan, status: "approved", approvedBy: "admin"))
     try expectEqual(ApprovalsDecisionGate.approveBlock(approved, hashVerified: true, companionBehind: false, scopes: operatorScopes), "No longer pending", "decided rows are not pending")
@@ -415,8 +427,10 @@ private func checkDecisionEligibility() throws {
     let stuckWait = #"{"code":"node_offline","reason":"offline","blocked":true,"dismissible":false}"#
     try check(ApprovalsDecisionGate.canDismiss(try decoded(approvalView(plugin: "nftpolicy", status: "approved", approvedBy: "a", waiting: dismissibleWait))), "waiting.dismissible true wins")
     try check(!ApprovalsDecisionGate.canDismiss(try decoded(approvalView(plugin: "agentupdate", status: "approved", approvedBy: "a", waiting: stuckWait))), "waiting.dismissible false wins over the plugin fallback")
-    try check(ApprovalsDecisionGate.canDismiss(stale), "stale falls back to dismissible")
-    try check(ApprovalsDecisionGate.canDismiss(pending), "SSH Guard falls back to dismissible")
+    try check(ApprovalsDecisionGate.canDismiss(stale), "a stale agent update falls back to dismissible")
+    try check(!ApprovalsDecisionGate.canDismiss(pending), "a fresh pending SSH Guard row is not dismissible")
+    try check(!ApprovalsDecisionGate.canDismiss(try decoded(approvalView(plugin: "agentupdate", action: "update-agent"))), "a fresh pending agent update is not dismissible")
+    try check(!ApprovalsDecisionGate.canDismiss(try decoded(approvalView(plugin: "sshguard", action: "sshguard-arm:v1", stale: true))), "only agent updates are dismissible by staleness")
     try check(!ApprovalsDecisionGate.canDismiss(try decoded(approvalView(plugin: "nftpolicy"))), "a fresh nftpolicy row is not dismissible")
     try check(!ApprovalsDecisionGate.canDismiss(try decoded(approvalView(plugin: "agentupdate", status: "dismissed"))), "a dismissed row is not dismissible again")
 
@@ -426,7 +440,7 @@ private func checkDecisionEligibility() throws {
         "approve reason names action, node and seal"
     )
     try expectEqual(ApprovalsDecisionGate.authReason(.reject, approval: pending, nodeName: "edge-tyo-2"), "Reject Confirm the SSH Guard arm on edge-tyo-2", "reject reason")
-    try expectEqual(ApprovalsDecisionGate.batchAuthReason(.approve(queueApply: true), count: 13, title: "Agent update to 0.4.2, 14 plans"), "Approve 13 plans: Agent update to 0.4.2, 14 plans", "batch reason")
+    try expectEqual(ApprovalsDecisionGate.batchAuthReason(.approve(queueApply: true), count: 13, title: "Agent update to 0.4.2"), "Approve 13 plans: Agent update to 0.4.2", "batch reason says the count once")
 }
 
 private func checkTransitionVerification() throws {
@@ -441,6 +455,12 @@ private func checkTransitionVerification() throws {
     try check(!ApprovalsTransition.verified(.reject, before: before, after: try decoded(approvalView(status: "rejected", approvedBy: "u-me")), actorID: "u-me"), "a failed apply is not a rejection")
     try check(ApprovalsTransition.verified(.dismiss(note: "x"), before: before, after: try decoded(approvalView(status: "dismissed")), actorID: "u-me"), "dismissal verifies by status")
     try check(!ApprovalsTransition.verified(.dismiss(note: "x"), before: try decoded(approvalView(status: "dismissed")), after: try decoded(approvalView(status: "dismissed")), actorID: "u-me"), "an already dismissed row does not")
+    try check(!ApprovalsTransition.verified(.approve(queueApply: true), before: before, after: theirs, actorID: ""), "without an actor id, someone else's approval does not verify")
+    try check(!ApprovalsTransition.verified(.reject, before: before, after: try decoded(approvalView(status: "rejected", rejectedBy: "u-other")), actorID: ""), "without an actor id, a rejection does not verify")
+    let retired = try decoded(approvalView(plugin: "agentupdate", status: "rejected", stale: true))
+    try check(!ApprovalsTransition.verified(.approve(queueApply: true), before: before, after: retired, actorID: "u-me"), "a stale retirement is not an approval")
+    try expectEqual(ApprovalsTransition.decider(retired), "Lattice", "a stale retirement was decided by Lattice")
+    try expectEqual(ApprovalsTransition.statusWord(try decoded(approvalView(status: "rejected", approvedBy: "u-me"))), "approved, then failed to apply,", "a failed apply keeps its wording")
 }
 
 // MARK: DecisionFlow
@@ -510,6 +530,23 @@ private func checkDecisionFlowOutcomes() async throws {
     try expectEqual(status, "approved", "already decided status")
     try expectEqual(by, "u-other", "already decided by")
     try expectEqual(refusal, "Not recorded: this plan was already approved by u-other at \(TimeDisplay.clock(checkDate("2026-06-17T02:04:00Z")!, mode: mode, locale: locale)).", "already decided sentence")
+
+    // A stale agent update the server retired while Review was open: approve
+    // answers 200 with the unchanged rejected view. Nobody approved it.
+    let retiredView = approvalView(plugin: "agentupdate", action: "update-agent", plan: plan, status: "rejected", stale: true, updatedAt: "2026-06-17T02:04:00Z")
+    (result, _) = await run(.approve(queueApply: true), [approve: [.json(200, retiredView)], get: [.json(200, #"{"approval":\#(retiredView)}"#)]], on: try decoded(approvalView(plugin: "agentupdate", action: "update-agent", plan: plan)))
+    guard case .finished(.refused(.alreadyDecided(_, let retiredBy, _), let retiredRefusal), _) = result else { throw CheckFailure.failed("stale retirement: \(result)") }
+    try expectEqual(retiredBy, "Lattice", "a stale retirement names Lattice")
+    try expectEqual(retiredRefusal, "Not recorded: this plan was already retired as stale (the agent update policy changed) by Lattice at \(TimeDisplay.clock(checkDate("2026-06-17T02:04:00Z")!, mode: mode, locale: locale)).", "stale retirement sentence")
+
+    // Without an actor id a decision someone else made is never green.
+    do {
+        let transport = ScriptedTransport([approve: [.json(200, theirs)], get: [.json(200, #"{"approval":\#(theirs)}"#)]])
+        let flow = DecisionFlow(client: LatticeClient(baseURL: checkBase, transport: transport), authenticator: CountingAuth(.confirmed), mode: mode, locale: locale)
+        let anonymous = await flow.decide(.approve(queueApply: true), on: approval, actorID: "", reason: "check")
+        guard case .finished(.unknown(let note), _) = anonymous else { throw CheckFailure.failed("no actor id is not done: \(anonymous)") }
+        try check(note.hasPrefix("Sent; this app could not confirm who decided it"), "no actor id says it could not confirm the decider")
+    }
 
     // Reject on an approval that is no longer pending also answers 200 unchanged.
     let reject = "POST /api/network/approvals/reject"
@@ -640,12 +677,25 @@ private func checkApprovalsDemoRoutes() async throws {
         try expectEqual(code, "approval_stale", "wrong hash is approval_stale")
     }
     let stale = try await demo.fetchApproval(id: "approval_d1008")
-    do {
-        _ = try await demo.approveReviewed(stale, queueApply: true)
-        throw CheckFailure.failed("a stale approval must be refused")
-    } catch LatticeAPIError.conflict(let code, _, _) {
-        try expectEqual(code, "approval_stale", "stale is approval_stale")
+    if stale.isPending {
+        do {
+            _ = try await demo.approveReviewed(stale, queueApply: true)
+            throw CheckFailure.failed("a stale approval must be refused")
+        } catch LatticeAPIError.conflict(let code, _, _) {
+            try expectEqual(code, "approval_stale", "stale is approval_stale")
+        }
+    } else {
+        try check(ApprovalsTransition.isStaleRetirement(stale), "approval_d1008 is served as the server retires it")
     }
+
+    // The module's retired stale agent update has the server's shape, and
+    // Review offers both of its exits.
+    let retired = try await demo.fetchApproval(id: ApprovalsFixtures.retiredAgentUpdateID)
+    try check(ApprovalsTransition.isStaleRetirement(retired), "the retired agent update is rejected, stale, with no decider")
+    try check(ApprovalsDecisionGate.canReplan(retired), "replan is offered on the retired stale row")
+    try check(ApprovalsDecisionGate.canDismiss(retired), "dismiss is offered on the retired stale row")
+    let history = try await demo.listApprovals(query: ApprovalQuery(status: "approved,applied,rejected,dismissed", includeDismissed: true))
+    try check(history.approvals.contains { $0.id == ApprovalsFixtures.retiredAgentUpdateID }, "History lists the retired agent update")
 
     // Dismiss: only agent updates and SSH Guard, only when dismissible.
     do {
@@ -662,6 +712,8 @@ private func checkApprovalsDemoRoutes() async throws {
     }
     let dismissed = try await demo.dismissApproval(approvalID: "approval_d0906", note: "Superseded by approval_d1002")
     try expectEqual(dismissed.status, "dismissed", "a dismissible wait is dismissed")
+    let retiredDismissed = try await demo.dismissApproval(approvalID: ApprovalsFixtures.retiredAgentUpdateID, note: "Replanned")
+    try expectEqual(retiredDismissed.status, "dismissed", "a retired stale agent update is dismissed")
 
     // The NetGuard plan reads, but the Operator token cannot decide it.
     let netguard = try await demo.fetchApproval(id: "approval_m1_netguard")

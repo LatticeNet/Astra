@@ -58,6 +58,7 @@ struct BatchReviewSheet: View {
         .presentationDetents([.large])
         .interactiveDismissDisabled(model.inFlight)
         .task {
+            if session.primaryIdentity == nil { await session.refreshIdentity() }
             await nodeDirectory.refreshIfOlder(than: 60)
             await model.load(session: session)
             await autoConfirmIfAsked()
@@ -170,11 +171,13 @@ struct BatchReviewSheet: View {
     // MARK: Decisions
 
     private var scopes: ScopeSet? { session.tokenScopes }
+    /// Without this credential's actor id a decision cannot be verified.
+    private var identityLoaded: Bool { session.primaryIdentity?.actorID.isEmpty == false }
 
     private func exclusion(_ row: InboxBatchModel.Row) -> String? {
         if let error = row.loadError { return "Could not load: \(error)" }
         guard let approval = row.approval else { return "Not loaded" }
-        return ApprovalsDecisionGate.batchApproveExclusion(approval, scopes: scopes)
+        return ApprovalsDecisionGate.batchApproveExclusion(approval, scopes: scopes, identityLoaded: identityLoaded)
     }
 
     private var approvable: [Approval] {
@@ -184,7 +187,7 @@ struct BatchReviewSheet: View {
     private var rejectable: [Approval] {
         model.rows.compactMap { row in
             guard row.outcome == nil, let approval = row.approval, row.loadError == nil else { return nil }
-            return ApprovalsDecisionGate.batchRejectExclusion(approval, scopes: scopes) == nil ? approval : nil
+            return ApprovalsDecisionGate.batchRejectExclusion(approval, scopes: scopes, identityLoaded: identityLoaded) == nil ? approval : nil
         }
     }
 
@@ -231,8 +234,13 @@ struct BatchReviewSheet: View {
         guard !approvals.isEmpty, let client = session.client, runner.beginDecision() else { return }
         model.inFlight = true
         let flow = DecisionFlow(client: client, authenticator: runner.authenticator, mode: mode, locale: locale)
-        let reason = ApprovalsDecisionGate.batchAuthReason(decision, count: approvals.count, title: model.title)
-        let result = await flow.decideBatch(decision, on: approvals, actorID: session.primaryIdentity?.actorID ?? "", reason: reason)
+        let reason = ApprovalsDecisionGate.batchAuthReason(decision, count: approvals.count, title: model.name)
+        guard let actorID = session.primaryIdentity?.actorID, !actorID.isEmpty else {
+            model.inFlight = false
+            runner.endDecision(haptic: nil)
+            return
+        }
+        let result = await flow.decideBatch(decision, on: approvals, actorID: actorID, reason: reason)
         model.inFlight = false
         var haptic: HapticEvent?
         switch result {
@@ -372,6 +380,8 @@ final class InboxBatchModel {
     private(set) var state: State = .loading
     private(set) var rows: [Row] = []
     private(set) var title = "Plans"
+    /// The group's name without a count, for the Face ID reason.
+    private(set) var name = "Plans"
     private(set) var writer: String?
     var applyAfterApproval = true
     var inFlight = false
@@ -429,9 +439,11 @@ final class InboxBatchModel {
         let loaded = rows.compactMap(\.approval)
         if let event = ApprovalEvents.group(loaded).first, event.approvals.count == loaded.count {
             title = ApprovalEvents.batchTitle(event)
+            name = ApprovalEvents.groupName(event)
             writer = event.writer
         } else {
             title = loaded.count == 1 ? "1 plan" : "\(rows.count) plans"
+            name = "the selected plans"
             writer = loaded.first.map(ApprovalEvents.writer)
         }
         state = loaded.isEmpty && rows.allSatisfy({ $0.loadError != nil }) ? .failed(rows.first?.loadError ?? "Could not load") : .loaded

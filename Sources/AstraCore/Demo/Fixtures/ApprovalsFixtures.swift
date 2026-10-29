@@ -4,7 +4,7 @@ import Foundation
 ///
 /// The decisions (`approve`, `reject`, `dismiss`) behave as the server does
 /// (`handleApprove`, `handleRejectApproval`, `handleDismissApproval` in
-/// server.go): 404 for an approval the token cannot read, 403 without the
+/// server.go): 404 for an unknown id, 403 without the
 /// decision scopes, 200 with the unchanged view for an approval that is no
 /// longer pending, 409 `approval_stale` for a plan hash that does not match
 /// or a row that is not dismissible. They record the outcome in
@@ -16,7 +16,10 @@ import Foundation
 /// request lands, so its decision comes back "already approved". The extra
 /// approvals below add a group of identical firewall plans (one distinct body
 /// in BatchReview) and a NetGuard plan the Operator token can read but not
-/// decide (it lacks `netguard:admin`), for the read-only Review.
+/// decide (it lacks `netguard:admin`), for the read-only Review, and an agent
+/// update the server already retired as stale (rejected, with the stale reason
+/// and no decider, as `rejectAgentUpdateApprovalWithReason` writes it), whose
+/// Review offers Plan again and Dismiss.
 public enum ApprovalsFixtures {
     public static var routes: [DemoRoute] {
         var routes = [
@@ -29,9 +32,15 @@ public enum ApprovalsFixtures {
             DemoRoute(method: "POST", pathPattern: "/api/network/approvals/dismiss") { request, state in
                 await decide(.dismiss, request: request, state: state)
             },
-            // The pending listing Inbox and Approvals read, with the extras added.
-            DemoRoute(pathPattern: "/api/network/approvals", query: ["status": "pending", "include": "plan"]) { request, state in
-                await pendingList(request, state: state)
+            // The pending page this module's screens read (with or without
+            // plans) and the History listing, with the extras added. The
+            // server's row set never depends on `include`. The bare Shared
+            // listing (`?status=pending`, the badge) stays the Shared world.
+            DemoRoute(pathPattern: "/api/network/approvals", query: ["status": "pending", "limit": "100"]) { request, state in
+                await listing(request, state: state)
+            },
+            DemoRoute(pathPattern: "/api/network/approvals", query: ["include_dismissed": "1"]) { request, state in
+                await listing(request, state: state)
             },
         ]
         for extra in extras {
@@ -46,6 +55,9 @@ public enum ApprovalsFixtures {
     public static let racedApprovalID = "approval_d1007"
     /// The operator who wins that race.
     public static let otherOperator = "u-demo-oncall"
+
+    /// The agent update the server retired as stale.
+    public static let retiredAgentUpdateID = "approval_m1_agent_retired"
 
     /// The identical firewall ruleset filed for three relays in one group.
     static let relayFirewallPlan = """
@@ -103,14 +115,24 @@ public enum ApprovalsFixtures {
             createdAt: "-50m", updatedAt: "-50m"
         )
         netGuard.reason = "Adopts edge-tyo-1 into NetGuard zones public and ops"
-        return firewall + [netGuard]
+        let agentPlan = DemoPlans.agentUpdate(node: "edge-ams-2", arch: "arm64", mode: "auto")
+        var retired = DemoApproval(
+            id: retiredAgentUpdateID, plugin: "agentupdate", action: "update-agent",
+            node: "edge-ams-2", status: "rejected", plan: agentPlan, planSHA256: PlanHasher.sha256Hex(agentPlan),
+            createdAt: "-2d", updatedAt: "-20h"
+        )
+        retired.actorID = "lattice-server"
+        retired.stale = true
+        retired.staleCode = "agent_update_policy_changed"
+        retired.reason = "agent update policy changed since this approval was planned; current_version planned=0.3.9 current=0.3.10; re-plan before approving"
+        return firewall + [netGuard, retired]
     }()
 
     static var all: [DemoApproval] { SharedFixtures.approvals + extras }
 
     // MARK: Reads
 
-    static func pendingList(_ request: DemoRequest, state: DemoState) async -> DemoResponse {
+    static func listing(_ request: DemoRequest, state: DemoState) async -> DemoResponse {
         let rows = await visibleRows(request, state: state)
         return .json(SharedFixtures.listBody(rows, query: request.query))
     }
@@ -150,9 +172,8 @@ public enum ApprovalsFixtures {
         }
         if request.identity == .pat {
             let scopes = DemoTransport.scopes(for: request.identity, scenario: request.scenario)
-            guard ApprovalVisibility.canList(plugin: base.plugin, nodeID: base.nodeID, scopes: scopes) else {
-                return .error(status: 404, code: "not_found", message: "approval not found")
-            }
+            // The server answers 404 only for a missing id; a token that
+            // cannot decide this plugin gets 403 (requireApprovalDecisionScopes).
             let view = Approval(id: base.id, nodeID: base.nodeID, plugin: base.plugin, action: base.action)
             let missing = scopes.missing(ApprovalVisibility.decisionRequirement(for: view), nodeID: base.nodeID)
             if !missing.isEmpty {

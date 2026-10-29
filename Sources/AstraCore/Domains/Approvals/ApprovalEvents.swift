@@ -326,11 +326,16 @@ public enum ApprovalEvents {
     public static func batchTitle(_ event: Event) -> String {
         let count = event.approvals.count
         let plans = count == 1 ? "1 plan" : "\(count) plans"
+        return "\(groupName(event)), \(plans)"
+    }
+
+    /// The group's name without a count: "Agent update to 0.3.10".
+    public static func groupName(_ event: Event) -> String {
         if event.plugin == "agentupdate", let transition = event.transition {
-            return "Agent update to \(transition.target), \(plans)"
+            return "Agent update to \(transition.target)"
         }
-        guard let first = event.approvals.first else { return "\(event.title), \(plans)" }
-        return "\(title(for: first)), \(plans)"
+        guard let first = event.approvals.first else { return event.title }
+        return title(for: first)
     }
 
     /// The plugin glyph of section 4.12.
