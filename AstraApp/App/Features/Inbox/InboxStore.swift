@@ -90,6 +90,9 @@ final class InboxStore {
     @ObservationIgnored var interactionInProgress = false
     @ObservationIgnored private var generation = -1
     @ObservationIgnored private var applyLater: Task<Void, Never>?
+    /// The screen's time zone mode and locale, for times inside rows.
+    @ObservationIgnored var timeZoneMode: TimeZoneMode = .local
+    @ObservationIgnored var locale: Locale = .current
 
     init(session: SessionStore, changes: ChangeLog) {
         self.session = session
@@ -380,7 +383,7 @@ final class InboxStore {
         InboxContent(
             incidents: sortedIncidents(now: now),
             events: ApprovalEvents.group(approvals.value?.approvals ?? []),
-            attention: InboxAttentionItem.items(store: self, now: now),
+            attention: InboxAttentionItem.items(store: self, now: now, mode: timeZoneMode, locale: locale),
             due: Array(dueSoon.prefix(3))
         )
     }

@@ -132,6 +132,11 @@ struct InboxScreen: View {
             }
         }
         .task { await nodeDirectory.refreshIfOlder(than: 15) }
+        .onChange(of: mode, initial: true) {
+            store.timeZoneMode = mode
+            store.locale = locale
+            store.rebuild(force: true)
+        }
         .onAppear {
             guard session.isDemo, !Self.appliedLaunchFilter else { return }
             Self.appliedLaunchFilter = true

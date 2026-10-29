@@ -94,7 +94,15 @@ struct DecisionPanel: View {
             .padding(.horizontal, Spacing.l)
             .padding(.vertical, Spacing.m)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(inline ? Color(uiColor: .secondarySystemGroupedBackground) : Color(uiColor: .systemGroupedBackground), in: .rect(cornerRadius: inline ? 22 : 0))
+            .background {
+                // Pinned, the panel's opaque background runs under the
+                // floating toolbar so the plan never shows between buttons.
+                if inline {
+                    RoundedRectangle(cornerRadius: 22).fill(Color(uiColor: .secondarySystemGroupedBackground))
+                } else {
+                    Color(uiColor: .systemGroupedBackground).ignoresSafeArea(edges: .bottom)
+                }
+            }
             .overlay(alignment: .top) { if !inline { Divider() } }
             // Pinned, it must leave room for the plan above it at AX5, as
             // the ConfirmSheet's pinned action does.
