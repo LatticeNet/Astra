@@ -9,6 +9,7 @@ public func checkMonitoring() async throws {
     try checkDefinitionDecoding()
     try checkChainDecoding()
     try await checkMonitoringRequestBodies()
+    try await checkSeriesSubjects()
     try await checkMaintenanceBodies()
     try checkMonitorHealth()
     try checkSeriesGaps()
@@ -201,6 +202,30 @@ private func checkMonitoringRequestBodies() async throws {
     try expect(urls.contains { $0.contains("compare=previous") }, "compare asks for the previous period")
     try expect(urls.contains { $0.hasSuffix("limit=2000") }, "results limit is capped at the server maximum")
     try expectEqual(await transport.methods.prefix(3).map { $0 ?? "" }, ["POST", "POST", "POST"], "monitoring writes are POST")
+}
+
+private func checkSeriesSubjects() async throws {
+    let unmigrated = try decode(PathView.self, #"{"source":"n-a","target_node":"n-b","monitor_id":"mon_latency_gen","managed":true,"method":"tcp","state":"up"}"#)
+    let authored = try decode(PathView.self, #"{"source":"n-a","target_node":"n-b","monitor_id":"mon_own","managed":false,"method":"tcp","state":"up"}"#)
+    let defined = try decode(PathView.self, #"{"source":"n-a","target_node":"n-b","monitor_id":"mon_gen","check_definition_id":"def_mesh","managed":true,"method":"tcp","state":"up"}"#)
+    let addressed = try decode(PathView.self, #"{"source":"","target":"https://core.example.net","monitor_id":"mon_tls","method":"tls","state":"up"}"#)
+    let base = "https://lattice.example.com/api/monitors/series?"
+    let empty = (200, json(#"{"window":"1h","step_seconds":60,"buckets":[]}"#))
+    let (api, transport) = client([
+        base + "source=n-a&target_node=n-b&window=1h": empty,
+        base + "source=n-a&target_node=n-b&check=mon_own&window=1h": empty,
+        base + "source=n-a&target_node=n-b&check=def_mesh&window=1h": empty,
+        base + "monitor=mon_tls&window=1h": empty,
+    ])
+    for path in [unmigrated, authored, defined, addressed] {
+        _ = try await api.monitoringPathSeries(MonitoringSeriesSubject(path: path), window: .oneHour)
+    }
+    let urls = await transport.requestURLs
+    try expectEqual(urls.count, 4, "every subject asks once")
+    try expect(!urls[0].contains("check="), "an unmigrated path-set cell names no check: the server keys its series on no id")
+    try expect(urls[1].contains("check=mon_own"), "an operator check on a pair is named by its monitor id")
+    try expect(urls[2].contains("check=def_mesh"), "a definition's cell is named by its definition")
+    try expect(urls[3].contains("monitor=mon_tls") && !urls[3].contains("source="), "a control-plane path asks by monitor alone")
 }
 
 private func checkMaintenanceBodies() async throws {
@@ -529,6 +554,11 @@ private func checkMonitoringDemo() async throws {
     try expectEqual(series.buckets.count, 60, "1 h at one-minute steps")
     try expect(MonitoringSeriesSegments.p50(series).count >= 2, "the degraded demo path has a gap")
     try expectEqual(series.previous?.p50Ms.count, 60, "compare adds one previous p50 per step")
+    _ = try await api.monitoringPathSeries(.pair(source: "n-edge-tyo-1", targetNode: "n-relay-fra-1", check: "def_fleet_mesh"), window: .oneHour)
+    do {
+        _ = try await api.monitoringPathSeries(.pair(source: "n-edge-tyo-1", targetNode: "n-relay-fra-1", check: "mon_tcp_edge-tyo-1_relay-fra-1"), window: .oneHour)
+        throw CheckFailure.failed("a generated monitor's id names no check on the pair")
+    } catch LatticeAPIError.notFound {}
     let silent = try await api.monitoringPathSeries(.pair(source: "n-edge-sjc-2", targetNode: "n-edge-sjc-1", check: nil), window: .oneDay)
     try expect(MonitoringSeriesSegments.isEmpty(silent), "the offline source's path has no data")
     _ = try await api.monitoringLatencySeries(source: "n-edge-sin-2", target: "n-relay-hkg-1", window: "24h")

@@ -32,7 +32,7 @@ public enum MonitoringPathQueryFields: QueryFieldProvider {
             LatticeQueryField(key: "country", type: .string, get: { .string($0.country) }),
             LatticeQueryField(key: "method", type: .enumeration, values: methods, get: { .string($0.path.method) }),
             LatticeQueryField(key: "check", type: .string, get: { item in
-                .string(item.path.checkDefinitionID.isEmpty ? item.path.monitorID : item.path.checkDefinitionID)
+                .strings([item.path.checkDefinitionID, item.path.monitorID].filter { !$0.isEmpty })
             }),
             LatticeQueryField(key: "p50", type: .number, get: { item in
                 item.measuresNow ? item.path.p50Ms.map { .number($0) } ?? .none : .none

@@ -40,12 +40,16 @@ public enum MonitoringSeriesSubject: Sendable, Hashable {
         }
     }
 
-    /// The series subject for a path cell of the matrix.
+    /// The series subject for a path cell of the matrix. A pair names its
+    /// definition, or an operator check by its monitor id; a cell of the
+    /// unmigrated path set names nothing, since the server keys that series
+    /// on no id and answers 404 to its generated monitor's (`PathDetail.vue`).
     public init(path: PathView) {
         if path.targetNode.isEmpty {
             self = .monitor(id: path.monitorID, source: path.source)
         } else {
-            self = .pair(source: path.source, targetNode: path.targetNode, check: path.checkDefinitionID.isEmpty ? path.monitorID : path.checkDefinitionID)
+            let check: String? = !path.checkDefinitionID.isEmpty ? path.checkDefinitionID : (path.managed ? nil : path.monitorID)
+            self = .pair(source: path.source, targetNode: path.targetNode, check: check)
         }
     }
 }

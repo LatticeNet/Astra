@@ -312,6 +312,9 @@ public enum MonitoringFixtures {
         let source = request.query["source"] ?? ""
         let chosen: Profile
         if let target = request.query["target_node"], !target.isEmpty {
+            if let check = request.query["check"], !check.isEmpty, !pairHasCheck(check, source: source, target: target) {
+                return .error(status: 404, code: "not_found", message: "no check measures that pair")
+            }
             chosen = profile(source: source, target: target)
         } else if let monitor = request.query["monitor"], let check = checks.first(where: { $0.id == monitor }) {
             switch check.health {
@@ -323,6 +326,17 @@ public enum MonitoringFixtures {
             return .error(status: 400, code: "bad_request", message: "source and target_node, or monitor, are required")
         }
         return .json(seriesBody(profile: chosen, window: window, compare: compare))
+    }
+
+    /// `pairCheckFor`: a pair's `check` names a definition or an operator's
+    /// own check on that pair; a generated monitor's id names nothing.
+    static func pairHasCheck(_ check: String, source: String, target: String) -> Bool {
+        if definitionVersions[check] != nil { return true }
+        return checks.contains { candidate in
+            candidate.id == check && candidate.definition.isEmpty && candidate.managedBy.isEmpty && !candidate.targetNode.isEmpty
+                && DemoWorld.node(candidate.targetNode).id == target
+                && candidate.nodes.contains { DemoWorld.node($0).id == source }
+        }
     }
 
     static let emptySeriesBody = #"{"window":"1h","step_seconds":60,"from":"{{now-1h}}","to":"{{now}}","method_changes":[],"buckets":[],"baseline":null}"#
