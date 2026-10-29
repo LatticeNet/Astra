@@ -39,6 +39,12 @@ struct NodesScreen: View {
             if value != nil, let pending = appState.consumeQuery(FleetScope.nodes.rawValue) { query = pending }
         }
         .modifier(FleetFilterSubtitle(query: query))
+        .onChange(of: listBusy, initial: true) { _, busy in store.interactionBusy = busy }
+    }
+
+    /// A write, confirmation or dialog in progress, or Select mode: reorders wait.
+    private var listBusy: Bool {
+        runner.isBusy || runner.pendingConfirm != nil || runner.pendingDialog != nil || editMode.isEditing
     }
 
     // MARK: List
@@ -117,6 +123,8 @@ struct NodesScreen: View {
             }
             .listStyle(.insetGrouped)
             .animation(reduceMotion ? nil : .default, value: sections.map(\.id))
+            .onScrollPhaseChange { _, _ in store.noteInteraction() }
+            .background(FleetTouchProbe { store.noteInteraction() })
         }
     }
 

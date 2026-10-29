@@ -1,5 +1,6 @@
 import SwiftUI
 import UIKit
+import UIKit.UIGestureRecognizerSubclass
 
 // Pieces the Fleet screens share: the node context menu with its glance
 // preview, menu buttons that stay visible when the token lacks a scope, and
@@ -245,5 +246,78 @@ enum FleetAge {
 
     static func short(_ date: Date?, now: Date = Date()) -> String? {
         date.map { RelativeDateFormatter.shortDuration(now.timeIntervalSince($0)) }
+    }
+}
+
+/// Reports every touch in the window (a tap, swipe or the long press that
+/// opens a context menu) without taking part in gesture handling, so a list
+/// can hold poll reorders until the operator's finger has been still for a
+/// moment (stable lists, section 5.0).
+struct FleetTouchProbe: UIViewRepresentable {
+    let onTouch: @MainActor () -> Void
+
+    func makeUIView(context: Context) -> ProbeView {
+        let view = ProbeView()
+        view.onTouch = onTouch
+        return view
+    }
+
+    func updateUIView(_ view: ProbeView, context: Context) {
+        view.onTouch = onTouch
+    }
+
+    final class ProbeView: UIView {
+        var onTouch: (@MainActor () -> Void)?
+        private let recorder = Recorder()
+
+        override init(frame: CGRect) {
+            super.init(frame: frame)
+            isUserInteractionEnabled = false
+            recorder.onTouch = { [weak self] in self?.onTouch?() }
+        }
+
+        required init?(coder: NSCoder) { nil }
+
+        override func didMoveToWindow() {
+            super.didMoveToWindow()
+            recorder.view?.removeGestureRecognizer(recorder)
+            window?.addGestureRecognizer(recorder)
+        }
+    }
+
+    /// Never recognizes: it notes the touch and fails, so no other gesture waits on it.
+    final class Recorder: UIGestureRecognizer, UIGestureRecognizerDelegate {
+        var onTouch: (() -> Void)?
+
+        init() {
+            super.init(target: nil, action: nil)
+            cancelsTouchesInView = false
+            delaysTouchesBegan = false
+            delaysTouchesEnded = false
+            delegate = self
+        }
+
+        override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent) {
+            onTouch?()
+        }
+
+        override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent) {
+            onTouch?()
+        }
+
+        override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent) {
+            onTouch?()
+            state = .failed
+        }
+
+        override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent) {
+            state = .failed
+        }
+
+        override func canPrevent(_ preventedGestureRecognizer: UIGestureRecognizer) -> Bool { false }
+        override func canBePrevented(by preventingGestureRecognizer: UIGestureRecognizer) -> Bool { false }
+
+        func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer,
+                               shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer) -> Bool { true }
     }
 }

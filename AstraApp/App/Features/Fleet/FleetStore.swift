@@ -11,9 +11,15 @@ final class FleetStore {
     private(set) var nodes: ResourceState<[FleetNodeRecord]> = .idle
     private(set) var duplicates: [FleetDuplicateGroup] = []
     private(set) var groups: FleetGroupsResponse?
-    /// A poll that reorders, inserts or removes rows while VoiceOver runs
-    /// waits here behind the "updates" row (stable lists, section 5.0).
+    /// A poll that reorders, inserts or removes rows while the list is busy
+    /// or VoiceOver runs waits here behind the "updates" row (stable lists, 5.0).
     private(set) var held: [FleetNodeRecord]?
+    /// VoiceOver holds until the operator taps Show; a busy list lets go once idle.
+    private(set) var heldForVoiceOver = false
+    /// A dialog, confirmation, write or edit mode is up: the list is not idle.
+    @ObservationIgnored var interactionBusy = false
+    @ObservationIgnored private var lastInteraction = Date.distantPast
+    @ObservationIgnored private var releaseTask: Task<Void, Never>?
     private(set) var geo: ResourceState<[NodeGeoView]> = .idle
     private(set) var paths: ResourceState<PathsResponse> = .idle
 
@@ -48,7 +54,7 @@ final class FleetStore {
 
     // MARK: Refresh
 
-    /// Polls hold reorders while VoiceOver runs; pull to refresh applies at once.
+    /// Polls hold reorders while the list is busy or VoiceOver runs; pull to refresh applies at once.
     @discardableResult
     func refresh(fromPoll: Bool = false) async -> Bool {
         if let missing = missing("node:read") {
@@ -87,11 +93,23 @@ final class FleetStore {
         return try? await client.fleetGroups()
     }
 
+    /// A touch, scroll or swipe on the list; reorders wait two seconds past the last one.
+    func noteInteraction() {
+        lastInteraction = Date()
+    }
+
+    private var isIdle: Bool {
+        !interactionBusy && Date().timeIntervalSince(lastInteraction) >= 2
+    }
+
     private func apply(_ fresh: [FleetNodeRecord], fromPoll: Bool) {
         let previous = nodes.value
-        if fromPoll, UIAccessibility.isVoiceOverRunning, let previous, previous.map(\.id) != fresh.map(\.id) || previous.map(\.node.honesty) != fresh.map(\.node.honesty) {
-            // Value changes inside existing rows apply at once; order and membership wait.
+        let voiceOver = UIAccessibility.isVoiceOverRunning
+        if fromPoll, voiceOver || !isIdle, let previous,
+           previous.map(\.id) != fresh.map(\.id) || previous.map(\.node.honesty) != fresh.map(\.node.honesty) {
+            // Values inside existing rows apply at once; order and membership wait.
             held = fresh
+            heldForVoiceOver = voiceOver
             let byID = Dictionary(fresh.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
             let kept = previous.map { old in
                 guard var row = byID[old.id] else { return old }
@@ -99,15 +117,32 @@ final class FleetStore {
                 return row
             }
             nodes = .loaded(kept, at: Date())
+            if !voiceOver { releaseWhenIdle() }
         } else {
             held = nil
+            releaseTask?.cancel()
             nodes = .loaded(fresh, at: Date())
+        }
+    }
+
+    private func releaseWhenIdle() {
+        releaseTask?.cancel()
+        releaseTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .milliseconds(500))
+                guard let self, self.held != nil, !self.heldForVoiceOver else { return }
+                if self.isIdle {
+                    self.showHeld()
+                    return
+                }
+            }
         }
     }
 
     func showHeld() {
         guard let held else { return }
         self.held = nil
+        releaseTask?.cancel()
         nodes = .loaded(held, at: Date())
     }
 
@@ -115,9 +150,10 @@ final class FleetStore {
     var heldCount: Int {
         guard let held, let current = nodes.value else { return 0 }
         let now = Dictionary(current.map { ($0.id, $0.node.honesty) }, uniquingKeysWith: { first, _ in first })
-        let changed = held.filter { now[$0.id] != $0.node.honesty }.count
+        let changed = held.filter { now[$0.id] != nil && now[$0.id] != $0.node.honesty }.count
+        let inserted = held.filter { now[$0.id] == nil }.count
         let removed = Set(current.map(\.id)).subtracting(held.map(\.id)).count
-        return max(1, changed + removed)
+        return max(1, changed + inserted + removed)
     }
 
     // MARK: Map
