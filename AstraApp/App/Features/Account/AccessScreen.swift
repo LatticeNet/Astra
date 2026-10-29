@@ -64,6 +64,7 @@ struct AccessScreen: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
         .navigationTitle("Access")
+        .navigationSubtitle(activeQuery.map { "Matching \($0)" } ?? "")
         // A link opens the Settings sheet with its path set, so the sheet's
         // root never appears to register itself; this page hosts its own gates.
         .actionHost(inSheet: true)
@@ -79,6 +80,18 @@ struct AccessScreen: View {
             }
             ToolbarItem(placement: .topBarTrailing) { moreMenu }
         }
+    }
+
+    /// The query filtering the shown layer, which a restored scene can carry
+    /// over from an earlier day, so the screen names it (section 2.6).
+    private var activeQuery: String? {
+        let query: String = switch shown {
+        case .users: store.users.value == nil ? "" : usersQuery
+        case .tokens: store.tokens.value == nil ? "" : tokensQuery
+        case .sso: store.providers.value == nil ? "" : ssoQuery
+        }
+        let trimmed = query.trimmingCharacters(in: .whitespaces)
+        return trimmed.isEmpty ? nil : trimmed
     }
 
     private var moreMenu: some View {
@@ -108,7 +121,7 @@ struct AccessScreen: View {
         ResourceView(state: store.tokens, noun: "tokens", retry: refreshTokens) { tokens in
             tokensList(tokens)
         }
-        .searchable(text: $tokensQuery, prompt: "Name, scope:task:run, is:revoked")
+        .accountSearchable($tokensQuery, prompt: "Name, scope:task:run, is:revoked", when: store.tokens.value != nil)
         .polling(.standard, version: changes.version([.tokens, .account])) {
             await store.refreshTokens()
         }
@@ -129,6 +142,11 @@ struct AccessScreen: View {
         let revoked = filtered.filter(\.isRevoked)
         return List {
             AccountRefreshError(state: store.tokens, noun: "tokens", retry: refreshTokens)
+            if let query = activeQuery {
+                Section {
+                    FilterStateRow(text: "Showing tokens matching \(query)") { tokensQuery = "" }
+                }
+            }
             if case .failure(let error) = tokensCompiled, !tokensQuery.isEmpty {
                 AccountQueryProblemRow(error: error, fields: "state, name, scope, actor, node, created, is:confined, is:revoked, is:admin")
             }
@@ -145,7 +163,7 @@ struct AccessScreen: View {
                 Section {
                     ForEach(active) { tokenRow($0) }
                 } header: {
-                    Text(AccessTokens.summary(tokens)).accessibilityAddTraits(.isHeader)
+                    Text(activeQuery == nil ? AccessTokens.summary(tokens) : "\(filtered.count) of \(tokens.count == 1 ? "1 token" : "\(tokens.count) tokens")").accessibilityAddTraits(.isHeader)
                 }
             }
             if !revoked.isEmpty {
@@ -231,7 +249,7 @@ struct AccessScreen: View {
         ResourceView(state: store.users, noun: "users", retry: refreshUsers) { users in
             usersList(users)
         }
-        .searchable(text: $usersQuery, prompt: "Name, login:sso, -is:totp")
+        .accountSearchable($usersQuery, prompt: "Name, login:sso, -is:totp", when: store.users.value != nil)
         .polling(.standard, version: changes.version([.account])) {
             await store.refreshUsers()
         }
@@ -249,6 +267,11 @@ struct AccessScreen: View {
         }
         return List {
             AccountRefreshError(state: store.users, noun: "users", retry: refreshUsers)
+            if let query = activeQuery {
+                Section {
+                    FilterStateRow(text: "Showing users matching \(query)") { usersQuery = "" }
+                }
+            }
             if case .failure(let error) = usersCompiled, !usersQuery.isEmpty {
                 AccountQueryProblemRow(error: error, fields: "name, scope, login, created, is:totp, is:admin, is:confined")
             }
@@ -276,7 +299,7 @@ struct AccessScreen: View {
                         }
                     }
                 } header: {
-                    Text(AccessUsers.summary(users)).accessibilityAddTraits(.isHeader)
+                    Text(activeQuery == nil ? AccessUsers.summary(users) : "\(filtered.count) of \(users.count == 1 ? "1 user" : "\(users.count) users")").accessibilityAddTraits(.isHeader)
                 }
             }
             Section {
@@ -302,7 +325,7 @@ struct AccessScreen: View {
         ResourceView(state: store.providers, noun: "identity providers", retry: refreshProviders) { providers in
             ssoList(providers)
         }
-        .searchable(text: $ssoQuery, prompt: "Name or issuer")
+        .accountSearchable($ssoQuery, prompt: "Name or issuer", when: store.providers.value != nil)
         .polling(.standard, version: changes.version([.account])) {
             await store.refreshProviders()
         }
@@ -316,6 +339,11 @@ struct AccessScreen: View {
         }
         return List {
             AccountRefreshError(state: store.providers, noun: "identity providers", retry: refreshProviders)
+            if let query = activeQuery {
+                Section {
+                    FilterStateRow(text: "Showing providers matching \(query)") { ssoQuery = "" }
+                }
+            }
             if filtered.isEmpty {
                 Section {
                     if providers.isEmpty {
@@ -357,6 +385,19 @@ struct AccessScreen: View {
 
     private func refreshProviders() {
         Task { await store.refreshProviders() }
+    }
+}
+
+extension View {
+    /// The search field only over a list that can be read: searching a
+    /// denied or companion-behind layer would do nothing and read as broken.
+    @ViewBuilder
+    func accountSearchable(_ text: Binding<String>, prompt: String, when readable: Bool) -> some View {
+        if readable {
+            searchable(text: text, prompt: prompt)
+        } else {
+            self
+        }
     }
 }
 
