@@ -160,8 +160,14 @@ public struct PathView: Codable, Equatable, Hashable, Sendable, Identifiable {
             : .pair(source: source, targetNode: targetNode)
     }
 
-    /// The key the app and the console use for `?path=`.
-    public var id: String { encodePathKey(address) }
+    /// The key the app and the console use for `?path=`: the pair (or the
+    /// check), whichever check definition measures it.
+    public var key: String { encodePathKey(address) }
+
+    /// Unique in the matrix. The server keeps one cell per check definition,
+    /// source and target, so two definitions measuring the same pair share a
+    /// key; the console's `${key}#${monitor_id}` tells them apart.
+    public var id: String { "\(key)#\(monitorID)" }
 
     public func displayState(judgesDegraded: Bool) -> PathDisplayState {
         PathDisplayState(state: state, reason: reason, judgesDegraded: judgesDegraded)
@@ -236,9 +242,9 @@ public struct PathsResponse: Decodable, Equatable, Sendable {
         beaconReplans = try c.decodeIfPresent([PathBeaconReplan].self, forKey: .beaconReplans) ?? []
     }
 
-    /// The path with this key, if the response has it.
+    /// The first path with this `?path=` key, if the response has it.
     public func path(key: String) -> PathView? {
-        paths.first { $0.id == key }
+        paths.first { $0.key == key }
     }
 }
 

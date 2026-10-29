@@ -906,6 +906,18 @@ private func checkPathDerivation() throws {
     try expectEqual(PathDisplayState(state: "unknown", reason: "check_paused", judgesDegraded: true).measure, .paused, "a paused check is the operator's choice")
     try expectEqual(PathDisplayState(state: "unknown", reason: "no_data", judgesDegraded: true).measure, .measured, "no data yet is still a measured path")
     try expectEqual(PathDisplayState(state: "down", reason: "path_paused", judgesDegraded: true).measure, .measured, "only unknown paths are skipped or paused")
+
+    // Two definitions measuring the same pair are two cells with one key.
+    let pair = try JSONDecoder().decode(PathsResponse.self, from: json(#"""
+    {"paths":[
+     {"source":"n1","target_node":"n2","target":"192.0.2.2:443","monitor_id":"m1","check_definition_id":"d1","state":"up"},
+     {"source":"n1","target_node":"n2","target":"192.0.2.2:7443","monitor_id":"m2","check_definition_id":"d2","state":"down"}
+    ]}
+    """#))
+    try expectEqual(pair.paths.count, 2, "both cells decode")
+    try expectEqual(pair.paths[0].key, pair.paths[1].key, "both cells share the pair key")
+    try expectEqual(Set(pair.paths.map(\.id)).count, 2, "ids stay unique in the matrix")
+    try expectEqual(pair.path(key: pair.paths[1].key)?.monitorID, "m1", "a pair key opens the first cell, as the console does")
 }
 
 // MARK: - Badge, DDNS, tasks
