@@ -42,6 +42,9 @@ struct DecisionPanel: View {
     var inline = false
     let approve: () -> Void
     let reject: () -> Void
+    /// A stale row's exits (Plan again, Dismiss) live in a card in the
+    /// content; this brings it into view from the pinned panel.
+    var showStaleExits: (() -> Void)?
 
     @Environment(\.dynamicTypeSize) private var typeSize
 
@@ -66,6 +69,11 @@ struct DecisionPanel: View {
                             .foregroundStyle(controls.reasonTone.glyph)
                     }
                     .frame(minHeight: Spacing.minimumTarget, alignment: .leading)
+                    if let showStaleExits {
+                        Button("Plan again or dismiss", systemImage: "arrow.down.circle", action: showStaleExits)
+                            .frame(minHeight: Spacing.minimumTarget)
+                            .accessibilityHint("Shows the stale plan's options")
+                    }
                 }
                 if controls.showsToggle {
                     Toggle("Apply after approval", isOn: $applyAfterApproval)

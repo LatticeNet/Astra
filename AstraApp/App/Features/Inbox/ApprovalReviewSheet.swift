@@ -13,6 +13,7 @@ struct ApprovalReviewSheet: View {
     @State private var position = ScrollPosition()
     @State private var planTop: CGFloat = 0
     @State private var contentOffset: CGFloat = 0
+    @State private var staleExitsRequest = 0
     @FocusState private var noteFocused: Bool
     @AccessibilityFocusState private var noteAccessibilityFocused: Bool
 
@@ -48,6 +49,9 @@ struct ApprovalReviewSheet: View {
                 }
                 .scrollPosition($position)
                 .onScrollGeometryChange(for: CGFloat.self) { $0.contentOffset.y } action: { _, offset in contentOffset = offset }
+                .onChange(of: staleExitsRequest) {
+                    withAnimation { proxy.scrollTo(Self.staleCardID, anchor: .top) }
+                }
                 .onChange(of: model.dismissing) { _, dismissing in
                     // The note field appears where the operator is looking,
                     // with the keyboard and VoiceOver focus on it.
@@ -60,7 +64,10 @@ struct ApprovalReviewSheet: View {
             .background(Color(uiColor: .systemGroupedBackground))
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 if let approval = model.approval, model.load == .loaded, heightClass != .compact {
-                    DecisionPanel(applyAfterApproval: $model.applyAfterApproval, controls: controls(approval), approve: approve, reject: reject)
+                    DecisionPanel(
+                        applyAfterApproval: $model.applyAfterApproval, controls: controls(approval), approve: approve, reject: reject,
+                        showStaleExits: hasStaleExits(approval) ? { staleExitsRequest += 1 } : nil
+                    )
                 }
             }
             .navigationTitle("Review")
@@ -84,6 +91,7 @@ struct ApprovalReviewSheet: View {
 
     private nonisolated static let contentSpace = "review.content"
     private nonisolated static let dismissCardID = "review.dismiss"
+    private nonisolated static let staleCardID = "review.stale"
 
     // MARK: Content
 
@@ -150,6 +158,16 @@ struct ApprovalReviewSheet: View {
             DecisionPanel(applyAfterApproval: $model.applyAfterApproval, controls: controls(approval), inline: true, approve: approve, reject: reject)
         }
         InboxReviewHeader(approval: approval, nodeName: nodeName(approval), openNode: openNode, disabled: model.inFlight)
+        // A stale row's ways forward sit right under the header, where
+        // Review opens, with the dismiss note beside them.
+        if hasStaleExits(approval) {
+            staleCard(approval)
+                .id(Self.staleCardID)
+            if model.dismissing {
+                dismissCard(approval)
+                    .id(Self.dismissCardID)
+            }
+        }
         if approval.isSSHGuardConfirm {
             InboxCard {
                 VStack(alignment: .leading, spacing: Spacing.s) {
@@ -195,11 +213,7 @@ struct ApprovalReviewSheet: View {
         if let notice = model.notice {
             InboxResultCard(text: notice, tone: .warn)
         }
-        // A stale row's ways forward sit above the plan, where Review opens.
-        if approval.isStale, ApprovalsDecisionGate.canReplan(approval) || ApprovalsDecisionGate.canDismiss(approval) {
-            staleCard(approval)
-        }
-        if model.dismissing {
+        if !approval.isStale, model.dismissing {
             dismissCard(approval)
                 .id(Self.dismissCardID)
         }
@@ -282,6 +296,10 @@ struct ApprovalReviewSheet: View {
         .frame(minHeight: Spacing.minimumTarget)
         Button("Cancel") { model.dismissing = false }
             .frame(minHeight: Spacing.minimumTarget)
+    }
+
+    private func hasStaleExits(_ approval: Approval) -> Bool {
+        approval.isStale && (ApprovalsDecisionGate.canReplan(approval) || ApprovalsDecisionGate.canDismiss(approval))
     }
 
     /// The two exits of a stale row: plan again (P tier) and dismiss (D tier).
