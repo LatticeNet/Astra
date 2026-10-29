@@ -173,6 +173,9 @@ struct TasksScreen: View {
                 VStack(alignment: .leading, spacing: Spacing.xs) {
                     Text(counts.failed24h == 0 ? "No failed runs in 24 hours" : (counts.failed24h == 1 ? "1 failed run in 24 hours" : "\(counts.failed24h) failed runs in 24 hours"))
                         .foregroundStyle(counts.failed24h > 0 ? Color.statusFailText : .primary)
+                        .onTapGesture { if counts.failed24h > 0, typeSize.isAccessibilitySize { query = "status:failed" } }
+                        .accessibilityAddTraits(counts.failed24h > 0 && typeSize.isAccessibilitySize ? .isButton : [])
+                        .accessibilityHint(counts.failed24h > 0 && typeSize.isAccessibilitySize ? "Shows the failed runs" : "")
                     // At accessibility sizes the runs below matter more than the tally.
                     if !typeSize.isAccessibilitySize {
                         Text(([counts.finished24h == 1 ? "1 finished" : "\(counts.finished24h) finished"] + live).joined(separator: ", "))
@@ -181,7 +184,7 @@ struct TasksScreen: View {
                 }
                 .frame(minHeight: Spacing.minimumTarget, alignment: .leading)
                 .accessibilityElement(children: .combine)
-                if counts.failed24h > 0 {
+                if counts.failed24h > 0, !typeSize.isAccessibilitySize {
                     Button("Show failed runs") { query = "status:failed" }
                 }
             }
