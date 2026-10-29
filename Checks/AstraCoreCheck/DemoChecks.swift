@@ -214,6 +214,8 @@ private func checkScenarios() async throws {
 
     let limited = demoClient(scenario: .limitedToken)
     try expectEqual(Set(try await limited.fetchIdentity().scopes), Set(TokenPresets.triage.scopes), "Limited token reports Triage")
+    let root = demoClient(scenario: .rootToken)
+    try expectEqual(Set(try await root.fetchIdentity().scopes), Set(TokenPresets.operatorPlusRoot.scopes), "Root token reports Operator plus root")
     try expectEqual(try await limited.listHumanPendingApprovals().count, 0, "Triage lists no approvals")
     try expectEqual(try await limited.fetchSSHGuardStatus().count, 0, "Triage reads no SSH Guard rows")
     do {

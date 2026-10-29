@@ -15,6 +15,9 @@ public enum DemoScenario: Sendable, Hashable {
     case limitedToken
     /// The Operator preset confined by a node allowlist (`DemoWorld.confinedNodeIDs`).
     case confinedToken
+    /// `/api/me` answers the Operator plus root preset, which adds
+    /// `task:run` and `terminal:open`, so the root-gated writes can be shown.
+    case rootToken
     /// No reveal session client.
     case noSession
     /// 403 `forbidden` for a path prefix after the first load.
@@ -26,7 +29,7 @@ public enum DemoScenario: Sendable, Hashable {
 
     public static let allCases: [DemoScenario] = [
         .normal, .quiet, .failing(prefix: nil), .stale, .offline, .limitedToken,
-        .confinedToken, .noSession, .forbidden(prefix: nil), .empty, .companionBehind(prefix: nil),
+        .confinedToken, .rootToken, .noSession, .forbidden(prefix: nil), .empty, .companionBehind(prefix: nil),
     ]
 
     /// Parses a launch argument value: "failing", "failing:/api/monitors".
@@ -41,6 +44,7 @@ public enum DemoScenario: Sendable, Hashable {
         case "offline": self = .offline
         case "limited", "limitedtoken", "limited-token": self = .limitedToken
         case "confined", "confinedtoken", "confined-token": self = .confinedToken
+        case "root", "roottoken", "root-token": self = .rootToken
         case "nosession", "no-session": self = .noSession
         case "forbidden": self = .forbidden(prefix: prefix)
         case "empty": self = .empty
@@ -59,6 +63,7 @@ public enum DemoScenario: Sendable, Hashable {
         case .offline: "offline"
         case .limitedToken: "limited-token"
         case .confinedToken: "confined-token"
+        case .rootToken: "root-token"
         case .noSession: "no-session"
         case .forbidden(let prefix): prefix.map { "forbidden:\($0)" } ?? "forbidden"
         case .empty: "empty"
@@ -76,6 +81,7 @@ public enum DemoScenario: Sendable, Hashable {
         case .offline: "Offline"
         case .limitedToken: "Limited token"
         case .confinedToken: "Confined token"
+        case .rootToken: "Root token"
         case .noSession: "No session"
         case .forbidden: "Forbidden"
         case .empty: "Empty"
