@@ -58,6 +58,7 @@ struct AuditScreen: View {
         .onAppear(perform: consumeQuery)
         .onAppear(perform: applyLaunchLayer)
         .onChange(of: appState.pendingQuery) { consumeQuery() }
+        .onChange(of: appState.auditLayer) { consumeQuery() }
         .polling(.standard, version: ActivityPollKey.of(changes.version([.audit, .tasks, .approvals]), request)) {
             await nodes.refreshIfOlder(than: 60)
             guard layer != .integrity else { return true }
@@ -363,6 +364,10 @@ struct AuditScreen: View {
 
     private func consumeQuery() {
         if let pending = appState.consumeQuery(ActivityScope.audit.rawValue) { query = pending }
+        if let linked = appState.auditLayer {
+            layer = linked
+            appState.auditLayer = nil
+        }
     }
 
     private func applyLaunchLayer() {

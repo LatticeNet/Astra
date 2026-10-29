@@ -39,6 +39,9 @@ final class AppState {
     /// consumed once by the segment root.
     var monitorView: String?
     var approvalsView: ApprovalsScope?
+    /// An audit layer a module asked for (Terminal's trail needs All, where
+    /// reaper and agent closes are), consumed once by the Audit scope.
+    var auditLayer: AuditLayer?
     /// Search text a count button or link asked for, keyed by scope name,
     /// consumed once by that scope root's `.searchable`.
     var pendingQuery: [String: String] = [:]

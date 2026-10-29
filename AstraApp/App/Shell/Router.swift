@@ -45,8 +45,9 @@ final class Router {
     }
 
     /// Selects a tab and, for a scoped tab, its segment. A query is handed to
-    /// the scope root's search field once.
-    func select(tab: AppTab, scope: String? = nil, query: String? = nil) {
+    /// the scope root's search field once, and so is an audit layer.
+    func select(tab: AppTab, scope: String? = nil, query: String? = nil, auditLayer: AuditLayer? = nil) {
+        if let auditLayer { appState.auditLayer = auditLayer }
         appState.selectedTab = tab
         switch tab {
         case .fleet:
