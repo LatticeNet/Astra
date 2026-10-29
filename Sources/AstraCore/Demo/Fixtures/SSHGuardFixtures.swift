@@ -42,13 +42,9 @@ public enum SSHGuardFixtures {
         return value as? String ?? ""
     }
 
-    /// The port sshd listens on per node: most run on 22, a few were moved.
+    /// The port sshd listens on, as the Shared status rows report it.
     static func sshPort(_ name: String) -> Int {
-        switch name {
-        case "relay-tyo-1": 3434
-        case "edge-ams-2": 2222
-        default: 22
-        }
+        22
     }
 
     /// An invented, stable knock sequence per node, in the knock range.

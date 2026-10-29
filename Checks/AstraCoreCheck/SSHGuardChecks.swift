@@ -339,7 +339,8 @@ private func checkSSHGuardDemoFlows() async throws {
     let tyo1Knock = try await client.sshGuardKnockState(nodeID: tyo1.id)
     let governing = try await client.fetchApproval(id: tyo1Knock.approvalID)
     let port = SSHGuardRotation.rotationSSHPort(serverPort: tyo1Knock.sshPort, governingPlan: governing.plan, observed: [])
-    try expectEqual(port, 3434, "relay-tyo-1 runs sshd on 3434")
+    try expectEqual(port, 22, "relay-tyo-1 runs sshd on 22, as its status reports")
+    try expectEqual(SSHGuardRotation.rotationRequest(nodeID: tyo1.id, sshPort: port ?? 0, from: .digest("d"), fallback: .terminal).sshPort, nil, "22 keeps the current port")
     try expectEqual(SSHGuardRotation.eligibility(selected: [tyo1Knock.knowledge], previousPorts: "", sshPort: port, governingPlan: governing.plan), .digest, "rotation by digest")
     try expectEqual(SSHGuardRotation.fallback(forPlan: governing.plan), .sources(["198.51.100.0/28", "2001:db8:22::/48"]), "governing sources")
 
