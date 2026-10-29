@@ -102,6 +102,30 @@ private func checkTranscriptCleaner() throws {
     try expectEqual(lines("\(e)[1K\(e)[2Kok\r\n"), ["ok"], "erasing an empty line")
     try expectEqual(lines("\(e)[5;10Hpos\(e)[2Aup\(e)[3Bdown\(e)[2J\r\n"), ["posupdown"], "moves off the line and screen clears are dropped")
     try expectEqual(lines("sl\u{08}\u{08}\(e)[Kls\r\n"), ["ls"], "a corrected command")
+
+    // apt's fancy progress: save, jump to the bottom row, draw, restore.
+    func aptStatus(_ percent: String, _ bar: String) -> String {
+        "\(e)7\(e)[24;0f\(e)[42m\(e)[30mProgress: [\(percent)%]\(e)[49m\(e)[39m [\(bar)] \(e)8"
+    }
+    let apt = "\n\(e)7\(e)[0;23r\(e)8\(e)[1A"
+        + "Selecting previously unselected package jq.\r\n" + aptStatus(" 20", "####......")
+        + "Unpacking jq (1.6-2.1) ...\r\n" + aptStatus(" 60", "######....")
+        + "Setting up jq (1.6-2.1) ...\r\n" + aptStatus("100", "##########")
+        + "\n\(e)7\(e)[0;24r\(e)8\(e)[1A\(e)[J$ "
+    let aptLines = lines(apt)
+    try expect(!aptLines.contains { $0.contains("Progress") || $0.contains("#") }, "apt's status line is not merged into output: \(aptLines)")
+    for line in ["Selecting previously unselected package jq.", "Unpacking jq (1.6-2.1) ...", "Setting up jq (1.6-2.1) ..."] {
+        try expect(aptLines.contains(line), "a dpkg line stays whole: \(line) in \(aptLines)")
+    }
+    try expectEqual(aptLines.last, "$", "the prompt after apt")
+    try expectEqual(lines("half\(e)7\(e)[24;1Hstatus\(e)8 done\r\n"), ["half done"], "a restore returns to the saved column")
+    try expectEqual(lines("\(e)[s\(e)[1;1Htop\(e)[ukept\r\n"), ["kept"], "CSI s and u save and restore")
+    try expectEqual(lines("a\(e)7\(e)[5;1Hmoved\r\nnext\r\n"), ["a", "moved", "next"], "whole lines after a move are kept when no restore comes")
+    var splitApt = TranscriptCleaner()
+    splitApt.feed("x\(e)7\(e)[24;0fProg")
+    try expectEqual(splitApt.lines.map(\.text), ["x"], "a half-drawn status line never shows")
+    splitApt.feed("ress\(e)8y\r\n")
+    try expectEqual(splitApt.lines.map(\.text), ["xy"], "the status line split across events")
     try expectEqual(lines("lss\u{08} \u{08}\r\n"), ["ls"], "a backspace echo")
     try expectEqual(lines("a\tb\r\n12345678\tc\r\n"), ["a       b", "12345678        c"], "tab stops")
 
@@ -330,7 +354,9 @@ private func checkTerminalDemo() async throws {
     for event in rest.events { cleaner.feed(event.data) }
     let text = cleaner.lines.map(\.text)
     try expect(text.contains("root@edge-tyo-1:~# systemctl status sing-box --no-pager"), "the corrected command reads cleanly: \(text.prefix(2))")
-    try expect(text.contains("Setting up libonig5:amd64 (6.9.8-1) ..."), "the progress bar split across events is gone")
+    for line in ["Unpacking libonig5:amd64 (6.9.8-1) ...", "Setting up libonig5:amd64 (6.9.8-1) ...", "Setting up jq (1.6-2.1) ..."] {
+        try expect(text.contains(line), "apt's status line, split across events, leaves dpkg lines whole: \(line)")
+    }
     try expect(!text.contains { $0.contains("\u{1B}") || $0.contains("Progress:") }, "no escape or progress residue")
     try expectEqual(text.last, "root@edge-tyo-1:~#", "the prompt is the last line")
     let empty = try await client().terminalEvents(sessionID: "term_demo_7f3k2a", cursor: rest.events.last!.seq)

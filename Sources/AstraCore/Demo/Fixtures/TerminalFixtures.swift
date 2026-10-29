@@ -61,6 +61,11 @@ public enum TerminalFixtures {
         "\(text)\r\n\(esc)[?2004l\r"
     }
 
+    /// One draw of apt's fancy progress line (apt-pkg PackageManagerFancy).
+    private static func aptStatus(_ percent: String, _ bar: String) -> String {
+        "\(esc)7\(esc)[24;0f\(esc)[42m\(esc)[30mProgress: [\(percent)%]\(esc)[49m\(esc)[39m [\(bar)] \(esc)8"
+    }
+
     public static let sessions: [Session] = [
         Session(
             id: "term_demo_7f3k2a", node: "edge-tyo-1", status: "open",
@@ -71,7 +76,7 @@ public enum TerminalFixtures {
                     + "     Loaded: loaded (/etc/systemd/system/sing-box.service; \(esc)[0;1;32menabled\(esc)[0m; preset: \(esc)[0;1;32menabled\(esc)[0m)\r\n"
                     + "     Active: \(esc)[0;1;32mactive (running)\(esc)[0m for 6 days\r\n"
                     + "   Main PID: 812 (sing-box)\r\n      Tasks: 9 (limit: 2307)\r\n     Memory: 41.2M\r\n        CPU: 18min 2.114s\r\n",
-                prompt("edge-tyo-1") + command("apt-get install -y jq"),
+                prompt("edge-tyo-1") + command("apt install -y jq"),
                 "Reading package lists... 0%\rReading package lists... 100%\rReading package lists... Done\r\n"
                     + "Building dependency tree... 0%\rBuilding dependency tree... 50%\rBuilding dependency tree... Done\r\n"
                     + "The following NEW packages will be installed:\r\n  jq libjq1 libonig5\r\n"
@@ -80,10 +85,20 @@ public enum TerminalFixtures {
                     + "Get:2 http://deb.example.net/debian bookworm/main amd64 libjq1 amd64 1.6-2.1 [135 kB]\r\n"
                     + "Get:3 http://deb.example.net/debian bookworm/main amd64 jq amd64 1.6-2.1 [64.9 kB]\r\n"
                     + "Fetched 388 kB in 0s (1210 kB/s)\r\n",
-                // The progress bar is split across two events, inside an escape sequence.
-                "Progress: [ 20%] [##########..................]\r\(esc)[KProgress: [ 60%] [###############",
-                "####.........]\r\(esc)",
-                "[KSetting up libonig5:amd64 (6.9.8-1) ...\r\nSetting up libjq1:amd64 (1.6-2.1) ...\r\nSetting up jq (1.6-2.1) ...\r\n",
+                // apt's bottom progress line, as apt draws it: reserve the last
+                // row, then save the cursor, jump there, draw and restore. The
+                // second status draw is split across two events, inside a sequence.
+                "\n\(esc)7\(esc)[0;23r\(esc)8\(esc)[1A"
+                    + "Selecting previously unselected package libonig5:amd64.\r\n"
+                    + "(Reading database ... 34512 files and directories currently installed.)\r\n"
+                    + "Preparing to unpack .../libonig5_6.9.8-1_amd64.deb ...\r\n"
+                    + aptStatus(" 20", "##########..................")
+                    + "Unpacking libonig5:amd64 (6.9.8-1) ...\r\n"
+                    + "\(esc)7\(esc)[24;0f\(esc)[42m\(esc)[30mProgress: [ 60%]\(esc)[49m\(esc)[39m [################",
+                "....] \(esc)",
+                "8Setting up libonig5:amd64 (6.9.8-1) ...\r\n" + aptStatus(" 80", "######################......")
+                    + "Setting up libjq1:amd64 (1.6-2.1) ...\r\nSetting up jq (1.6-2.1) ...\r\n"
+                    + "\n\(esc)7\(esc)[0;24r\(esc)8\(esc)[1A\(esc)[J",
                 prompt("edge-tyo-1") + command("ls --color=auto /etc/sing-box"),
                 "\(esc)[0m\(esc)[01;34mcerts\(esc)[0m  config.json  \(esc)[01;32mreload.sh\(esc)[0m  rules.srs\r\n",
                 prompt("edge-tyo-1") + command("journalctl -u sing-box -n 3 --no-pager -o cat"),

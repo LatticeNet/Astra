@@ -10,6 +10,12 @@ import Foundation
 /// out and marked with one `.fullScreen` line; `fullScreenActive` says the
 /// program is still running when the output ends.
 ///
+/// A program that saves the cursor, draws somewhere else on the screen and
+/// restores it (apt's bottom progress line) does not touch the line it left:
+/// what it draws after moving away goes to a scratch line that the restore
+/// throws away. A move without a saved cursor is ignored, so the output after
+/// `clear` is kept.
+///
 /// Lines are at most `maxColumns` wide: a cursor move stops at the right
 /// margin and a character written past it wraps to a new line, as a terminal
 /// with autowrap does. The bound matters because the counts in a cursor
@@ -50,6 +56,18 @@ public struct TranscriptCleaner: Sendable, Equatable {
         case string(sawEscape: Bool)
     }
 
+    /// Where ESC 7 or CSI s left the cursor: its column, and the line it was on.
+    private struct SavedCursor: Sendable, Equatable {
+        var column: Int
+        var lineID: Int
+    }
+
+    /// The real line, set aside while the program draws elsewhere.
+    private struct Parked: Sendable, Equatable {
+        var line: [Unicode.Scalar]
+        var column: Int
+    }
+
     /// Lines kept in memory; older ones are dropped and counted.
     public var maxLines: Int
     /// The widest a line gets before it wraps.
@@ -59,6 +77,8 @@ public struct TranscriptCleaner: Sendable, Equatable {
     private var current: [Unicode.Scalar] = []
     private var column = 0
     private var mode = Mode.ground
+    private var saved: SavedCursor?
+    private var parked: Parked?
     private var nextID = 1
     /// True while a full-screen program holds the alternate screen.
     public private(set) var fullScreenActive = false
@@ -104,9 +124,14 @@ public struct TranscriptCleaner: Sendable, Equatable {
         lines.allSatisfy { $0.kind == .text && $0.text.isEmpty }
     }
 
+    /// The unfinished real line; a scratch line drawn elsewhere never shows.
     private var currentText: String {
+        Self.trimmed(parked?.line ?? current)
+    }
+
+    private static func trimmed(_ scalars: [Unicode.Scalar]) -> String {
         var view = String.UnicodeScalarView()
-        view.append(contentsOf: current)
+        view.append(contentsOf: scalars)
         var text = String(view)
         while text.last == " " { text.removeLast() }
         return text
@@ -195,10 +220,23 @@ public struct TranscriptCleaner: Sendable, Equatable {
         case 0x45: // E, next line
             mode = .ground
             newline()
+        case 0x37: // 7, save cursor
+            mode = .ground
+            saveCursor()
+        case 0x38: // 8, restore cursor
+            mode = .ground
+            restoreCursor()
+        case 0x44, 0x4D: // D index, M reverse index
+            mode = .ground
+            moveOffLine()
+        case 0x63: // c, full reset
+            mode = .ground
+            returnToLine()
+            saved = nil
         case 0x00...0x1F:
             control(scalar)
         default:
-            // Save and restore cursor, keypad modes, index, reset: nothing to keep.
+            // Keypad modes and the like draw nothing.
             mode = .ground
         }
     }
@@ -237,6 +275,24 @@ public struct TranscriptCleaner: Sendable, Equatable {
         // Everything drawn on the alternate screen is left out.
         guard !fullScreenActive else { return }
 
+        if !isPrivate {
+            switch final {
+            case "s" where parameters.isEmpty:
+                saveCursor()
+                return
+            case "u" where parameters.isEmpty:
+                restoreCursor()
+                return
+            case "H", "f", "A", "B", "d", "E", "F", "r":
+                // Off the line only matters while a restore is due; otherwise
+                // the move is dropped and output keeps going to this line.
+                moveOffLine()
+                return
+            default:
+                break
+            }
+        }
+
         switch final {
         case "K":
             eraseInLine(first ?? 0)
@@ -262,8 +318,7 @@ public struct TranscriptCleaner: Sendable, Equatable {
                 }
             }
         default:
-            // Colors (m), cursor up, down and position, scroll regions,
-            // screen clears and modes do not change a transcript line.
+            // Colors (m), screen clears and modes do not change a transcript line.
             return
         }
     }
@@ -302,13 +357,53 @@ public struct TranscriptCleaner: Sendable, Equatable {
 
     private mutating func newline() {
         guard !fullScreenActive else { return }
+        if let parked {
+            // A program that prints whole lines after moving away was not
+            // drawing a status line, so its output is kept, after the real line.
+            self.parked = nil
+            saved = nil
+            let text = Self.trimmed(parked.line)
+            if !text.isEmpty { commit(Line(id: nextID, text: text)) }
+        }
         commit(Line(id: nextID, text: currentText))
         current.removeAll()
         column = 0
     }
 
+    private mutating func saveCursor() {
+        guard !fullScreenActive, parked == nil else { return }
+        saved = SavedCursor(column: column, lineID: nextID)
+    }
+
+    private mutating func restoreCursor() {
+        guard !fullScreenActive, let saved else { return }
+        returnToLine()
+        // After a newline the saved line is committed; the cursor stays put.
+        if saved.lineID == nextID { column = min(saved.column, lastColumn) }
+        // Forgotten once used, so a later move (a clear before the prompt)
+        // is dropped instead of sending the output to a scratch line.
+        self.saved = nil
+    }
+
+    private mutating func moveOffLine() {
+        guard !fullScreenActive, saved != nil, parked == nil else { return }
+        parked = Parked(line: current, column: column)
+        current.removeAll()
+        column = 0
+    }
+
+    /// Drops the scratch line and puts the real line back.
+    private mutating func returnToLine() {
+        guard let parked else { return }
+        current = parked.line
+        column = parked.column
+        self.parked = nil
+    }
+
     private mutating func setFullScreen(_ on: Bool) {
         guard on != fullScreenActive else { return }
+        returnToLine()
+        saved = nil
         if on {
             if !currentText.isEmpty { newline() }
             current.removeAll()
