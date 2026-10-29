@@ -59,6 +59,9 @@ struct PublishingScreen: View {
             }
             .onChange(of: tokens) { _, new in if new.isEmpty, lens != .all { lens = .all } }
             .onChange(of: query) { offerRoutes(force: true) }
+            // Each view reads the search with its own grammar, so a query
+            // typed for one never silently filters another.
+            .onChange(of: selected) { query = "" }
             .onChange(of: store.records.value) { offerRoutes(force: false) }
             .refreshable {
                 await store.refresh()
@@ -151,21 +154,31 @@ struct PublishingScreen: View {
         let title = origin == "plugin" ? "Shares and identity links" : (origin == "kv" ? "KV" : "Static")
         let lensValue: PlatformPublishingLens = origin == "plugin" ? .share : (origin == "kv" ? .kv : .static)
         if visible || store.records.value == nil {
-            let serving = records.filter { PlatformRouteState.of($0, now: now) == .serving }.count
-            let off = records.count - serving
+            let states = records.map { PlatformRouteState.of($0, now: now) }
+            let serving = states.filter { $0 == .serving }.count
+            let expired = states.filter { $0 == .expired }.count
+            let disabled = states.filter { $0 == .disabled }.count
             Button {
                 lens = lensValue
                 selected = .routes
             } label: {
-                    let doubt = recordsDoubt(now: now)
-                let style = records.isEmpty
-                    ? StatusStyle(word: "no routes", symbol: originSymbol(origin), tone: .quiet)
-                    : (off > 0
-                        ? StatusStyle(word: "\(off) not serving", symbol: "exclamationmark.triangle.fill", tone: .warn)
-                        : (doubt == nil ? StatusStyle(word: "all serving", symbol: "checkmark.circle.fill", tone: .ok) : PlatformConfidence.style))
+                let doubt = recordsDoubt(now: now)
+                // Only an expired route warns, and Needs attention lists it; a
+                // route switched off on purpose is reported in the quiet style.
+                let style: StatusStyle = if records.isEmpty {
+                    StatusStyle(word: "no routes", symbol: originSymbol(origin), tone: .quiet)
+                } else if expired > 0 {
+                    StatusStyle(word: "\(expired) expired", symbol: "clock.badge.xmark", tone: .warn)
+                } else if doubt != nil {
+                    PlatformConfidence.style
+                } else if disabled > 0 {
+                    StatusStyle(word: "\(disabled) off", symbol: "minus.circle", tone: .quiet)
+                } else {
+                    StatusStyle(word: "all serving", symbol: "checkmark.circle.fill", tone: .ok)
+                }
                 StatusRow(style: style, title: title,
                           detail: records.isEmpty ? nil : (records.count == 1 ? "1 route" : "\(records.count) routes"),
-                          reason: off == 0 && !records.isEmpty ? doubt : nil,
+                          reason: expired == 0 && !records.isEmpty ? doubt : nil,
                           accessibilityPhrase: "\(title), \(style.word), \(serving) of \(records.count) serving")
             }
             .tint(.primary)
@@ -351,6 +364,7 @@ struct PublishingScreen: View {
 
     private var tokensView: some View {
         List {
+            if let error = tokenQueryError { queryErrorRow(error) }
             ForEach(PlatformStorageKind.allCases, id: \.self) { kind in
                 if lens == .all || lens.origin == kind.rawValue {
                     tokenSection(kind)
@@ -411,6 +425,12 @@ struct PublishingScreen: View {
         } footer: {
             if state.value != nil { FreshnessFooter(state: state, interval: 60) }
         }
+    }
+
+    private var tokenQueryError: String? {
+        let text = query.trimmingCharacters(in: .whitespaces)
+        guard !text.isEmpty, case .failure(let error) = LatticeQueryEngine.compile(text, provider: PlatformTokenQueryFields.self) else { return nil }
+        return error.localizedDescription
     }
 
     private func filterTokens(_ list: [PlatformStorageToken]) -> [PlatformStorageToken] {
@@ -615,7 +635,7 @@ struct PlatformBucketRow: View {
         let owner = PlatformBucketOwner.of(entry)
         let count = entry.entries == 1 ? "1 entry" : "\(entry.entries) entries"
         let detail = entry.reserved
-            ? "Typed private state the server owns; its contents are refused to every scope"
+            ? "Server-owned; no scope can read it"
             : [displayName?.isEmpty == false ? displayName : nil, owner.sentence, count, entry.registered ? nil : "not registered"].compactMap { $0 }.joined(separator: " · ")
         StatusRow(style: .platformBucket(entry), title: PlatformFormat.breakable(entry.name), detail: detail, titleIsIdentifier: true,
                   accessibilityPhrase: "\(entry.name), \(detail)")
