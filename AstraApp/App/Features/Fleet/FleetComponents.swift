@@ -143,9 +143,29 @@ struct FleetListState<Value: Sendable, Content: View>: View {
     let noun: String
     let retry: () -> Void
     @ViewBuilder let content: (Value) -> Content
+    @Environment(NetworkMonitor.self) private var network
 
     var body: some View {
-        ResourceView(state: state, noun: noun, retry: retry, content: content)
+        // Polling stops while the path is unsatisfied, so a screen opened offline
+        // would otherwise keep its placeholders forever and read as still loading.
+        if !network.isSatisfied, state.value == nil, Self.isWaiting(state) {
+            WholeScreenState {
+                ContentUnavailableView {
+                    Label("Offline", systemImage: "wifi.slash")
+                } description: {
+                    Text("There is no connection, and nothing was loaded here before it dropped. This screen loads when the connection returns.")
+                }
+            }
+        } else {
+            ResourceView(state: state, noun: noun, retry: retry, content: content)
+        }
+    }
+
+    private static func isWaiting(_ state: ResourceState<Value>) -> Bool {
+        switch state {
+        case .idle, .loading, .failed: true
+        case .loaded, .denied, .companionBehind: false
+        }
     }
 }
 

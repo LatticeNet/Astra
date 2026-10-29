@@ -28,7 +28,9 @@ struct NodeNetworkScreen: View {
             }
             .listStyle(.insetGrouped)
         }
-        .navigationTitle(store.record(id: nodeID)?.node.displayName ?? "Network")
+        .navigationTitle(store.record(id: nodeID)?.node.displayName ?? nodeID)
+        // Opened by a link, the nodes list may not be loaded yet; the title needs it.
+        .task { if store.nodes.value == nil { _ = await store.refresh() } }
         .navigationSubtitle("Effective network")
         .navigationBarTitleDisplayMode(.inline)
         .refreshable { await load() }
