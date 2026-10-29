@@ -252,7 +252,12 @@ private func checkTasksTokens() throws {
     let unresolved = TasksTokens.parse("node:nowhere node: ", grammar: TasksModel.grammar, resolvers: resolvers)
     try expectEqual(unresolved.problems.map(\.kind), [.unresolved, .emptyValue], "unresolved and empty tokens reported")
     try expectEqual(unresolved.values["node"], "nowhere", "an unresolved node is sent as typed")
-    try expectEqual(TasksModel.normalizedQuery("status:running node:a"), "status:leased node:a", "running reads as leased")
+    try expectEqual(TasksTokens.parse("status:running", grammar: TasksModel.grammar).enums["status"], ["leased"], "running reads as leased")
+    // Quotes survive the alias: a quoted node name stays one value, a quoted key stays text.
+    let quoted = TasksTokens.parse(#"status:Running node:"edge tyo 1" "node:x""#, grammar: TasksModel.grammar)
+    try expectEqual(quoted.values["node"], "edge tyo 1", "a quoted node name is one value")
+    try expectEqual(quoted.text, "node:x", "a quoted key is text")
+    try expectEqual(quoted.enums["status"], ["leased"], "the alias applies after parsing")
 }
 
 private func checkTasksFilter() throws {

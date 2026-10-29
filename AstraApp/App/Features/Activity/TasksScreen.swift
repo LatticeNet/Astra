@@ -69,7 +69,7 @@ struct TasksScreen: View {
         }
         // An empty directory cannot tell a typo from a name: send what was typed.
         let resolvers: [String: @Sendable (String) -> String?] = directory.isEmpty ? [:] : ["node": resolve]
-        return TasksTokens.parse(TasksModel.normalizedQuery(query), grammar: TasksModel.grammar, resolvers: resolvers)
+        return TasksTokens.parse(query, grammar: TasksModel.grammar, resolvers: resolvers)
     }
 
     private var filter: TasksListFilter {

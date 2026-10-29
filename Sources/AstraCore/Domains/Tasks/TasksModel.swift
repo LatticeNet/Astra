@@ -15,18 +15,11 @@ public enum TasksModel {
     /// `status`, `node`, `origin` and `approval`. The task list has no text
     /// search, so free words are reported rather than sent.
     public static let grammar = TasksTokenGrammar(fields: [
-        TasksTokenField(key: "status", kind: .enumeration(statuses)),
+        TasksTokenField(key: "status", kind: .enumeration(statuses), aliases: ["running": "leased", "canceled": "cancelled"]),
         TasksTokenField(key: "node", resolve: "node"),
         TasksTokenField(key: "origin", kind: .enumeration(origins)),
         TasksTokenField(key: "approval"),
     ])
-
-    /// `running` is the word an operator types for a leased run.
-    public static func normalizedQuery(_ text: String) -> String {
-        TasksTokens.scan(text).map { word in
-            word.word.lowercased().hasPrefix("status:") ? word.word.replacingOccurrences(of: "running", with: "leased", options: .caseInsensitive) : word.word
-        }.joined(separator: " ")
-    }
 
     // MARK: Liveness
 

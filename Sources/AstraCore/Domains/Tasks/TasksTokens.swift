@@ -19,11 +19,14 @@ public struct TasksTokenField: Sendable, Hashable {
     public var kind: TasksTokenKind
     /// Names a resolver (`node`) that turns a typed name into an id.
     public var resolve: String?
+    /// Enumeration words an operator types for a known value (`running` for `leased`).
+    public var aliases: [String: String]
 
-    public init(key: String, kind: TasksTokenKind = .value, resolve: String? = nil) {
+    public init(key: String, kind: TasksTokenKind = .value, resolve: String? = nil, aliases: [String: String] = [:]) {
         self.key = key
         self.kind = kind
         self.resolve = resolve
+        self.aliases = aliases
     }
 }
 
@@ -158,7 +161,8 @@ public enum TasksTokens {
                 }
             case .enumeration(let known):
                 var set = sets[field.key] ?? []
-                for part in value.lowercased().split(separator: ",").map({ $0.trimmingCharacters(in: .whitespaces) }) where !part.isEmpty {
+                for typed in value.lowercased().split(separator: ",").map({ $0.trimmingCharacters(in: .whitespaces) }) where !typed.isEmpty {
+                    let part = field.aliases[typed] ?? typed
                     if known.contains(part) {
                         set.insert(part)
                     } else {
