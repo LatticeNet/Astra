@@ -15,7 +15,8 @@ extension StatusStyle {
         case .missing: StatusStyle(word: "bundle missing", symbol: "shippingbox.and.arrow.backward", tone: .fail)
         case .stopped: StatusStyle(word: "stopped", symbol: "stop.circle", tone: .warn)
         case .disabled: StatusStyle(word: "disabled", symbol: "minus.circle", tone: .quiet)
-        case .pending: StatusStyle(word: "waiting to activate", symbol: "hourglass", tone: .quiet)
+        // Installed plugins move only when an operator activates them.
+        case .pending: StatusStyle(word: "installed, not active", symbol: "pause.circle", tone: .quiet)
         case .unknown:
             row.status == "active"
                 ? StatusStyle(word: "active", symbol: "puzzlepiece.extension", tone: .quiet)
@@ -90,7 +91,7 @@ extension PlatformPluginHealth {
         case .failed: "Failed"
         case .missing: "Bundle missing"
         case .stopped: "Stopped"
-        case .pending: "Waiting to activate"
+        case .pending: "Installed"
         case .unknown: "Active"
         case .running: "Running"
         case .disabled: "Disabled"
