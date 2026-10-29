@@ -201,7 +201,15 @@ private func checkAuditPaging() async throws {
         "\(auditBase)/api/audit?limit=500&offset=0": (200, json(#"{"events":[{"id":"y1"}],"total":9,"limit":500,"offset":0,"scanned":9,"complete":true}"#)),
     ])
     let capped = try await AuditExport.collect(AuditQuery(), client: LatticeClient(baseURL: URL(string: auditBase)!, credential: LatticeCredential(bearerToken: "t"), transport: capTransport), maxPages: 1)
-    try expectEqual(capped.partial?.scanned, 9, "page cap labelled partial")
+    try expectEqual(capped.partial?.label, "Partial: first 1 of 9 events", "page cap labelled by what the file holds")
+
+    // An event appended between pages shifts the offsets; the repeated row is written once.
+    let shiftTransport = MockTransport(responses: [
+        "\(auditBase)/api/audit?limit=500&offset=0": (200, json(#"{"events":[{"id":"z1"},{"id":"z2"}],"total":3,"limit":500,"offset":0}"#)),
+        "\(auditBase)/api/audit?limit=500&offset=2": (200, json(#"{"events":[{"id":"z2"},{"id":"z3"}],"total":4,"limit":500,"offset":2}"#)),
+    ])
+    let shifted = try await AuditExport.collect(AuditQuery(), client: LatticeClient(baseURL: URL(string: auditBase)!, credential: LatticeCredential(bearerToken: "t"), transport: shiftTransport))
+    try expectEqual(shifted.events.map(\.id), ["z1", "z2", "z3"], "a shifted row is not written twice")
 }
 
 private func checkAuditDemo() async throws {

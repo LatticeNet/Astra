@@ -138,23 +138,34 @@ public enum AuditExport {
         progress: @Sendable (Int) async -> Void = { _ in }
     ) async throws -> AuditExportResult {
         var events: [AuditEvent] = []
+        var seen = Set<String>()
         var page = query
         page.limit = AuditModel.maxPageSize
         page.offset = 0
         var serverPartial = false
         var scanned = 0
-        for _ in 0..<maxPages {
+        var total = 0
+        for index in 0..<maxPages {
             let answer = try await client.auditPage(page)
-            events += answer.events
+            // The log grows at the newest end while the export pages by offset;
+            // an id seen on the page before is a shifted row, not a new event.
+            for event in answer.events where seen.insert(event.id).inserted { events.append(event) }
             serverPartial = serverPartial || answer.isPartial
             scanned = max(scanned, answer.scanned ?? 0)
+            total = max(total, answer.total)
             page.offset += answer.events.count
             await progress(events.count)
             if answer.events.isEmpty || page.offset >= answer.total {
                 return AuditExportResult(events: events, partial: serverPartial ? AuditExportScan(scanned: max(scanned, events.count)) : nil)
             }
+            if index == 0, query.atTo == nil, let newest = answer.events.compactMap(\.at).max() {
+                // Hold the window's end at the first page's newest event, so later
+                // pages keep their offsets. at_to is inclusive (After excludes);
+                // the next whole second covers a stamp the wire format rounds down.
+                page.atTo = Date(timeIntervalSince1970: (newest.timeIntervalSince1970 + 1).rounded(.down))
+            }
         }
-        return AuditExportResult(events: events, partial: AuditExportScan(scanned: max(scanned, events.count)))
+        return AuditExportResult(events: events, partial: AuditExportScan(scanned: max(scanned, events.count), stoppedAt: events.count, of: total))
     }
 
     /// "lattice-audit.csv", or "lattice-audit-partial.csv" for a partial scan.
@@ -185,13 +196,23 @@ public enum AuditExportFormat: String, Sendable, Hashable, CaseIterable {
 /// A scan the server or the export stopped before the end of the range.
 public struct AuditExportScan: Sendable, Hashable {
     public var scanned: Int
+    /// Set when this iPhone's page cap stopped the export: the events in the
+    /// file, and how many the server said match.
+    public var stoppedAt: Int?
+    public var of: Int?
 
-    public init(scanned: Int) {
+    public init(scanned: Int, stoppedAt: Int? = nil, of: Int? = nil) {
         self.scanned = scanned
+        self.stoppedAt = stoppedAt
+        self.of = of
     }
 
-    /// "Partial: scanned 10000 events"
-    public var label: String { "Partial: scanned \(scanned) events" }
+    /// "Partial: scanned 10000 events", or for the page cap what the file
+    /// holds: "Partial: first 25000 of 60000 events".
+    public var label: String {
+        if let stoppedAt, let of, of > stoppedAt { return "Partial: first \(stoppedAt) of \(of) events" }
+        return "Partial: scanned \(scanned) events"
+    }
 }
 
 public struct AuditExportResult: Sendable {
