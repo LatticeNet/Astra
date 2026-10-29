@@ -114,6 +114,7 @@ private func checkAuditExportEdges() throws {
     try expect(AuditExport.headRecord(AuditChainStatus(enabled: true, ok: false, count: 3), verifiedAt: Date()) == nil, "no head for a broken chain")
     try expectEqual(AuditExport.csvCell("plain"), "plain", "plain cell")
     try expectEqual(AuditExport.csvCell("a\"b"), "\"a\"\"b\"", "quoted cell")
+    try expectEqual(AuditExport.csvCell("line one\r\nline two"), "\"line one\r\nline two\"", "a CRLF cell is quoted, as the console's /[\",\\n]/ does")
 }
 
 // MARK: Requests

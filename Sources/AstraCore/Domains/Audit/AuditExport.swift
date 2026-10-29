@@ -15,7 +15,8 @@ public enum AuditExport {
 
     /// `csvCell`: quoted when the text holds a quote, comma or newline.
     public static func csvCell(_ text: String) -> String {
-        guard text.contains(where: { $0 == "\"" || $0 == "," || $0 == "\n" }) else { return text }
+        // Scalars, not Characters: "\r\n" is one Character that is not "\n".
+        guard text.unicodeScalars.contains(where: { $0 == "\"" || $0 == "," || $0 == "\n" }) else { return text }
         return "\"" + text.replacingOccurrences(of: "\"", with: "\"\"") + "\""
     }
 
