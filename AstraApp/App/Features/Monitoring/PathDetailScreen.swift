@@ -320,18 +320,15 @@ struct PathDetailScreen: View {
     }
 
     /// Beacon replans for either end of the path, as the console's
-    /// `replanStep` reads them: none is settled, a waiting approval is opened
+    /// `replanStep` reads them: none is settled and shows nothing (a beacon
+    /// path may be unknown for another reason, such as beacon_not_enabled),
+    /// a waiting approval is opened
     /// rather than filed again, and only a difference with no plan files one.
     @ViewBuilder
     private func beaconSection(_ item: MonitoringPathItem) -> some View {
         let replans = (store.paths.value?.beaconReplans ?? []).filter { $0.nodeID == item.path.targetNode || $0.nodeID == item.path.source }
-        if item.path.method == "beacon" || !replans.isEmpty {
+        if !replans.isEmpty {
             Section {
-                if replans.isEmpty {
-                    Label("Beacon sources match the applied plan.", systemImage: "checkmark.circle")
-                        .foregroundStyle(.secondary)
-                        .frame(minHeight: Spacing.minimumTarget)
-                }
                 ForEach(replans, id: \.nodeID) { replan in
                     replanRows(replan)
                 }
