@@ -51,7 +51,10 @@ extension InventoryUpcomingKind {
 }
 
 /// One machine: its name, the renewal countdown, vendor and region, and the
-/// monthly equivalent as the trailing figure.
+/// monthly equivalent as the trailing figure (the section header and the
+/// spend header already say it is a month, so the figure carries no suffix).
+/// A machine with no monthly figure shows its billing word there instead,
+/// which keeps the detail line short enough for the vendor with Bold Text.
 struct InventoryMachineRow: View {
     let machine: MachineProfile
     let today: InventoryDay
@@ -65,9 +68,10 @@ struct InventoryMachineRow: View {
         let style = StatusStyle.inventoryRenewal(state)
         let monthly = InventoryCost.monthlyEquivalentCents(machine)
         let money = monthly > 0 ? InventoryCurrency.format(cents: monthly, currency: machine.currency, locale: locale) : nil
+        let billing = billingWord
         let detail = detailLine
-        StatusRow(style: style, title: machine.inventoryName, detail: detail, trailing: money.map { "\($0)/mo" })
-            .accessibilityLabel([machine.inventoryName, style.word, detail, money.map { "\($0) a month" }].compactMap { $0 }.joined(separator: ", "))
+        StatusRow(style: style, title: machine.inventoryName, detail: detail, trailing: money ?? billing)
+            .accessibilityLabel([machine.inventoryName, style.word, detail, money.map { "\($0) a month" } ?? billing].compactMap { $0 }.joined(separator: ", "))
     }
 
     private var detailLine: String? {
@@ -77,13 +81,17 @@ struct InventoryMachineRow: View {
         parts.append(vendor.isEmpty ? "No vendor" : vendor)
         let region = machine.region.trimmingCharacters(in: .whitespaces)
         if showsRegion, !region.isEmpty { parts.append(region) }
-        switch InventoryCost.billing(machine) {
-        case .free: parts.append("free")
-        case .onetime: parts.append("one-time")
-        case .unpriced: parts.append("not priced")
-        default: break
-        }
         return parts.joined(separator: ", ")
+    }
+
+    private var billingWord: String? {
+        guard machine.isProfiled else { return nil }
+        switch InventoryCost.billing(machine) {
+        case .free: return "Free"
+        case .onetime: return "One-time"
+        case .unpriced: return "Not priced"
+        default: return nil
+        }
     }
 }
 
