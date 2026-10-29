@@ -70,7 +70,7 @@ final class ConfirmFlowModel {
 
     /// Text entry, a dry run or toggles open the sheet at the large detent.
     var prefersLarge: Bool {
-        intent.confirmPhrase != nil || intent.dryRun != nil || !intent.toggles.isEmpty || intent.affected.count > 1
+        intent.confirmPhrase != nil || intent.dryRun != nil || intent.toggles.contains { !$0.revealedByConflict } || intent.affected.count > 1
     }
 
     var isShowingFindings: Bool {
@@ -217,11 +217,24 @@ private struct ConfirmStepView: View {
     @Bindable var model: ConfirmFlowModel
     @Environment(ActionRunner.self) private var runner
     @Environment(NetworkMonitor.self) private var network
+    @FocusState private var phraseFocused: Bool
 
     var body: some View {
         let intent = model.intent
         ScrollViewReader { proxy in
             List {
+                // A notice follows an action the operator just took, so it
+                // sits first, where it is seen without scrolling.
+                if let notice = model.notice {
+                    Section {
+                        Label {
+                            Text(notice).foregroundStyle(Color.statusWarnText)
+                        } icon: {
+                            Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(Color.statusWarnFill)
+                        }
+                    }
+                    .id(Self.noticeID)
+                }
                 Section {
                     Text(intent.consequence)
                         .fixedSize(horizontal: false, vertical: true)
@@ -272,21 +285,25 @@ private struct ConfirmStepView: View {
                             .textInputAutocapitalization(.never)
                             .autocorrectionDisabled()
                             .font(TextRole.identifierInDetail.font)
+                            .focused($phraseFocused)
+                            .submitLabel(.done)
                     } header: {
                         Text("Type \(phrase) to confirm")
                     }
-                }
-                if let notice = model.notice {
-                    Section {
-                        Label {
-                            Text(notice).foregroundStyle(Color.statusWarnText)
-                        } icon: {
-                            Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(Color.statusWarnFill)
-                        }
-                    }
+                    .id(Self.phraseID)
                 }
             }
-            .safeAreaInset(edge: .bottom) { primaryAction }
+            .safeAreaInset(edge: .bottom) {
+                primaryAction {
+                    withAnimation { proxy.scrollTo(Self.phraseID, anchor: .center) }
+                    phraseFocused = true
+                }
+            }
+            .onChange(of: model.notice) { _, notice in
+                guard let notice else { return }
+                withAnimation { proxy.scrollTo(Self.noticeID, anchor: .top) }
+                AccessibilityNotification.Announcement(notice).post()
+            }
             // The findings push the acceptance toggle below the pinned button;
             // bring it into view, since it is the only way forward.
             .onChange(of: model.isShowingFindings) { _, showing in
@@ -297,6 +314,8 @@ private struct ConfirmStepView: View {
     }
 
     private static let togglesID = "confirm.toggles"
+    private static let phraseID = "confirm.phrase"
+    private static let noticeID = "confirm.notice"
 
     @ViewBuilder
     private func blastRadius(_ intent: WriteIntent) -> some View {
@@ -343,11 +362,21 @@ private struct ConfirmStepView: View {
         }
     }
 
-    private var primaryAction: some View {
+    /// The pinned primary button. When the only thing missing is the typed
+    /// name, the reason above it is a button that brings the field into view
+    /// and focuses it, since the field sits below the dry run.
+    private func primaryAction(showPhraseField: @escaping () -> Void) -> some View {
         let reason = model.blockReason(online: network.isSatisfied)
         let destructive = model.intent.tier == .t4
+        let phraseReason = model.intent.confirmPhrase.map { "Type \($0) to confirm" }
         return VStack(spacing: Spacing.s) {
-            if let reason {
+            if let reason, reason == phraseReason {
+                Button(action: showPhraseField) {
+                    Text(reason).font(TextRole.footnote.font).multilineTextAlignment(.center)
+                }
+                .tint(Color.accentText)
+                .accessibilityHint("Moves to the text field")
+            } else if let reason {
                 Text(reason).textRole(.footnote).multilineTextAlignment(.center)
             }
             Button(role: destructive ? .destructive : nil) {
@@ -360,7 +389,7 @@ private struct ConfirmStepView: View {
                 .frame(maxWidth: .infinity, minHeight: Spacing.minimumTarget - 8)
             }
             .buttonStyle(.borderedProminent)
-            .tint(destructive ? nil : Color.accentFill)
+            .tint(destructive ? Color.destructiveFill : Color.accentFill)
             .disabled(reason != nil || model.isSending)
         }
         .padding(.horizontal, Spacing.l)

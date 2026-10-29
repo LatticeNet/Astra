@@ -9,6 +9,7 @@ import SwiftUI
 //   token              light    dark     light HC dark HC
 //   accent.text        #2F5BEA  #7C9BFF  #1A3DB8  #A3BAFF
 //   accent.fill        #2F5BEA  #2F5BEA  #1A3DB8  #2F5BEA
+//   destructive.fill   #D70015  #D70015  #A00010  #D70015
 //   status.ok.fill     #248A3D  #30D158  #1B6B30  #30DB5B
 //   status.ok.text     #1F7A35  #30D158  #145A26  #5BE37D
 //   status.warn.fill   #C93400  #FF9F0A  #A12A00  #FFB340
@@ -25,6 +26,9 @@ extension Color {
     static let accentText = Color("AccentText")
     /// Background of prominent buttons only.
     static let accentFill = Color("AccentFill")
+    /// Background of the T4 destructive button: white reaches 4.5:1, which
+    /// system red does not.
+    static let destructiveFill = Color("DestructiveFill")
 
     static let statusOKFill = Color("StatusOKFill")
     static let statusOKText = Color("StatusOKText")

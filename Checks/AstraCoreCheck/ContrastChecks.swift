@@ -31,6 +31,9 @@ private let tokens: [ColorToken] = [
 
 /// accent.fill per variant: light, dark, light Increase Contrast, dark Increase Contrast.
 private let accentFill = ["#2F5BEA", "#2F5BEA", "#1A3DB8", "#2F5BEA"]
+/// destructive.fill per variant, the T4 primary button. System red under a
+/// white label is about 3.5:1, so the destructive button has its own fill.
+private let destructiveFill = ["#D70015", "#D70015", "#A00010", "#D70015"]
 
 /// Light cells and the light grouped background (section footers).
 private let lightBackgrounds = ["#FFFFFF", "#F2F2F7"]
@@ -60,6 +63,10 @@ public func checkContrast() async throws {
     for (index, fill) in accentFill.enumerated() {
         let ratio = try contrast("#FFFFFF", fill)
         if ratio < 4.5 { failures.append("white on accent.fill variant \(index) \(fill): \(format(ratio)) < 4.5") }
+    }
+    for (index, fill) in destructiveFill.enumerated() {
+        let ratio = try contrast("#FFFFFF", fill)
+        if ratio < 4.5 { failures.append("white on destructive.fill variant \(index) \(fill): \(format(ratio)) < 4.5") }
     }
     try expect(failures.isEmpty, "contrast targets of section 4.1:\n" + failures.joined(separator: "\n"))
 
