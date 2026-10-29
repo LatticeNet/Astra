@@ -337,3 +337,33 @@ public enum FleetCapabilityState {
     /// Whether the gate would let it act on the node right now.
     public static func admits(_ capability: NodeCapabilityEffective) -> Bool { capability.allowed }
 }
+
+/// One sentence for a query the engine refused, shown under the search
+/// field so a typo never reads as an empty fleet.
+public enum FleetQueryMessage {
+    public static func sentence(_ error: LatticeQueryError) -> String {
+        let field = error.params["field"] ?? ""
+        let suggestion = error.params["suggestion"].flatMap { $0.isEmpty ? nil : $0 }
+        let hint = suggestion.map { " Did you mean \($0)?" } ?? ""
+        switch error.code {
+        case .unknownField: return "There is no field \(field).\(hint)"
+        case .unknownValue:
+            let values = error.params["values"].map { " Use one of \($0)." } ?? ""
+            return "\(field) has no value \(error.params["value"] ?? "").\(values)"
+        case .unknownFlag: return "There is no flag is:\(error.params["flag"] ?? "").\(hint)"
+        case .unknownSort: return "Cannot sort by \(field).\(hint)"
+        case .emptyValue: return "\(field) needs a value."
+        case .noCompare: return "\(field) cannot be compared with < or >."
+        case .needsCompare: return "\(field) needs a comparison, such as \(error.params["example"] ?? "\(field)>1")."
+        case .badNumber: return "\(field) needs a number."
+        case .badDuration: return "\(field) needs a duration, such as 10m."
+        case .badTime: return "\(field) needs a time or an age, such as 1h."
+        case .badBool: return "\(field) needs yes or no."
+        case .badVersion: return "\(field) needs a version, such as 0.3.10."
+        case .unclosedQuote: return "A quote is not closed."
+        case .unclosedParen, .unexpectedParen: return "Parentheses do not match."
+        case .danglingOperator, .nothingToNegate, .emptyGroup, .notArity, .callArity, .sortNested:
+            return "The query is incomplete."
+        }
+    }
+}
