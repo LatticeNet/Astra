@@ -148,8 +148,8 @@ public enum TerminalFixtures {
         ),
         Session(
             id: "term_demo_3k5u7m", node: "build-fra-4", shell: "/usr/bin/zsh", status: "failed",
-            error: "start pty: fork/exec /usr/bin/zsh: no such file or directory",
-            created: "-47m", opened: "-47m", closed: "-47m", lastSeen: "-47m"
+            error: "shell not available: stat /usr/bin/zsh: no such file or directory",
+            created: "-27m", closed: "-27m", lastSeen: "-27m"
         ),
         Session(
             id: "term_demo_6p0y4j", node: "relay-fra-2", shell: "/bin/sh", status: "failed",
