@@ -12,20 +12,45 @@ struct MonitorOverviewScreen: View {
     @Environment(\.dynamicTypeSize) private var typeSize
     @Environment(\.locale) private var locale
 
+    @Environment(NetworkMonitor.self) private var network
+
     var body: some View {
-        MonitoringResource(state: store.paths, noun: "monitoring", retry: refresh) { response in
-            let items = MonitoringPaths.visible(store.pathItems(nodeName: nodeName), showUnmeasured: false)
-            List {
-                MonitoringRefreshError(state: store.paths, noun: "paths", retry: refresh)
-                Section {
-                    pathsRow(items)
-                    checksRow
-                    incidentsRow
-                    replansRow(response)
-                } header: {
-                    Text("Health").accessibilityAddTraits(.isHeader)
-                }
-                Section {
+        Group {
+            if showsWholeScreenState {
+                MonitoringResource(state: store.paths, noun: "monitoring", retry: refresh) { _ in EmptyView() }
+            } else {
+                overview
+            }
+        }
+        .polling(.monitoring, version: pollVersion) {
+            await nodes.refreshIfOlder(than: 60)
+            return await store.refreshOverview(window: appState.monitorWindow)
+        }
+    }
+
+    /// One screen-wide state only when no verdict can render: monitor:read is
+    /// missing, or the phone is offline with nothing loaded. Otherwise each
+    /// verdict row carries its own state, so a failed paths read never hides
+    /// incidents and checks that loaded (5.0).
+    private var showsWholeScreenState: Bool {
+        if case .denied = store.paths { return true }
+        return !network.isSatisfied && store.paths.value == nil && store.monitors.value == nil && store.incidents.value == nil
+    }
+
+    private var overview: some View {
+        let items = MonitoringPaths.visible(store.pathItems(nodeName: nodeName), showUnmeasured: false)
+        return List {
+            MonitoringRefreshError(state: store.paths, noun: "paths", retry: refresh)
+            Section {
+                pathsRow(items)
+                checksRow
+                incidentsRow
+                if let response = store.paths.value { replansRow(response) }
+            } header: {
+                Text("Health").accessibilityAddTraits(.isHeader)
+            }
+            Section {
+                if store.paths.value != nil {
                     let recent = MonitoringPaths.recentlyDegraded(items)
                     if recent.isEmpty {
                         Label("No path is down or degraded in the last \(appState.monitorWindow.rawValue).", systemImage: "checkmark.circle")
@@ -38,19 +63,23 @@ struct MonitorOverviewScreen: View {
                             }
                         }
                     }
-                } header: {
-                    Text("Recently degraded").accessibilityAddTraits(.isHeader)
-                } footer: {
-                    MonitoringFreshness(state: store.paths, cadence: .monitoring)
+                } else if case .failed = store.paths {
+                    Label("Shown once the paths load.", systemImage: "point.topleft.down.to.point.bottomright.curvepath")
+                        .foregroundStyle(.secondary)
+                        .frame(minHeight: Spacing.minimumTarget)
+                } else if case .companionBehind = store.paths {
+                    EmptyView()
+                } else {
+                    LoadingRows(label: "Loading recently degraded paths", count: 2)
                 }
+            } header: {
+                Text("Recently degraded").accessibilityAddTraits(.isHeader)
+            } footer: {
+                if store.paths.value != nil { MonitoringFreshness(state: store.paths, cadence: .monitoring) }
             }
-            .listStyle(.insetGrouped)
-            .refreshable { await store.refreshOverview(window: appState.monitorWindow) }
         }
-        .polling(.monitoring, version: pollVersion) {
-            await nodes.refreshIfOlder(than: 60)
-            return await store.refreshOverview(window: appState.monitorWindow)
-        }
+        .listStyle(.insetGrouped)
+        .refreshable { await store.refreshOverview(window: appState.monitorWindow) }
     }
 
     private var pollVersion: Int {
@@ -67,7 +96,25 @@ struct MonitorOverviewScreen: View {
 
     // MARK: Verdict rows
 
+    @ViewBuilder
     private func pathsRow(_ items: [MonitoringPathItem]) -> some View {
+        switch store.paths {
+        case .denied(let scope):
+            ScopeDeniedRow(scope: scope)
+        case .companionBehind(let surface):
+            CompanionBehindRow(surface: surface)
+        default:
+            if store.paths.value != nil {
+                pathsVerdict(items)
+            } else if case .failed(let error, nil, _) = store.paths {
+                ErrorRow(message: "Could not load paths: \(error.localizedDescription)", retry: refresh)
+            } else {
+                LoadingRows(label: "Loading paths", count: 1)
+            }
+        }
+    }
+
+    private func pathsVerdict(_ items: [MonitoringPathItem]) -> some View {
         let counts = MonitoringPaths.counts(items)
         let style: StatusStyle = counts.down > 0
             ? StatusStyle(word: "\(counts.down) down", symbol: "xmark.circle.fill", tone: .fail)
@@ -103,6 +150,8 @@ struct MonitorOverviewScreen: View {
                     ? StatusStyle(word: "\(failing) failing", symbol: "xmark.circle.fill", tone: .fail)
                     : StatusStyle(word: "none failing", symbol: "checkmark.circle.fill", tone: .ok)
                 verdictButton(title: monitors.count == 1 ? "1 check" : "\(monitors.count) checks", style: style, detail: nil, segment: .checks, query: failing > 0 ? "state:failing" : nil)
+            } else if case .failed(let error, nil, _) = store.monitors {
+                ErrorRow(message: "Could not load checks: \(error.localizedDescription)", retry: refresh)
             } else {
                 LoadingRows(label: "Loading checks", count: 1)
             }
