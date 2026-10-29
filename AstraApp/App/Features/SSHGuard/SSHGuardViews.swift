@@ -72,13 +72,20 @@ struct SSHGuardCountdown: View {
     var prominent = false
 
     var body: some View {
-        HStack(spacing: Spacing.xs) {
-            Text("Reverts in")
-            Text(timerInterval: Date.now...max(deadline, .now), countsDown: true)
-                .monospacedDigit()
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: Spacing.xs) { parts }
+            VStack(alignment: .leading, spacing: Spacing.xxs) { parts }
         }
+        .accessibilityElement(children: .combine)
         .font(prominent ? .title3.weight(.semibold) : TextRole.rowReason(Color.statusWarnText).font.weight(.semibold))
         .foregroundStyle(Color.statusWarnText)
+    }
+
+    @ViewBuilder
+    private var parts: some View {
+        Text("Reverts in")
+        Text(timerInterval: Date.now...max(deadline, .now), countsDown: true)
+            .monospacedDigit()
     }
 }
 

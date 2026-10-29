@@ -279,10 +279,15 @@ struct SSHGuardArmSheet: View {
             : "sshd moves to the new port; port 22 stops answering once the arm applies."
     }
 
+    /// Short, because it sits pinned above the button; the problems
+    /// themselves are listed in full in the form.
     private var armBlockReason: String? {
         if let reason = store.planBlockReason() { return reason }
-        if let first = model.problems.first { return first.sentence }
-        return nil
+        switch model.problems.count {
+        case 0: return nil
+        case 1: return "Fix the problem listed above"
+        default: return "Fix the \(model.problems.count) problems listed above"
+        }
     }
 
     private func fileArm() async {

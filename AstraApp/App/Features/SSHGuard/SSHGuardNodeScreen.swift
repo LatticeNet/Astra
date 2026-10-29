@@ -161,8 +161,9 @@ struct SSHGuardNodeScreen: View {
                 if case .failed(let error, _, _) = model.status {
                     ErrorRow(message: "Could not refresh SSH Guard: \(error.localizedDescription)", retry: retry)
                 }
-                stateSection(row)
+                // The revert deadline is the 2am job: it leads, so Confirm is on screen first at every text size.
                 if row.isReverting { confirmSection(row) }
+                stateSection(row)
                 postureSection(status).id("sshd")
                 knockSection(row).id("knock")
                 coverageSection(row).id("enrollment")
@@ -194,18 +195,15 @@ struct SSHGuardNodeScreen: View {
     private func confirmSection(_ row: SSHGuardBoardRow) -> some View {
         let target = SSHGuardConfirmTarget.of(row.status)
         return Section {
-            VStack(alignment: .leading, spacing: Spacing.s) {
+            Group {
                 if let deadline = row.deadline {
                     SSHGuardCountdown(deadline: deadline, prominent: true)
-                    Text("At \(TimeDisplay.clock(deadline, mode: mode, locale: locale)) the node restores its previous sshd settings and removes the SSH gate by itself.")
-                        .textRole(.footnote)
                 } else {
                     Text("The revert timer is armed. Confirm before it runs out.")
                         .foregroundStyle(Color.statusWarnText)
                 }
             }
-            .padding(.vertical, Spacing.xs)
-            .accessibilityElement(children: .combine)
+            .frame(minHeight: Spacing.minimumTarget, alignment: .leading)
             Button {
                 confirm(row)
             } label: {
@@ -217,15 +215,18 @@ struct SSHGuardNodeScreen: View {
             .tint(Color.accentFill)
             .disabled(!store.canPlan)
             .listRowInsets(EdgeInsets(top: Spacing.s, leading: Spacing.l, bottom: Spacing.s, trailing: Spacing.l))
-        } header: {
-            Text("Confirm needed").accessibilityAddTraits(.isHeader)
         } footer: {
-            if let reason = store.planBlockReason() {
-                Text(reason)
-            } else if case .review = target {
-                Text("A confirm plan is already waiting. It must be approved and applied before the deadline.")
-            } else {
-                Text("Files the confirm plan. Open a new SSH connection over the hardened path first: the confirm is the evidence that you still can.")
+            VStack(alignment: .leading, spacing: Spacing.xs) {
+                if let deadline = row.deadline {
+                    Text("At \(TimeDisplay.clock(deadline, mode: mode, locale: locale)) the node restores its previous sshd settings and removes the SSH gate by itself.")
+                }
+                if let reason = store.planBlockReason() {
+                    Text(reason)
+                } else if case .review = target {
+                    Text("A confirm plan is already waiting. It must be approved and applied before the deadline.")
+                } else {
+                    Text("Files the confirm plan. Open a new SSH connection over the hardened path first: the confirm is the evidence that you still can.")
+                }
             }
         }
     }
