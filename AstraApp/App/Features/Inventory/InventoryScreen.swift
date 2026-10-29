@@ -42,6 +42,7 @@ struct InventoryScreen: View {
         }
         .modifier(InventoryFilterSubtitle(text: query.trimmingCharacters(in: .whitespaces).isEmpty ? nil : "Filtered: \(query.trimmingCharacters(in: .whitespaces))"))
         .onChange(of: listBusy, initial: true) { _, busy in store.interactionBusy = busy }
+        .onChange(of: [groupRaw, query], initial: true) { registerLayout() }
     }
 
     /// A write, a confirmation or a dialog in progress: reorders wait.
@@ -55,19 +56,8 @@ struct InventoryScreen: View {
     private func content(_ machines: [MachineProfile]) -> some View {
         let today = InventoryDay(date: Date())
         let trimmed = query.trimmingCharacters(in: .whitespaces)
-        let rows = machines.map { machine in
-            InventoryQuery.Row(machine: machine, facts: facts(machine.nodeID),
-                               groupNames: (nodes.nodes[machine.nodeID]?.groupIDs ?? []).compactMap { store.groupNames[$0] }, today: today)
-        }
         let compiled = trimmed.isEmpty ? nil : InventoryQuery.compile(trimmed)
-        let filtered: [MachineProfile] = switch compiled {
-        case .success(let query)?: LatticeQueryEngine.apply(query, to: rows, now: Date()).map(\.machine)
-        default: machines
-        }
-        let sorted = trimmed.contains("sort:")
-        let sections = sorted
-            ? [InventorySection(id: "sorted", title: "Sorted", machines: filtered, spend: InventoryCost.aggregate(filtered))]
-            : InventoryGrouping.sections(filtered, by: groupBy, today: today, facts: facts, groupName: { store.groupNames[$0] }, locale: locale)
+        let (filtered, sections) = Self.arrange(machines, query: trimmed, groupBy: groupBy, nodes: nodes, groupNames: store.groupNames, locale: locale, today: today)
 
         if machines.isEmpty, trimmed.isEmpty {
             emptyInventory
@@ -115,8 +105,44 @@ struct InventoryScreen: View {
         }
     }
 
-    private func facts(_ nodeID: String) -> InventoryNodeFacts? {
-        nodes.nodes[nodeID].map(InventoryNodeFacts.init(node:))
+    /// The rows the filter keeps and the sections they fall in, for the
+    /// list and for the store's stable-list check.
+    private static func arrange(_ machines: [MachineProfile], query trimmed: String, groupBy: InventoryGroupBy, nodes: NodeDirectory,
+                                groupNames: [String: String], locale: Locale, today: InventoryDay) -> ([MachineProfile], [InventorySection]) {
+        let facts: (String) -> InventoryNodeFacts? = { nodes.nodes[$0].map(InventoryNodeFacts.init(node:)) }
+        let compiled = trimmed.isEmpty ? nil : InventoryQuery.compile(trimmed)
+        let filtered: [MachineProfile]
+        if case .success(let query)? = compiled {
+            let rows = machines.map { machine in
+                InventoryQuery.Row(machine: machine, facts: facts(machine.nodeID),
+                                   groupNames: (nodes.nodes[machine.nodeID]?.groupIDs ?? []).compactMap { groupNames[$0] }, today: today)
+            }
+            filtered = LatticeQueryEngine.apply(query, to: rows, now: Date()).map(\.machine)
+        } else {
+            filtered = machines
+        }
+        let sections = trimmed.contains("sort:")
+            ? [InventorySection(id: "sorted", title: "Sorted", machines: filtered, spend: InventoryCost.aggregate(filtered))]
+            : InventoryGrouping.sections(filtered, by: groupBy, today: today, facts: facts, groupName: { groupNames[$0] }, locale: locale)
+        return (filtered, sections)
+    }
+
+    /// Tells the store where rows sit under the current grouping and filter,
+    /// so a poll that only changes values inside rows applies at once.
+    private func registerLayout() {
+        let trimmed = query.trimmingCharacters(in: .whitespaces)
+        let groupBy = groupBy, nodes = nodes, locale = locale
+        store.layout = { machines, groupNames in
+            let (_, sections) = Self.arrange(machines, query: trimmed, groupBy: groupBy, nodes: nodes, groupNames: groupNames,
+                                             locale: locale, today: InventoryDay(date: Date()))
+            var slots: [String: InventoryStore.Slot] = [:]
+            for section in sections {
+                for (index, machine) in section.machines.enumerated() {
+                    slots[InventoryStore.rowKey(machine)] = InventoryStore.Slot(section: section.id, index: index)
+                }
+            }
+            return slots
+        }
     }
 
     @ViewBuilder

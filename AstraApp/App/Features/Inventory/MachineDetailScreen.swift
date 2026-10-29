@@ -53,6 +53,9 @@ struct MachineDetailScreen: View {
         let missing = store.adminMissing
         List {
             Section {
+                if store.heldForVoiceOver, store.holdsChange(for: id) {
+                    PendingUpdatesRow(count: 1) { store.showHeld() }
+                }
                 StatusRow(style: style, title: machine.inventoryName, detail: machine.vendor.isEmpty ? nil : machine.vendor,
                           accessibilityPhrase: "\(machine.inventoryName), \(style.word)")
                 InventoryRefreshError(state: store.machines, noun: "the machine") { Task { await store.refresh() } }

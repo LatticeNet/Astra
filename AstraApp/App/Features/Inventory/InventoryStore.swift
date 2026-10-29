@@ -68,12 +68,13 @@ final class InventoryStore {
         }
         guard let client = session.client else { return false }
         machines = machines.reloading
+        let writeVersion = changes.version([.machines, .upcoming, .nodes, .groups])
         async let vendorsRead = readVendors(client)
         async let namesRead = readGroupNames(client)
         async let upcomingRead = refreshUpcoming()
         var ok = true
         do {
-            apply(try await client.listMachines(), fromPoll: fromPoll)
+            apply(try await client.listMachines(), fromPoll: fromPoll, writeVersion: writeVersion)
         } catch {
             let apiError = LatticeAPIError(error)
             machines = machines.failing(apiError, surface: "Machines", missingScope: Self.readScope)
@@ -126,30 +127,46 @@ final class InventoryStore {
         !interactionBusy && Date().timeIntervalSince(lastInteraction) >= 2
     }
 
-    /// The facts that decide where a row sits; a change in anything else
-    /// (a price, a note) applies at once.
-    private static func layoutKey(_ list: [MachineProfile]) -> [String] {
-        list.map { machine in
-            [machine.id, machine.nodeID, machine.inventoryName, machine.region, machine.renewalDay?.description ?? "",
-             machine.renewalCycleRaw, machine.autoRoll ? "auto" : "", machine.vendor].joined(separator: "|")
-        }
+    /// Where a row sits on Machines: its section and its place in it.
+    struct Slot: Hashable {
+        var section: String
+        var index: Int
     }
 
-    private func apply(_ fresh: [MachineProfile], fromPoll: Bool) {
+    /// Slots by row key under the grouping, filter and sort the operator
+    /// chose on Machines; InventoryScreen sets it. Until then rows sit in
+    /// server order.
+    @ObservationIgnored var layout: @MainActor ([MachineProfile], [String: String]) -> [String: Slot] = { list, _ in
+        Dictionary(list.enumerated().map { (InventoryStore.rowKey($1), Slot(section: "", index: $0)) }, uniquingKeysWith: { first, _ in first })
+    }
+
+    nonisolated static func rowKey(_ machine: MachineProfile) -> String {
+        machine.id.isEmpty ? machine.nodeID : machine.id
+    }
+
+    /// The ChangeLog version the last applied read saw; a newer one means
+    /// the read follows a confirmed write, which applies at once.
+    @ObservationIgnored private var appliedWriteVersion: Int?
+
+    private func apply(_ fresh: [MachineProfile], fromPoll: Bool, writeVersion: Int) {
         let current = machines.value
-        let moves = current.map { Self.layoutKey($0) != Self.layoutKey(fresh) } ?? false
+        let followsWrite = appliedWriteVersion.map { $0 != writeVersion } ?? false
+        appliedWriteVersion = writeVersion
+        let oldSlots = current.map { layout($0, groupNames) }
+        let newSlots = layout(fresh, groupNames)
+        // Only a change of section, order or membership is a move; a value
+        // inside a row that stays put applies at once (section 5.0).
+        let moves = oldSlots.map { $0 != newSlots } ?? false
         let voiceOver = UIAccessibility.isVoiceOverRunning
-        if fromPoll, moves, voiceOver || !isIdle {
+        if fromPoll, !followsWrite, moves, voiceOver || !isIdle, let current, let oldSlots {
             held = fresh
             heldForVoiceOver = voiceOver
-            // Rows keep their place; values inside rows still move.
-            if let current {
-                let byKey = Dictionary(fresh.map { ($0.id.isEmpty ? $0.nodeID : $0.id, $0) }, uniquingKeysWith: { first, _ in first })
-                machines = .loaded(current.map { old in
-                    guard let row = byKey[old.id.isEmpty ? old.nodeID : old.id], Self.layoutKey([row]) == Self.layoutKey([old]) else { return old }
-                    return row
-                }, at: Date())
-            }
+            let byKey = Dictionary(fresh.map { (Self.rowKey($0), $0) }, uniquingKeysWith: { first, _ in first })
+            machines = .loaded(current.map { old in
+                let key = Self.rowKey(old)
+                guard let row = byKey[key], newSlots[key] == oldSlots[key] else { return old }
+                return row
+            }, at: Date())
             if !voiceOver { releaseWhenIdle() }
         } else {
             held = nil
@@ -182,8 +199,16 @@ final class InventoryStore {
     /// Rows a held update would move, add or remove.
     var heldCount: Int {
         guard let held, let current = machines.value else { return 0 }
-        let old = Set(Self.layoutKey(current))
-        let new = Set(Self.layoutKey(held))
-        return max(old.subtracting(new).count, new.subtracting(old).count, 1)
+        let old = layout(current, groupNames)
+        let new = layout(held, groupNames)
+        let keys = Set(old.keys).union(new.keys)
+        let changed = keys.filter { old[$0]?.section != new[$0]?.section }.count
+        return max(changed, 1)
+    }
+
+    /// True when a held update would change the row Machine detail shows for `id`.
+    func holdsChange(for id: String) -> Bool {
+        guard let held, let shown = machine(id: id) else { return false }
+        return InventoryLookup.machine(id, in: held) != shown
     }
 }
