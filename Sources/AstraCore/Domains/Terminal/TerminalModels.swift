@@ -308,7 +308,9 @@ public enum TerminalOpener: Sendable, Equatable {
     public var phrase: String {
         switch self {
         case .thisToken: "with this token"
-        case .otherToken(let id): "with token \(id)"
+        // The id stays out of prose, where wrapping can hyphenate it; the
+        // transcript shows it on its own monospaced row.
+        case .otherToken: "with another token"
         case .signedInSession: "from a browser"
         }
     }
@@ -365,11 +367,14 @@ public enum TerminalTranscriptNotice: Sendable, Equatable {
     case noOutputYet
     /// The server dropped older output to stay under its cap.
     case truncated
+    /// This phone dropped its oldest lines to stay under the cleaner's cap.
+    case trimmedOnPhone
 
     /// The notices for one session and its cleaned transcript, in display order.
     public static func of(_ session: TerminalSession, transport: TerminalTransport, cleaner: TranscriptCleaner, firstSeq: Int64?) -> [TerminalTranscriptNotice] {
         var notices: [TerminalTranscriptNotice] = []
         if let firstSeq, firstSeq > 1 { notices.append(.truncated) }
+        if cleaner.droppedLines > 0 { notices.append(.trimmedOnPhone) }
         if session.status == "pending" {
             notices.append(.waitingForAgent)
         } else if cleaner.fullScreenActive, session.isLive {

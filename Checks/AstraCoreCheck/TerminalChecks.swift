@@ -236,7 +236,7 @@ private func checkTerminalDerivations() throws {
     // Who opened it.
     try expectEqual(TerminalOpener.of(terminalSession("open"), currentTokenID: "tok_phone"), .signedInSession, "no token: a browser")
     try expectEqual(TerminalOpener.of(terminalSession("open", token: "tok_phone"), currentTokenID: "tok_phone"), .thisToken, "this token")
-    try expectEqual(TerminalOpener.of(terminalSession("open", token: "tok_cli"), currentTokenID: "tok_phone").phrase, "with token tok_cli", "another token")
+    try expectEqual(TerminalOpener.of(terminalSession("open", token: "tok_cli"), currentTokenID: "tok_phone").phrase, "with another token", "another token, its id kept out of prose")
 
     // Lists.
     let sessions = [
@@ -260,6 +260,8 @@ private func checkTerminalDerivations() throws {
     try expectEqual(TerminalTranscriptNotice.of(terminalSession("open"), transport: .poll, cleaner: TranscriptCleaner(), firstSeq: nil), [.noOutputYet], "nothing printed yet")
     try expectEqual(TerminalTranscriptNotice.of(terminalSession("pending"), transport: .unknown, cleaner: TranscriptCleaner(), firstSeq: nil), [.waitingForAgent], "waiting for the agent")
     try expectEqual(TerminalTranscriptNotice.of(terminalSession("open"), transport: .poll, cleaner: TranscriptCleaner.clean("x"), firstSeq: 41), [.truncated], "older output dropped")
+    let trimmed = TranscriptCleaner.clean((1...5).map { "line \($0)\r\n" }.joined(), maxLines: 3)
+    try expectEqual(TerminalTranscriptNotice.of(terminalSession("open"), transport: .poll, cleaner: trimmed, firstSeq: 1), [.trimmedOnPhone], "lines past the phone's cap are noticed")
     try expect(TerminalLimits.sentence.contains("30 minutes without activity") && TerminalLimits.sentence.contains("4 live sessions per node"), "limits sentence")
 }
 

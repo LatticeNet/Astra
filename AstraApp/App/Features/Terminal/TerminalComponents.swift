@@ -1,5 +1,6 @@
 import SwiftUI
 import UIKit
+import UniformTypeIdentifiers
 
 // Views and styles the terminal screens share. Every state is a symbol and
 // a word (section 4.2), colored only for a fault.
@@ -27,6 +28,13 @@ extension LatticeConsolePath {
 enum TerminalCopy {
     static func copy(_ text: String) {
         UIPasteboard.general.string = text
+    }
+
+    /// Root-shell output often holds config and environment values, so it
+    /// stays on this device and leaves the pasteboard after two minutes.
+    static func copyOutput(_ text: String) {
+        UIPasteboard.general.setItems([[UTType.plainText.identifier: text]],
+                                      options: [.localOnly: true, .expirationDate: Date.now.addingTimeInterval(120)])
     }
 
     static func link(sessionID: String) -> String {
@@ -140,20 +148,21 @@ struct TerminalNoticeRow: View {
     }
 }
 
-/// A menu or list action the token may lack: disabled, with "Needs ..." under it.
+/// A menu action that cannot run now: disabled, with why under it.
 struct TerminalGatedButton: View {
     let title: String
     let systemImage: String
-    var missing: String?
+    /// Why it cannot run, such as "No connection".
+    var unavailable: String?
     var role: ButtonRole?
     let action: () -> Void
 
     var body: some View {
         Button(role: role, action: action) {
-            if let missing {
+            if let unavailable {
                 Label {
                     Text(title)
-                    Text("Needs \(missing)")
+                    Text(unavailable)
                 } icon: {
                     Image(systemName: systemImage)
                 }
@@ -161,7 +170,7 @@ struct TerminalGatedButton: View {
                 Label(title, systemImage: systemImage)
             }
         }
-        .disabled(missing != nil)
+        .disabled(unavailable != nil)
     }
 }
 
@@ -191,6 +200,9 @@ struct TerminalOfflineView: View {
 /// stay put apply at once.
 @MainActor @Observable
 final class TerminalStableList<Row: Identifiable & Sendable> where Row.ID: Sendable {
+    /// False when a new value would move the row to another section, which
+    /// is a move like any reorder and is held the same way.
+    private let keepsPlace: (Row, Row) -> Bool
     private(set) var shown: [Row] = []
     private(set) var held: [Row]?
     @ObservationIgnored private var lastActivity = Date.distantPast
@@ -198,10 +210,16 @@ final class TerminalStableList<Row: Identifiable & Sendable> where Row.ID: Senda
     @ObservationIgnored private var voiceOver = false
     @ObservationIgnored private var release: Task<Void, Never>?
 
+    init(keepsPlace: @escaping (Row, Row) -> Bool = { _, _ in true }) {
+        self.keepsPlace = keepsPlace
+    }
+
     var pendingCount: Int {
         guard let held else { return 0 }
         let moved = zip(shown.map(\.id), held.map(\.id)).contains { $0 != $1 }
-        return max(Set(shown.map(\.id)).symmetricDifference(Set(held.map(\.id))).count, moved ? 1 : 0)
+        let current = Dictionary(shown.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        let replaced = held.filter { row in current[row.id].map { !keepsPlace($0, row) } ?? false }.count
+        return max(Set(shown.map(\.id)).symmetricDifference(Set(held.map(\.id))).count + replaced, moved ? 1 : 0)
     }
 
     func noteActivity() {
@@ -212,7 +230,9 @@ final class TerminalStableList<Row: Identifiable & Sendable> where Row.ID: Senda
     /// `force` applies at once: pull to refresh, a filter or query change, a confirmed write.
     func offer(_ rows: [Row], voiceOver: Bool, force: Bool = false) {
         self.voiceOver = voiceOver
+        let current = Dictionary(shown.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         let sameOrder = rows.map(\.id) == shown.map(\.id)
+            && rows.allSatisfy { row in current[row.id].map { keepsPlace($0, row) } ?? true }
         let idle = Date().timeIntervalSince(lastActivity) > 2
         if !hasShown || shown.isEmpty || force || sameOrder || (idle && !voiceOver) {
             shown = rows
@@ -220,7 +240,7 @@ final class TerminalStableList<Row: Identifiable & Sendable> where Row.ID: Senda
             hasShown = true
         } else {
             let fresh = Dictionary(rows.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
-            shown = shown.map { fresh[$0.id] ?? $0 }
+            shown = shown.map { old in fresh[old.id].map { keepsPlace(old, $0) ? $0 : old } ?? old }
             held = rows
             if voiceOver { AccessibilityNotification.Announcement(pendingCount == 1 ? "1 update" : "\(pendingCount) updates").post() }
             scheduleRelease()

@@ -119,6 +119,7 @@ struct TerminalTranscriptScreen: View {
     @State private var followTail = true
     @State private var scrolledOnce = false
     @State private var highlighted: Int?
+    @AccessibilityFocusState private var focusedLine: Int?
 
     private static let bottomID = "terminal.transcript.bottom"
 
@@ -256,6 +257,7 @@ struct TerminalTranscriptScreen: View {
                 Task {
                     try? await Task.sleep(for: .milliseconds(200))
                     proxy.scrollTo(line, anchor: .center)
+                    focusedLine = line
                     try? await Task.sleep(for: .seconds(2))
                     if highlighted == line { highlighted = nil }
                 }
@@ -301,8 +303,12 @@ struct TerminalTranscriptScreen: View {
                 DetailRow(label: "Node", value: record.nodeID, monospaced: true)
             }
             DetailRow(label: "Shell", value: record.shellPath, monospaced: true)
-            DetailRow(label: "Transport", value: transportSentence(transport), copyable: false)
-            DetailRow(label: "Opened", value: TerminalOpener.of(record, currentTokenID: store.currentTokenID).phrase.capitalizedFirst, copyable: false)
+            DetailRow(label: "Transport", value: transportSentence(transport, live: record.isLive), copyable: false)
+            let opener = TerminalOpener.of(record, currentTokenID: store.currentTokenID)
+            DetailRow(label: "Opened", value: opener.phrase.capitalizedFirst, copyable: false)
+            if case .otherToken(let tokenID) = opener {
+                DetailRow(label: "Token", value: tokenID, monospaced: true)
+            }
             if let created = record.createdAt { timeRow(record.status == "pending" ? "Requested" : "Started", created) }
             if let seen = record.lastSeen, record.isLive, record.status != "pending", transport != .stream {
                 DetailRow(label: "Last activity", value: TimeDisplay.relative(seen, now: now, locale: locale).capitalizedFirst,
@@ -322,11 +328,11 @@ struct TerminalTranscriptScreen: View {
         }
     }
 
-    private func transportSentence(_ transport: TerminalTransport) -> String {
+    private func transportSentence(_ transport: TerminalTransport, live: Bool) -> String {
         switch transport {
         case .poll: "Poll: output passes through the server, which keeps the recent part"
-        case .stream: "Stream: straight between the browser and the node"
-        case .unknown: "Not known yet"
+        case .stream: "Stream: relayed live through the server, which keeps no copy"
+        case .unknown: live ? "Not known yet" : "Not reported"
         }
     }
 
@@ -383,7 +389,9 @@ struct TerminalTranscriptScreen: View {
                         Text(verbatim: String(line.id))
                     }
                     .font(.caption2.monospacedDigit())
-                    .foregroundStyle(.tertiary)
+                    // A found line is marked by weight as well as by tint.
+                    .fontWeight(highlighted == line.id ? .bold : .regular)
+                    .foregroundStyle(highlighted == line.id ? AnyShapeStyle(Color.accentText) : AnyShapeStyle(.tertiary))
                     .lineLimit(1)
                     // Capped so the gutter never crowds out the text it numbers.
                     .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
@@ -402,6 +410,7 @@ struct TerminalTranscriptScreen: View {
             }
         }
         .id(line.id)
+        .accessibilityFocused($focusedLine, equals: line.id)
         .listRowSeparator(.hidden)
         .listRowInsets(EdgeInsets(top: 2, leading: Spacing.m, bottom: 2, trailing: Spacing.l))
         .listRowBackground(highlighted == line.id ? Color.accentText.opacity(0.18) : nil)
@@ -430,7 +439,7 @@ struct TerminalTranscriptScreen: View {
                                 .textRole(.footnote)
                         }
                     } icon: {
-                        Image(systemName: "xmark.square")
+                        Image(systemName: "xmark.square").foregroundStyle(Color.destructiveFill)
                     }
                     .frame(minHeight: Spacing.minimumTarget)
                 }
@@ -462,10 +471,15 @@ struct TerminalTranscriptScreen: View {
                               text: "Open on web to see it. Its screens are drawn, not written as lines, so the transcript leaves them out.")
         case .streamed:
             TerminalNoticeRow(symbol: "dot.radiowaves.left.and.right", tone: .quiet, title: "No transcript on the server",
-                              text: "This session streams straight between the browser and the node, so the server never holds its output. Open on web to watch it.")
+                              text: record.isLive
+                                ? "The server relays this session live and keeps no copy of its output. Open on web to watch it."
+                                : "The server relayed this session live and kept no copy of its output.")
         case .noOutputYet:
             TerminalNoticeRow(symbol: "text.alignleft", tone: .quiet, title: "No output",
                               text: record.isLive ? "The shell has not printed anything yet." : "The server holds no output for this session.")
+        case .trimmedOnPhone:
+            TerminalNoticeRow(symbol: "scissors", tone: .quiet, title: "Earlier lines not kept here",
+                              text: "This iPhone keeps the last \(model.cleaner.maxLines.formatted()) lines, so Find and Copy cover only those. Open on web for the rest.")
         case .truncated:
             TerminalNoticeRow(symbol: "scissors", tone: .quiet, title: "Earlier output dropped",
                               text: "The server keeps the last \(TerminalLimits.maxEvents) output events (\(TerminalLimits.maxSessionKiB) KB) of a session; what came before is gone.")
@@ -539,11 +553,11 @@ struct TerminalTranscriptScreen: View {
             Menu {
                 if let record, record.isLive, model.gone == nil {
                     TerminalGatedButton(title: "Close session", systemImage: "xmark.square",
-                                        missing: network.isSatisfied ? nil : "a connection", role: .destructive) { close(record) }
+                                        unavailable: network.isSatisfied ? nil : "No connection", role: .destructive) { close(record) }
                 }
                 Section {
                     if model.hasLines {
-                        Button("Copy transcript", systemImage: "doc.on.doc") { TerminalCopy.copy(model.cleaner.text) }
+                        Button("Copy transcript", systemImage: "doc.on.doc") { TerminalCopy.copyOutput(model.cleaner.text) }
                     }
                     Button("Copy link", systemImage: "link") { TerminalCopy.copy(TerminalCopy.link(sessionID: sessionID)) }
                     Button("Copy ID", systemImage: "number") { TerminalCopy.copy(sessionID) }
