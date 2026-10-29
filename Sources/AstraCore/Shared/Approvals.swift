@@ -471,15 +471,16 @@ public struct ApprovalPage: Sendable, Equatable {
 
 public extension Approval {
     /// Section 4.2. `waiting.blocked` on an approved row reads "waiting".
+    /// The server has no failed status: when an apply task fails it rejects
+    /// the approval with the failure as its reason and no `rejected_by`
+    /// (rejectApprovalWithReason, server_views.go), so that row reads "failed".
     var displayState: ApprovalDisplayState {
         if isAutoApprovedLineMeta { return .auto }
         switch status.lowercased() {
         case "pending": return isStale ? .stale : .needsYou
-        case "approved", "applying": return waiting?.blocked == true ? .waiting : .applying
+        case "approved": return waiting?.blocked == true ? .waiting : .applying
         case "applied": return .applied
-        case "applied_unobserved": return .appliedUnobserved
-        case "failed": return .failed
-        case "rejected": return .rejected
+        case "rejected": return rejectedBy.isEmpty ? .failed : .rejected
         case "dismissed": return .dismissed
         default: return .applying
         }

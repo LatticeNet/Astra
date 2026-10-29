@@ -264,7 +264,6 @@ public enum ApprovalDisplayState: Sendable, Hashable, CaseIterable {
     case waiting
     case applying
     case applied
-    case appliedUnobserved
     case failed
     case rejected
     case dismissed

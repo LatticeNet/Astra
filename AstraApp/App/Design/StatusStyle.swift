@@ -96,8 +96,6 @@ struct StatusStyle: Sendable, Hashable {
         case .waiting: StatusStyle(word: "waiting", symbol: "pause.circle", tone: .warn)
         case .applying: StatusStyle(word: "applying", symbol: "arrow.clockwise.circle", tone: .quiet)
         case .applied: StatusStyle(word: "applied", symbol: "checkmark.circle", tone: .ok)
-        case .appliedUnobserved:
-            StatusStyle(word: "applied, not observed", symbol: "checkmark.circle.trianglebadge.exclamationmark", tone: .warn)
         case .failed: StatusStyle(word: "failed", symbol: "xmark.circle.fill", tone: .fail)
         case .rejected: StatusStyle(word: "rejected", symbol: "xmark.circle", tone: .quiet)
         case .dismissed: StatusStyle(word: "dismissed", symbol: "archivebox", tone: .quiet)

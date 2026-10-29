@@ -100,15 +100,8 @@ extension SharedFixtures {
             )
             approval.actorID = "lattice-server"
             approval.stale = true
-            approval.staleCode = "superseded"
-            approval.reason = "A newer plan for this node replaced it"
-            approval.waiting = .object([
-                "code": "superseded",
-                "reason": "approval_d1002 is the newer plan for this node's agent",
-                "blocked": true,
-                "superseded_by": "approval_d1002",
-                "dismissible": true,
-            ])
+            approval.staleCode = "agent_update_policy_changed"
+            approval.reason = "agent update policy changed since this approval was planned; current_version planned=0.3.9 current=0.3.10; re-plan before approving"
             return approval
         }(),
         {
@@ -143,9 +136,11 @@ extension SharedFixtures {
         }(),
         {
             var approval = DemoApproval(
-                id: "approval_d0903", plugin: "nftpolicy", action: "apply-ruleset", node: "edge-hkg-2", status: "failed",
+                id: "approval_d0903", plugin: "nftpolicy", action: "apply-ruleset", node: "edge-hkg-2", status: "rejected",
                 plan: DemoPlans.outboundPolicy(node: "edge-hkg-2"), planSHA256: "63910bd06612dfdb8401e69fdd86d8ac2576cf878674e68d78c16a5785924b9c", createdAt: "-5h", updatedAt: "-5h"
             )
+            // A failed apply: the server rejects the row with the failure as
+            // its reason and keeps approved_by, with no rejected_by.
             approval.approvedBy = DemoWorld.actorID
             approval.reason = "apply task failed: nft exited 1"
             return approval
@@ -179,11 +174,20 @@ extension SharedFixtures {
             return approval
         }(),
         {
+            // Approved without queueing, then replaced by approval_d1002: the
+            // server's plan_superseded wait, which it marks dismissible.
             var approval = DemoApproval(
-                id: "approval_d0906", plugin: "beacon", action: "node.beacon", node: "dns-fra-1", status: "applied_unobserved",
-                plan: DemoPlans.beaconFrankfurt, planSHA256: "86777aaa936978fda14293f7a91e221dd1ae0f21304a41f3eb3f66d7b581cc83", createdAt: "-7h", updatedAt: "-6h"
+                id: "approval_d0906", plugin: "agentupdate", action: "update-agent", node: "edge-sin-1", status: "approved",
+                plan: DemoPlans.agentUpdate(node: "edge-sin-1", arch: "amd64", current: "0.3.8"), planSHA256: "f53f9e8ed3b5dc2ebfb8c7d59fc29ee2666f20e3afa14687e69139f317fd2f6a", createdAt: "-3d", updatedAt: "-3d"
             )
             approval.approvedBy = DemoWorld.actorID
+            approval.waiting = .object([
+                "code": "plan_superseded",
+                "reason": "A newer plan for the same change on edge-sin-1 replaced this one (approval_d1002); this approval will not be dispatched.",
+                "blocked": true,
+                "superseded_by": "approval_d1002",
+                "dismissible": true,
+            ])
             return approval
         }(),
         {
@@ -285,7 +289,7 @@ extension SharedFixtures {
                 ("pending", .number(count("pending"))),
                 ("approved", .number(count("approved"))),
                 ("stale", .number(Double(rows.filter { $0.status == "pending" && $0.stale }.count))),
-                ("applied", .number(count("applied") + count("applied_unobserved"))),
+                ("applied", .number(count("applied"))),
                 ("rejected", .number(count("rejected"))),
                 ("dismissed", .number(count("dismissed"))),
                 ("total", .number(Double(rows.count))),
@@ -313,7 +317,8 @@ extension SharedFixtures {
             "created_at": .time(approval.createdAt),
             "updated_at": .time(approval.updatedAt),
             "targets": approval.targets.isEmpty ? nil : .strings(approval.targets),
-            "waiting": approval.status == "approved" ? approval.waiting : (approval.stale ? approval.waiting : nil),
+            // The server sends a waiting record only for approved rows.
+            "waiting": approval.status == "approved" ? approval.waiting : nil,
         ])
     }
 
@@ -448,7 +453,6 @@ enum DemoPlans {
 
     static let beaconEnable = beacon(node: "dns-iad-1", action: "enable", port: "7443")
 
-    static let beaconFrankfurt = beacon(node: "dns-fra-1", action: "enable", port: "7443")
 
     static func beacon(node name: String, action: String, port: String) -> String {
         let node = DemoWorld.node(name)

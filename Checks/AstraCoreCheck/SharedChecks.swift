@@ -341,6 +341,9 @@ private func checkApprovalListing() async throws {
     try expect(waiting.waiting?.blocked == true, "waiting blocked")
     try expect(waiting.proofLine.contains("waiting"), "waiting proof line")
     try expectEqual(waiting.displayState, .waiting, "blocked approved row reads waiting")
+    let failedApply = Approval(id: "ap-f", status: "rejected", reason: "apply task failed: nft exited 1", approvedBy: "u1")
+    try expectEqual(failedApply.displayState, .failed, "a rejected row without rejected_by is a failed apply")
+    try expectEqual(Approval(id: "ap-r", status: "rejected", approvedBy: "", rejectedBy: "u1").displayState, .rejected, "a rejected row with rejected_by was rejected by someone")
 
     let guardStatus = try await client.fetchSSHGuardStatus(nodeID: "node-a")
     try expectEqual(guardStatus.posture.state, "secured", "ssh guard posture")
