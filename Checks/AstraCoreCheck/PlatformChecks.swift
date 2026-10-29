@@ -379,6 +379,22 @@ private func checkPlatformExtensionPages() throws {
     try expectEqual(page.requiredScopes, ["node:read"], "the source method's scopes gate the page")
     try expectEqual(page.consolePath, "/plugins/examplelabs.cert-watch/certificates", "page console path")
     try expect(page.hasSource, "table page has a source")
+    try expect(page.sourceIsRead, "a read source may be called")
+    let bound = PlatformPlugin(id: "x.writer", name: "Writer", ui: PlatformManifestUI(
+        nav: [PlatformNavEntry(title: "W", route: "w"), PlatformNavEntry(title: "B", route: "b"), PlatformNavEntry(title: "U", route: "u")],
+        views: [
+            PlatformViewContribution(route: "w", title: "W", kind: "table", source: PlatformViewSource(interface: "x/svc", method: "rotate")),
+            PlatformViewContribution(route: "b", title: "B", kind: "detail", source: PlatformViewSource(interface: "x/legacy", method: "status")),
+            PlatformViewContribution(route: "u", title: "U", kind: "table", source: PlatformViewSource(interface: "x/svc", method: "undeclared")),
+        ]
+    ), interfaces: [
+        PlatformInterface(service: "x/svc", methods: [PlatformInterfaceMethod(name: "rotate", effect: "write"), PlatformInterfaceMethod(name: "file", effect: "plan")]),
+        PlatformInterface(service: "x/legacy", methods: [PlatformInterfaceMethod(name: "status")]),
+    ])
+    let writePage = try expectUnwrapped(ExtensionPageModel.page(plugin: bound, route: "w"), "write-bound page")
+    try expect(writePage.hasSource && !writePage.sourceIsRead, "a view bound to a write method is never called")
+    try expect(ExtensionPageModel.page(plugin: bound, route: "b")?.sourceIsRead == true, "a bare method name is a read")
+    try expect(ExtensionPageModel.page(plugin: bound, route: "u")?.sourceIsRead == false, "an undeclared method is never called")
     let raw = try expectUnwrapped(ExtensionPageModel.page(plugin: plugin, route: "raw"), "markdown page")
     try expectEqual(raw.kind, .web, "markdown opens on the web")
     try expectEqual(raw.requiredScopes, ["audit:read"], "without a source the nav entry's scopes apply")

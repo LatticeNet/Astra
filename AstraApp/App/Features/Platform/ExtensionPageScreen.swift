@@ -3,7 +3,9 @@ import SwiftUI
 /// M8-03 Extension page: a third-party plugin page of kind table or detail
 /// drawn natively from its manifest (the `PluginView.vue` model), with data
 /// from `/api/plugins/call`. Manifest actions write, so they open on the
-/// web; secrets stay masked; unknown kinds open on the web.
+/// web; secrets stay masked; unknown kinds open on the web. The source is
+/// called only when declared a read, once on open, on a plugins change and
+/// on pull to refresh; like the console, the page does not poll.
 struct ExtensionPageScreen: View {
     let pluginID: String
     let route: String
@@ -28,7 +30,7 @@ struct ExtensionPageScreen: View {
             .navigationBarTitleDisplayMode(.inline)
             .navigationSubtitle(page?.pluginName ?? "")
             .refreshable { await reload() }
-            .polling(.standard, version: changes.version(.plugins)) { await reload() }
+            .task(id: changes.version(.plugins)) { await reload() }
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu {
@@ -50,7 +52,7 @@ struct ExtensionPageScreen: View {
     @discardableResult
     private func reload() async -> Bool {
         if store.contributions.value == nil { await store.refreshContributions() }
-        guard let page, page.kind != .web, page.hasSource, missingScopes == nil, let client = session.client else { return true }
+        guard let page, page.kind != .web, page.sourceIsRead, missingScopes == nil, let client = session.client else { return true }
         return await model.load(client: client, pluginID: pluginID, source: page.view.source!)
     }
 
@@ -65,6 +67,8 @@ struct ExtensionPageScreen: View {
                 webOnly(page)
             } else if !page.hasSource {
                 webOnly(page, reason: "This page declares no data source, so it has nothing to show here.")
+            } else if !page.sourceIsRead {
+                webOnly(page, reason: "\(page.pluginName) fills this page from a method that is not declared a read, so opening it here could change something. Open it on the web, where the console shows what it does.")
             } else {
                 PlatformListState(state: model.data, noun: "\(page.view.title.isEmpty ? "the page" : page.view.title)", retry: { Task { await reload() } }) { data in
                     loaded(page, data: data)
@@ -110,7 +114,7 @@ struct ExtensionPageScreen: View {
             Section {
             } footer: {
                 VStack(alignment: .leading, spacing: Spacing.xs) {
-                    Text("Provided by \(page.pluginName). Secrets stay masked here; copy them on the web.")
+                    Text("Provided by \(page.pluginName). Pull to refresh. Secrets stay masked here; copy them on the web.")
                     FreshnessFooter(state: model.data, interval: 60)
                 }
             }

@@ -58,22 +58,33 @@ public enum ExtensionPageModel {
         /// The scopes the source call needs: the method's, else the interface's, else the nav entry's.
         public var requiredScopes: [String]
         public var consolePath: String
+        /// The source method's declared effect, or nil when the plugin's
+        /// interfaces do not declare it.
+        public var sourceEffect: String?
 
         public var hasSource: Bool { view.source.map { !$0.interface.isEmpty && !$0.method.isEmpty } ?? false }
+        /// The phone calls a source only when it is declared a read: a
+        /// manifest may bind a view to a write or plan method, and opening a
+        /// page must never change anything.
+        public var sourceIsRead: Bool { hasSource && sourceEffect == "read" }
     }
 
     /// The page for `route`, or nil when the plugin contributes none.
     public static func page(plugin: PlatformPlugin, route: String) -> Page? {
         guard let view = plugin.ui?.views.first(where: { $0.route == route }) else { return nil }
         var scopes: [String] = []
+        var effect: String?
         if let source = view.source, !source.interface.isEmpty {
-            scopes = plugin.interfaces.first { $0.service == source.interface }?.scopes(for: source.method) ?? []
+            let contract = plugin.interfaces.first { $0.service == source.interface }
+            scopes = contract?.scopes(for: source.method) ?? []
+            effect = contract?.effect(of: source.method)
         }
         if scopes.isEmpty {
             scopes = plugin.ui?.nav.first { $0.route == view.route }?.scopes ?? []
         }
         return Page(pluginID: plugin.id, pluginName: plugin.name.isEmpty ? plugin.id : plugin.name, view: view,
-                    kind: Kind(view.kind), requiredScopes: scopes, consolePath: "/plugins/\(plugin.id)/\(route)")
+                    kind: Kind(view.kind), requiredScopes: scopes, consolePath: "/plugins/\(plugin.id)/\(route)",
+                    sourceEffect: effect)
     }
 
     /// The rows of a source answer (`asRows`): a bare array, or `{rows: [...]}`.

@@ -68,6 +68,13 @@ public struct PlatformInterface: Decodable, Hashable, Sendable {
         backing = try c.decodeIfPresent(String.self, forKey: .backing) ?? ""
     }
 
+    /// The method's effect as the server's `effectiveMethods` resolves it:
+    /// a bare name is a read. Nil when the interface does not declare it.
+    public func effect(of method: String) -> String? {
+        guard let declared = methods.first(where: { $0.name == method }) else { return nil }
+        return declared.effect.isEmpty ? "read" : declared.effect
+    }
+
     /// The console's `interfaceMethodScopes`: a typed method's own scopes,
     /// else the interface's.
     public func scopes(for method: String) -> [String] {
