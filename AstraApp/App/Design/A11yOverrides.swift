@@ -9,7 +9,9 @@ extension EnvironmentValues {
 }
 
 /// Applied once at the root: folds the system setting and the demo overrides
-/// (bold text, differentiate without color, color filter) into the environment.
+/// (differentiate without color, color filter) into the environment. Bold
+/// text is a scene trait override set by `SceneDelegate`, because SwiftUI
+/// text does not read a legibility weight set only in the environment.
 struct A11yOverrides: ViewModifier {
     let overrides: LaunchOverrides
     @Environment(\.accessibilityDifferentiateWithoutColor) private var systemDifferentiate
@@ -17,7 +19,6 @@ struct A11yOverrides: ViewModifier {
     func body(content: Content) -> some View {
         content
             .environment(\.astraDifferentiateWithoutColor, systemDifferentiate || overrides.differentiateWithoutColor)
-            .modifier(BoldTextOverride(enabled: overrides.boldText))
             .colorFilter(overrides.colorFilter)
     }
 }
@@ -31,18 +32,6 @@ extension View {
         switch filter {
         case .grayscale: grayscale(1)
         case .deuteranopia, nil: self
-        }
-    }
-}
-
-private struct BoldTextOverride: ViewModifier {
-    let enabled: Bool
-
-    func body(content: Content) -> some View {
-        if enabled {
-            content.environment(\.legibilityWeight, .bold)
-        } else {
-            content
         }
     }
 }

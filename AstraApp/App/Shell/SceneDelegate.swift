@@ -14,6 +14,12 @@ final class SceneDelegate: NSObject, UIWindowSceneDelegate {
         guard let scene = scene as? UIWindowScene else { return }
         self.scene = scene
         let services = AppServices.shared
+        if services.launch.demo, services.launch.boldText {
+            // `-AstraBoldText`: SwiftUI text ignores a legibility weight set only
+            // in the environment, while a scene trait override reaches it, the
+            // UIKit bars and the scene-level windows alike, as Bold Text does.
+            scene.traitOverrides.legibilityWeight = .bold
+        }
         bannerWindow = BannerWindow(scene: scene, center: services.banner, services: services)
         shield = ShieldController(scene: scene) { services.runner.authenticator }
         services.router.mainWindow = { [weak self] in self?.mainWindow }
