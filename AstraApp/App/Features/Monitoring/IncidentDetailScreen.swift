@@ -13,6 +13,12 @@ final class MonitoringDeliveriesModel {
             deliveries = .denied(scope: missing.joined(separator: " and "))
             return true
         }
+        // The outbox is fleet-wide, so the server refuses it to a token with
+        // a node allowlist (refuseConfinedNotifyRead); say so without asking.
+        if session.primaryIdentity?.scopeSet.isConfined == true {
+            deliveries = .denied(scope: ScopeRequirement.unconfinedPhrase)
+            return true
+        }
         guard let client = session.client else { return false }
         deliveries = deliveries.reloading
         do {
