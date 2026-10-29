@@ -133,7 +133,7 @@ struct BatchReviewSheet: View {
                     Text(offline.count == 1
                          ? "\(offline[0]) is offline. Its plan waits until the node reports again."
                          : "\(VerdictBuilder.listed(offline)) are offline. Their plans wait until the nodes report again.")
-                        .foregroundStyle(Color.statusWarnText)
+                        .foregroundStyle(Color.statusFailText)
                         .fixedSize(horizontal: false, vertical: true)
                 } icon: {
                     Image(systemName: "xmark.octagon.fill").foregroundStyle(Color.statusFailFill)
@@ -148,7 +148,7 @@ struct BatchReviewSheet: View {
                 }
             }
         }
-        ForEach(model.bodies, id: \.hash) { body in
+        ForEach(model.bodies, id: \.id) { body in
             InboxCard(title: model.bodies.count == 1 ? "The plan" : "Plan \(PlanSeal.short(body.hash))") {
                 VStack(alignment: .leading, spacing: Spacing.m) {
                     HStack(alignment: .firstTextBaseline, spacing: Spacing.s) {
@@ -254,7 +254,7 @@ struct BatchReviewSheet: View {
             case .done(let message, _):
                 model.summary = (message, .ok)
                 haptic = .batchLanded
-            case .partial(_, _, let message):
+            case .partial(_, _, let message), .unknown(let message):
                 model.summary = (message, .warn)
                 haptic = .partial
             default:
@@ -343,6 +343,9 @@ struct InboxBatchRowView: View {
             return ("Done", message, "checkmark.circle.fill", .ok)
         case .refused(.alreadyDecided, let message)?:
             return ("Not recorded", message, "xmark.octagon.fill", .fail)
+        case .unknown(let message)?:
+            // Sent; the reload could not say either way.
+            return ("Not confirmed", message, "questionmark.circle.fill", .warn)
         case let outcome?:
             return ("Not recorded", outcome.message, "xmark.circle.fill", .fail)
         case nil:
@@ -369,6 +372,8 @@ final class InboxBatchModel {
 
     /// One distinct plan body and the approvals that share it.
     struct Body {
+        /// The local hash and the server's, which differ only on a mismatch.
+        let id: String
         let hash: String
         let text: String
         let verified: Bool
@@ -394,16 +399,20 @@ final class InboxBatchModel {
 
     var isLoaded: Bool { state == .loaded }
 
+    /// Distinct bodies keyed by the hash of the text on the sheet and the
+    /// server's hash, so every body a row would approve is shown, each with
+    /// its own seal (section 6.2).
     var bodies: [Body] {
         var order: [String] = []
         var groups: [String: [Approval]] = [:]
         for approval in rows.compactMap(\.approval) {
-            if groups[approval.planSHA256] == nil { order.append(approval.planSHA256) }
-            groups[approval.planSHA256, default: []].append(approval)
+            let key = approval.planHash + approval.planSHA256
+            if groups[key] == nil { order.append(key) }
+            groups[key, default: []].append(approval)
         }
-        return order.compactMap { hash in
-            guard let approvals = groups[hash], let first = approvals.first else { return nil }
-            return Body(hash: hash, text: first.plan, verified: first.planHashMatchesServer, approvals: approvals)
+        return order.compactMap { key in
+            guard let approvals = groups[key], let first = approvals.first else { return nil }
+            return Body(id: key, hash: first.planSHA256, text: first.plan, verified: first.planHashMatchesServer, approvals: approvals)
         }
     }
 

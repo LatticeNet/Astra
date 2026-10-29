@@ -279,22 +279,33 @@ public struct DecisionFlow: Sendable {
         }
         var succeeded: [ObjectRef] = []
         var failed: [ObjectFailure] = []
+        // Sent but not confirmed either way: said apart from "not recorded".
+        var unconfirmed = 0
         for approval in approvals {
             let object = ObjectRef(kind: "approval", id: approval.id, name: ApprovalEvents.nodeLabel(approval))
             switch rows[approval.id] {
             case .done?: succeeded.append(object)
-            case let outcome?: failed.append(ObjectFailure(object: object, reason: outcome.message))
+            case let outcome?:
+                if case .unknown = outcome { unconfirmed += 1 }
+                failed.append(ObjectFailure(object: object, reason: outcome.message))
             case nil: failed.append(ObjectFailure(object: object, reason: "Not sent"))
             }
         }
         if failed.isEmpty {
             return .done(succeeded.count == 1 ? "1 plan \(past)" : "\(succeeded.count) plans \(past)")
         }
+        let notRecorded = failed.count - unconfirmed
         if succeeded.isEmpty {
+            if notRecorded == 0 {
+                return .unknown(unconfirmed == 1 ? "Sent, but not confirmed: \(failed.first?.reason ?? "")" : "None of the \(unconfirmed) plans could be confirmed")
+            }
             let reason = failed.first?.reason ?? "Not recorded"
             return .refused(.validation(reason), failed.count == 1 ? "Not recorded: \(reason)" : "None of the \(failed.count) plans were recorded")
         }
-        return .partial(succeeded: succeeded, failed: failed, message: "\(succeeded.count) \(past), \(failed.count) not recorded")
+        var parts = ["\(succeeded.count) \(past)"]
+        if unconfirmed > 0 { parts.append("\(unconfirmed) could not be confirmed") }
+        if notRecorded > 0 { parts.append("\(notRecorded) not recorded") }
+        return .partial(succeeded: succeeded, failed: failed, message: parts.joined(separator: ", "))
     }
 
     // MARK: Steps

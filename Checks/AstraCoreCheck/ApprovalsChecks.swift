@@ -622,6 +622,8 @@ private func checkBatchDecisions() async throws {
 
     let allDone = DecisionFlow.batchSummary(.reject, approvals: Array(approvals.prefix(2)), rows: ["b0": .done("Rejected."), "b1": .done("Rejected.")])
     guard case .done("2 plans rejected", _) = allDone else { throw CheckFailure.failed("clean batch summary: \(allDone)") }
+    let unconfirmed = DecisionFlow.batchSummary(.approve(queueApply: true), approvals: Array(approvals.prefix(2)), rows: ["b0": .done("Approved."), "b1": .unknown("Could not confirm.")])
+    guard case .partial(_, _, "1 approved, 1 could not be confirmed") = unconfirmed else { throw CheckFailure.failed("an unconfirmed row is not called unrecorded: \(unconfirmed)") }
 
     let fetchTransport = ScriptedTransport([
         "GET /api/network/approvals?id=b0": [.json(200, #"{"approval":\#(approvalView(id: "b0", plan: plans[0]))}"#)],

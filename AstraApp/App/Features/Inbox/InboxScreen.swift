@@ -510,13 +510,11 @@ struct InboxGroupRow: View {
         let nodes = names.prefix(3).joined(separator: ", ") + (names.count > 3 ? " +\(names.count - 3) more" : "")
         let age = event.newestCreatedAt.map { RelativeDateFormatter.string(from: $0) }
         let style = StatusStyle.approval(.needsYou)
-        let bodies = Set(event.approvals.map(\.planSHA256)).count
         StatusRow(
             style: style,
             title: ApprovalEvents.summary(event),
             detail: [nodes, age].compactMap { $0 }.joined(separator: ", "),
             reason: nil,
-            trailing: bodies == 1 ? "1 body" : "\(bodies) bodies",
             accessibilityPhrase: "Needs you, \(ApprovalEvents.summary(event)), \(nodes)" + (event.newestCreatedAt.map { ", filed \(TimeDisplay.duration(Date().timeIntervalSince($0), locale: locale)) ago" } ?? "")
         )
     }
@@ -620,7 +618,9 @@ struct InboxControlPlaneRow: View {
     }
 }
 
-/// The snooze choices (M1-01): 1 h, 4 h, until 08:00 tomorrow.
+/// The snooze choices (M1-01): 1 h, 4 h, and until the next 08:00. Before
+/// 08:00 that is this morning, so a 3am snooze does not silence repeat
+/// alerts through the whole next working day; the label names the day.
 struct InboxSnoozeChoice: Identifiable {
     let id: String
     let label: String
@@ -630,14 +630,19 @@ struct InboxSnoozeChoice: Identifiable {
     static func choices(now: Date, mode: TimeZoneMode, locale: Locale) -> [InboxSnoozeChoice] {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = mode.timeZone
-        let tomorrow = calendar.date(byAdding: .day, value: 1, to: now) ?? now
-        let morning = calendar.date(bySettingHour: 8, minute: 0, second: 0, of: tomorrow) ?? tomorrow
+        let todayMorning = calendar.date(bySettingHour: 8, minute: 0, second: 0, of: now) ?? now
+        let isToday = todayMorning > now
+        let morning = isToday ? todayMorning : (calendar.date(byAdding: .day, value: 1, to: todayMorning) ?? todayMorning)
         let clock = { (date: Date) in TimeDisplay.clock(date, mode: mode, locale: locale) }
         let hour = now.addingTimeInterval(3600), four = now.addingTimeInterval(4 * 3600)
+        let minutes = max(1, Int(morning.timeIntervalSince(now) / 60))
+        let rounded = Int((morning.timeIntervalSince(now) / 3600).rounded())
+        let hours = rounded < 1 ? "under an hour" : (rounded == 1 ? "1 hour" : "\(rounded) hours")
+        let until = isToday ? "\(clock(morning)) this morning" : "\(clock(morning)) tomorrow"
         return [
             InboxSnoozeChoice(id: "1h", label: "1 hour, until \(clock(hour))", minutes: 60, until: clock(hour)),
             InboxSnoozeChoice(id: "4h", label: "4 hours, until \(clock(four))", minutes: 240, until: clock(four)),
-            InboxSnoozeChoice(id: "morning", label: "Until \(clock(morning)) tomorrow", minutes: max(1, Int(morning.timeIntervalSince(now) / 60)), until: "\(clock(morning)) tomorrow"),
+            InboxSnoozeChoice(id: "morning", label: "Until \(until), \(hours)", minutes: minutes, until: until),
         ]
     }
 }
