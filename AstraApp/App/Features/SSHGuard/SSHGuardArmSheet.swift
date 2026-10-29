@@ -200,6 +200,7 @@ struct SSHGuardArmSheet: View {
                         .onChange(of: model.portText) { model.syncPort() }
                     Toggle("Keep port 22 working too", isOn: $model.form.keepLegacyPort)
                 }
+                problemRows([.portRange, .portIsLegacy])
             } header: {
                 Text("SSH port").accessibilityAddTraits(.isHeader)
             } footer: {
@@ -232,6 +233,7 @@ struct SSHGuardArmSheet: View {
             }
             Section {
                 Toggle("Lattice terminal as the fallback", isOn: $model.form.outOfBandFallback)
+                problemRows([.singleWayIn])
             } footer: {
                 Text(model.form.outOfBandFallback
                      ? "If knocking fails, the way back in is the node's Lattice terminal. The server refuses this when the node is offline or does not report the terminal."
@@ -243,17 +245,16 @@ struct SSHGuardArmSheet: View {
                         Text(SSHGuardIntents.windowWords(seconds)).tag(seconds)
                     }
                 }
+                problemRows([.windowTooShort])
             } header: {
                 Text("Revert timer").accessibilityAddTraits(.isHeader)
             } footer: {
                 Text("Once the arm applies, \(model.name) undoes every change by itself unless a confirm plan applies within \(SSHGuardIntents.windowWords(model.form.confirmWindowSec)). Confirm only after you opened a new SSH connection over the hardened path.")
             }
-            if !model.problems.isEmpty {
+            let unplaced = model.problems.filter { !Self.placedProblems.contains($0) }
+            if !unplaced.isEmpty {
                 Section {
-                    ForEach(model.problems, id: \.self) { problem in
-                        Label(problem.sentence, systemImage: "exclamationmark.triangle.fill")
-                            .foregroundStyle(Color.statusWarnText)
-                    }
+                    problemRows(unplaced)
                 } header: {
                     Text("Before filing").accessibilityAddTraits(.isHeader)
                 }
@@ -279,14 +280,38 @@ struct SSHGuardArmSheet: View {
             : "sshd moves to the new port; port 22 stops answering once the arm applies."
     }
 
-    /// Short, because it sits pinned above the button; the problems
-    /// themselves are listed in full in the form.
+    /// Problems shown under the field they concern. The invalid sources
+    /// already have their own line under the field.
+    private static let placedProblems: Set<SSHGuardRotation.FormProblem> = [.portRange, .portIsLegacy, .singleWayIn, .windowTooShort, .sourcesInvalid]
+
+    @ViewBuilder
+    private func problemRows(_ kinds: [SSHGuardRotation.FormProblem]) -> some View {
+        ForEach(model.problems.filter(kinds.contains), id: \.self) { problem in
+            Label(problem.sentence, systemImage: "exclamationmark.triangle.fill")
+                .foregroundStyle(Color.statusWarnText)
+                .symbolRenderingMode(.monochrome)
+        }
+    }
+
+    /// Short, because it sits pinned above the button: it names the fix,
+    /// since the field it concerns may be off screen.
     private var armBlockReason: String? {
         if let reason = store.planBlockReason() { return reason }
         switch model.problems.count {
         case 0: return nil
-        case 1: return "Fix the problem listed above"
-        default: return "Fix the \(model.problems.count) problems listed above"
+        case 1: return Self.fix(model.problems[0])
+        default: return "Fix the \(model.problems.count) problems marked in the form"
+        }
+    }
+
+    private static func fix(_ problem: SSHGuardRotation.FormProblem) -> String {
+        switch problem {
+        case .nodeRequired: "Choose a node"
+        case .portRange: "Enter an SSH port from 1 to 65535"
+        case .portIsLegacy: "Choose a port other than 22, or leave it unchanged"
+        case .sourcesInvalid: "Correct the management sources"
+        case .windowTooShort: "Choose a confirm window of 2 minutes or more"
+        case .singleWayIn: "Add a management source or turn on the terminal fallback"
         }
     }
 
