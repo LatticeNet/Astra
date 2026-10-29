@@ -97,6 +97,12 @@ private func checkAuditExportEdges() throws {
     let csv = AuditExport.csv(page.events).components(separatedBy: "\n")
     try expectEqual(csv[1], #"2026-10-28T11:00:00.000000001Z,,notify.test,,,,,,a <b>,"{""url"":""https://x.example.net/a?b=1&c=2""}""#, "CSV reads strings, keeps metadata bytes and the server's precision")
 
+    // Go escapes < > & in metadata; the CSV writes them as JSON.stringify does. NDJSON stays raw.
+    let escaped = try AuditPage.decode(json(#"{"events":[{"id":"e2","action":"notify.test","metadata":{"note":"\\u003c","url":"a?b=1\u0026c=\u003cd\u003e"}}],"total":1,"limit":100,"offset":0}"#), query: AuditQuery())
+    let escapedCSV = AuditExport.csv(escaped.events).components(separatedBy: "\n")
+    try expect(escapedCSV[1].hasSuffix(#""{""note"":""\\u003c"",""url"":""a?b=1&c=<d>""}""#), "CSV metadata unescapes Go's escapes only: \(escapedCSV[1])")
+    try expect(AuditExport.ndjson(escaped.events).contains(#"\u0026"#), "NDJSON keeps Go's escapes")
+
     // A partial scan says so on the first line and in the share title.
     let scan = AuditExportScan(scanned: 200_000)
     try expectEqual(AuditExport.csv([], partial: scan).components(separatedBy: "\n").first, "Partial: scanned 200000 events", "partial CSV first line")

@@ -43,8 +43,31 @@ public enum AuditExport {
         case "n":
             return ""
         default:
-            return raw
+            return jsonStringifyEscapes(raw)
         }
+    }
+
+    /// Go's encoder writes < > & and U+2028/9 as \u escapes; the console's
+    /// JSON.stringify of the parsed object writes them literally. Only those
+    /// five are undone, and an escaped backslash is passed through untouched.
+    static func jsonStringifyEscapes(_ raw: String) -> String {
+        guard raw.contains("\\u") else { return raw }
+        let undo: [String: String] = ["003c": "<", "003e": ">", "0026": "&", "2028": "\u{2028}", "2029": "\u{2029}"]
+        var out = ""
+        var rest = Substring(raw)
+        while let slash = rest.firstIndex(of: "\\") {
+            out += rest[..<slash]
+            let after = rest[rest.index(after: slash)...]
+            if after.hasPrefix("u"), after.count >= 5, let literal = undo[String(after.dropFirst().prefix(4)).lowercased()] {
+                out += literal
+                rest = after.dropFirst(5)
+            } else {
+                // Any other escape, \\ included, stays as the server wrote it.
+                out += rest[slash...].prefix(2)
+                rest = rest[slash...].dropFirst(2)
+            }
+        }
+        return out + rest
     }
 
     /// For an event built without its raw slice: the model's fields, metadata
