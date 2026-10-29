@@ -11,6 +11,9 @@ struct StatusRow: View {
     let title: String
     var detail: String?
     var reason: String?
+    /// Lines the reason may take below accessibility sizes; nil shows it in
+    /// full, for a reason that is the only place a fix is named.
+    var reasonLineLimit: Int? = 2
     var trailing: String?
     /// Ids, hashes and IPs truncate in the middle; names never do.
     var titleIsIdentifier = false
@@ -47,7 +50,7 @@ struct StatusRow: View {
                 if let reason = shownReason {
                     Text(reason)
                         .textRole(.rowReason(style.tone.word))
-                        .lineLimit(accessible ? nil : 2)
+                        .lineLimit(accessible ? nil : reasonLineLimit)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
