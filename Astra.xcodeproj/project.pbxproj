@@ -3,82 +3,37 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 56;
+	objectVersion = 77;
 	objects = {
 
 /* Begin PBXBuildFile section */
-		0A0000010000000000000001 /* AstraApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A0000010000000000000101 /* AstraApp.swift */; };
-		0A0000010000000000000002 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A0000010000000000000102 /* ContentView.swift */; };
-		0A0000010000000000000003 /* ServerDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A0000010000000000000103 /* ServerDetailView.swift */; };
-		0A0000010000000000000004 /* AppSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A0000010000000000000104 /* AppSettings.swift */; };
-		0A0000010000000000000005 /* DashboardModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A0000010000000000000105 /* DashboardModel.swift */; };
-		0A0000010000000000000006 /* AstraCore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A0000010000000000000106 /* AstraCore.swift */; };
 		0A0000010000000000000007 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 0A0000010000000000000107 /* Assets.xcassets */; };
 		0A0000010000000000000008 /* Security.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 0A0000010000000000000108 /* Security.framework */; };
-		0A0000010000000000000009 /* BackgroundRefresh.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A0000010000000000000111 /* BackgroundRefresh.swift */; };
 		0A000001000000000000000A /* BackgroundTasks.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 0A0000010000000000000112 /* BackgroundTasks.framework */; };
-		0A0000010000000000002001 /* LatticeModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A0000010000000000001001 /* LatticeModels.swift */; };
-		0A0000010000000000002002 /* LatticeAPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A0000010000000000001002 /* LatticeAPI.swift */; };
-		0A0000010000000000002003 /* LatticeAnalytics.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A0000010000000000001003 /* LatticeAnalytics.swift */; };
-		0A0000010000000000002004 /* DesignSystem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A0000010000000000001004 /* DesignSystem.swift */; };
-		0A0000010000000000002005 /* OverviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A0000010000000000001005 /* OverviewView.swift */; };
-		0A0000010000000000002006 /* NodesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A0000010000000000001006 /* NodesView.swift */; };
-		0A0000010000000000002007 /* NodeActions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A0000010000000000001007 /* NodeActions.swift */; };
-		0A0000010000000000002008 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A0000010000000000001008 /* SettingsView.swift */; };
-		0A0000010000000000002009 /* MoreHubView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A0000010000000000001009 /* MoreHubView.swift */; };
-		0A000001000000000000200A /* InventoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A000001000000000000100A /* InventoryView.swift */; };
-		0A000001000000000000200B /* MonitorsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A000001000000000000100B /* MonitorsView.swift */; };
-		0A000001000000000000200C /* ActivityView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A000001000000000000100C /* ActivityView.swift */; };
-		0A000001000000000000200D /* AccountView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A000001000000000000100D /* AccountView.swift */; };
-		0A000001000000000000200E /* NotificationsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A000001000000000000100E /* NotificationsView.swift */; };
-		0A000001000000000000200F /* LogsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A000001000000000000100F /* LogsView.swift */; };
-		0A0000010000000000002010 /* TasksView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A0000010000000000001010 /* TasksView.swift */; };
-		0A0000010000000000002011 /* LatticeNetwork.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A0000010000000000001011 /* LatticeNetwork.swift */; };
-		0A0000010000000000002012 /* NetworkView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A0000010000000000001012 /* NetworkView.swift */; };
-		0A0000010000000000002013 /* InboxView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A0000010000000000001013 /* InboxView.swift */; };
-		0A0000010000000000002014 /* ReviewSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A0000010000000000001014 /* ReviewSheet.swift */; };
-		0A0000010000000000002015 /* IntentAuth.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A0000010000000000001015 /* IntentAuth.swift */; };
-		0A0000010000000000002016 /* LatticeDeepLink.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A0000010000000000001016 /* LatticeDeepLink.swift */; };
 		0A000001000000000000000B /* LocalAuthentication.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 0A0000010000000000000113 /* LocalAuthentication.framework */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
-		0A0000010000000000000101 /* AstraApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AstraApp.swift; sourceTree = "<group>"; };
-		0A0000010000000000000102 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
-		0A0000010000000000000103 /* ServerDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServerDetailView.swift; sourceTree = "<group>"; };
-		0A0000010000000000000104 /* AppSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSettings.swift; sourceTree = "<group>"; };
-		0A0000010000000000000105 /* DashboardModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardModel.swift; sourceTree = "<group>"; };
-		0A0000010000000000000106 /* AstraCore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AstraCore.swift; sourceTree = "<group>"; };
 		0A0000010000000000000107 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		0A0000010000000000000108 /* Security.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Security.framework; path = System/Library/Frameworks/Security.framework; sourceTree = SDKROOT; };
 		0A0000010000000000000109 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		0A0000010000000000000110 /* Astra.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Astra.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		0A0000010000000000000111 /* BackgroundRefresh.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackgroundRefresh.swift; sourceTree = "<group>"; };
 		0A0000010000000000000112 /* BackgroundTasks.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = BackgroundTasks.framework; path = System/Library/Frameworks/BackgroundTasks.framework; sourceTree = SDKROOT; };
-		0A0000010000000000001001 /* LatticeModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LatticeModels.swift; sourceTree = "<group>"; };
-		0A0000010000000000001002 /* LatticeAPI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LatticeAPI.swift; sourceTree = "<group>"; };
-		0A0000010000000000001003 /* LatticeAnalytics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LatticeAnalytics.swift; sourceTree = "<group>"; };
-		0A0000010000000000001004 /* DesignSystem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesignSystem.swift; sourceTree = "<group>"; };
-		0A0000010000000000001005 /* OverviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OverviewView.swift; sourceTree = "<group>"; };
-		0A0000010000000000001006 /* NodesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NodesView.swift; sourceTree = "<group>"; };
-		0A0000010000000000001007 /* NodeActions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NodeActions.swift; sourceTree = "<group>"; };
-		0A0000010000000000001008 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
-		0A0000010000000000001009 /* MoreHubView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MoreHubView.swift; sourceTree = "<group>"; };
-		0A000001000000000000100A /* InventoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InventoryView.swift; sourceTree = "<group>"; };
-		0A000001000000000000100B /* MonitorsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MonitorsView.swift; sourceTree = "<group>"; };
-		0A000001000000000000100C /* ActivityView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityView.swift; sourceTree = "<group>"; };
-		0A000001000000000000100D /* AccountView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountView.swift; sourceTree = "<group>"; };
-		0A000001000000000000100E /* NotificationsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationsView.swift; sourceTree = "<group>"; };
-		0A000001000000000000100F /* LogsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogsView.swift; sourceTree = "<group>"; };
-		0A0000010000000000001010 /* TasksView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TasksView.swift; sourceTree = "<group>"; };
-		0A0000010000000000001011 /* LatticeNetwork.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LatticeNetwork.swift; sourceTree = "<group>"; };
-		0A0000010000000000001012 /* NetworkView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkView.swift; sourceTree = "<group>"; };
-		0A0000010000000000001013 /* InboxView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InboxView.swift; sourceTree = "<group>"; };
-		0A0000010000000000001014 /* ReviewSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReviewSheet.swift; sourceTree = "<group>"; };
-		0A0000010000000000001015 /* IntentAuth.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IntentAuth.swift; sourceTree = "<group>"; };
-		0A0000010000000000001016 /* LatticeDeepLink.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LatticeDeepLink.swift; sourceTree = "<group>"; };
 		0A0000010000000000000113 /* LocalAuthentication.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = LocalAuthentication.framework; path = System/Library/Frameworks/LocalAuthentication.framework; sourceTree = SDKROOT; };
 /* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedRootGroup section */
+		0A0000010000000000000303 /* App */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = App;
+			sourceTree = "<group>";
+		};
+		0A0000010000000000000307 /* AstraCore */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = AstraCore;
+			sourceTree = "<group>";
+		};
+/* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		0A0000010000000000000201 /* Frameworks */ = {
@@ -114,55 +69,12 @@
 			path = AstraApp;
 			sourceTree = "<group>";
 		};
-		0A0000010000000000000303 /* App */ = {
-			isa = PBXGroup;
-			children = (
-				0A0000010000000000000101 /* AstraApp.swift */,
-				0A0000010000000000000102 /* ContentView.swift */,
-				0A0000010000000000000103 /* ServerDetailView.swift */,
-				0A0000010000000000000104 /* AppSettings.swift */,
-				0A0000010000000000000105 /* DashboardModel.swift */,
-				0A0000010000000000000111 /* BackgroundRefresh.swift */,
-				0A0000010000000000001004 /* DesignSystem.swift */,
-				0A0000010000000000001005 /* OverviewView.swift */,
-				0A0000010000000000001006 /* NodesView.swift */,
-				0A0000010000000000001007 /* NodeActions.swift */,
-				0A0000010000000000001008 /* SettingsView.swift */,
-				0A0000010000000000001009 /* MoreHubView.swift */,
-				0A000001000000000000100A /* InventoryView.swift */,
-				0A000001000000000000100B /* MonitorsView.swift */,
-				0A000001000000000000100C /* ActivityView.swift */,
-				0A000001000000000000100D /* AccountView.swift */,
-				0A000001000000000000100E /* NotificationsView.swift */,
-				0A000001000000000000100F /* LogsView.swift */,
-				0A0000010000000000001010 /* TasksView.swift */,
-				0A0000010000000000001012 /* NetworkView.swift */,
-				0A0000010000000000001013 /* InboxView.swift */,
-				0A0000010000000000001014 /* ReviewSheet.swift */,
-				0A0000010000000000001015 /* IntentAuth.swift */,
-			);
-			path = App;
-			sourceTree = "<group>";
-		};
 		0A0000010000000000000304 /* Sources */ = {
 			isa = PBXGroup;
 			children = (
 				0A0000010000000000000307 /* AstraCore */,
 			);
 			path = Sources;
-			sourceTree = "<group>";
-		};
-		0A0000010000000000000307 /* AstraCore */ = {
-			isa = PBXGroup;
-			children = (
-				0A0000010000000000000106 /* AstraCore.swift */,
-				0A0000010000000000001001 /* LatticeModels.swift */,
-				0A0000010000000000001002 /* LatticeAPI.swift */,
-				0A0000010000000000001003 /* LatticeAnalytics.swift */,
-				0A0000010000000000001011 /* LatticeNetwork.swift */,
-				0A0000010000000000001016 /* LatticeDeepLink.swift */,
-			);
-			path = AstraCore;
 			sourceTree = "<group>";
 		};
 		0A0000010000000000000305 /* Frameworks */ = {
@@ -198,6 +110,10 @@
 			);
 			dependencies = (
 			);
+			fileSystemSynchronizedGroups = (
+				0A0000010000000000000303 /* App */,
+				0A0000010000000000000307 /* AstraCore */,
+			);
 			name = Astra;
 			productName = Astra;
 			productReference = 0A0000010000000000000110 /* Astra.app */;
@@ -210,8 +126,8 @@
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
-				LastSwiftUpdateCheck = 1600;
-				LastUpgradeCheck = 1600;
+				LastSwiftUpdateCheck = 2650;
+				LastUpgradeCheck = 2650;
 				TargetAttributes = {
 					0A0000010000000000000401 = {
 						CreatedOnToolsVersion = 16.0;
@@ -219,7 +135,6 @@
 				};
 			};
 			buildConfigurationList = 0A0000010000000000000901 /* Build configuration list for PBXProject "Astra" */;
-			compatibilityVersion = "Xcode 14.0";
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
@@ -227,6 +142,7 @@
 				Base,
 			);
 			mainGroup = 0A0000010000000000000301;
+			preferredProjectObjectVersion = 77;
 			productRefGroup = 0A0000010000000000000306 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
@@ -252,35 +168,6 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				0A0000010000000000000001 /* AstraApp.swift in Sources */,
-				0A0000010000000000000002 /* ContentView.swift in Sources */,
-				0A0000010000000000000003 /* ServerDetailView.swift in Sources */,
-				0A0000010000000000000004 /* AppSettings.swift in Sources */,
-				0A0000010000000000000005 /* DashboardModel.swift in Sources */,
-				0A0000010000000000000009 /* BackgroundRefresh.swift in Sources */,
-				0A0000010000000000000006 /* AstraCore.swift in Sources */,
-				0A0000010000000000002001 /* LatticeModels.swift in Sources */,
-				0A0000010000000000002002 /* LatticeAPI.swift in Sources */,
-				0A0000010000000000002003 /* LatticeAnalytics.swift in Sources */,
-				0A0000010000000000002004 /* DesignSystem.swift in Sources */,
-				0A0000010000000000002005 /* OverviewView.swift in Sources */,
-				0A0000010000000000002006 /* NodesView.swift in Sources */,
-				0A0000010000000000002007 /* NodeActions.swift in Sources */,
-				0A0000010000000000002008 /* SettingsView.swift in Sources */,
-				0A0000010000000000002009 /* MoreHubView.swift in Sources */,
-				0A000001000000000000200A /* InventoryView.swift in Sources */,
-				0A000001000000000000200B /* MonitorsView.swift in Sources */,
-				0A000001000000000000200C /* ActivityView.swift in Sources */,
-				0A000001000000000000200D /* AccountView.swift in Sources */,
-				0A000001000000000000200E /* NotificationsView.swift in Sources */,
-				0A000001000000000000200F /* LogsView.swift in Sources */,
-				0A0000010000000000002010 /* TasksView.swift in Sources */,
-				0A0000010000000000002011 /* LatticeNetwork.swift in Sources */,
-				0A0000010000000000002012 /* NetworkView.swift in Sources */,
-				0A0000010000000000002013 /* InboxView.swift in Sources */,
-				0A0000010000000000002014 /* ReviewSheet.swift in Sources */,
-				0A0000010000000000002015 /* IntentAuth.swift in Sources */,
-				0A0000010000000000002016 /* LatticeDeepLink.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -338,7 +225,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
@@ -393,7 +280,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				SDKROOT = iphoneos;
