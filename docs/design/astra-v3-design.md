@@ -481,8 +481,8 @@ Every page in `console-inventory.md` section 1 and every action in section 2 app
 | Plugins | Lifecycle activate or disable | `POST /api/plugins/lifecycle` | plugin:admin | N-T3 | Stop a misbehaving plugin |
 | Plugins | Lifecycle verified to installed | `POST /api/plugins/lifecycle` | plugin:admin | W | Part of the install ceremony |
 | Plugins | Verify uploaded bundle | `POST /api/plugins/verify` | plugin:verify | W | Needs a file upload |
-| Publishing | Delete binding | `POST /api/storage/bindings/delete` | kv:write or static:write | N-T4 | Leak response |
-| Publishing | Revoke storage token | `POST /api/storage/tokens/revoke` | kv:write or static:write | N-T4 | Leak response |
+| Publishing | Delete binding | `POST /api/storage/bindings/delete` | kv:admin or static:admin | N-T4 | Leak response |
+| Publishing | Revoke storage token | `POST /api/storage/tokens/revoke` | kv:admin or static:admin | N-T4 | Leak response |
 | Publishing | Share create | `POST /api/subscription-shares` | proxy:admin | W | Form |
 | Publishing | Share edit expiry or interval | `PATCH /api/subscription-shares/{id}` | proxy:admin | W | Form |
 | Publishing | Share rotate | `POST /api/subscription-shares/{id}/rotate` | proxy:admin | N-T3 | Leak response; old URL stops working |
@@ -1283,11 +1283,11 @@ Pull to refresh is always immediate. After a failed poll the interval doubles up
 - Tabs and directory rows never disappear. Unreadable sections render ScopeDeniedRow; unreadable directory pages move to the collapsed "Not available with this token" group; unavailable actions stay visible in menus, disabled, with "Needs {scope}".
 - A token confined by `server_allowlist` shows "Confined to {n} nodes" in Fleet's header and "of visible nodes" in counts; actions that need an unconfined token (measure certificate, proxy plans) are disabled with "Needs a token without a node allowlist".
 - `ScopeCatalogue` in AstraCore holds the scope descriptions from `lib/scopes.ts` for ScopeSummary and TokenDetail.
-- **Token presets.** AstraCore `TokenPresets` derives the presets from the parity matrix (each N-* row's scopes are data in AstraCore `ParityMatrix`), and a check asserts that every N-* row's scopes belong to some preset or to `TokenPresets.deliberatelyExcluded` (`token:admin`, `user:admin`, `plugin:admin`, `oidc:admin`, `notify:send`, `secrets:reveal`). The resulting presets:
+- **Token presets.** AstraCore `TokenPresets` derives the presets from the parity matrix (each N-* row's scopes are data in AstraCore `ParityMatrix`), and a check asserts that every N-* row's scopes belong to some preset or to `TokenPresets.deliberatelyExcluded` (`token:admin`, `user:admin`, `plugin:admin`, `oidc:admin`, `notify:send`, `secrets:reveal`, `kv:admin`, `static:admin`). The resulting presets:
   - **Triage** (read and acknowledge; cannot change configuration or see approvals): `node:read`, `group:read`, `inventory:read`, `monitor:read`, `monitor:admin`, `audit:read`, `task:read`, `netpolicy:read`, `geo:read`, `log:read`.
   - **Operator**: Triage plus `network:plan`, `network:apply`, `node:admin`, `group:admin`, `sshguard:admin`, `inventory:admin`, `ddns:admin`, `dns:admin`, `geo:admin`, `tunnel:admin`, `netpolicy:admin`, `netguard:read`, `notify:admin`, `proxy:read`, `proxy:admin`, `log:admin`, `kv:read`, `kv:write`, `static:read`, `static:write`.
   - **Operator plus root**: Operator plus `task:run` and `terminal:open`, shown with "This token can run scripts as root on every node it can see and open root shells through the API."
-  - Actions that need an excluded scope (plugin lifecycle, token revoke and delete, user detail) work only when the operator deliberately added it, and ScopeSummary warns about it.
+  - Actions that need an excluded scope (plugin lifecycle, token revoke and delete, storage binding delete and storage token revoke, user detail) work only when the operator deliberately added it, and ScopeSummary warns about it.
 
 ### 6.13 Revealed secrets
 

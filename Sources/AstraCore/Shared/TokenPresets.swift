@@ -143,8 +143,8 @@ public enum ParityMatrix {
         ParityMatrixRow(page: "Plugins", action: "Lifecycle activate or disable", endpoint: "POST /api/plugins/lifecycle", scopes: ["plugin:admin"], modes: [.nativeT3]),
         ParityMatrixRow(page: "Plugins", action: "Lifecycle verified to installed", endpoint: "POST /api/plugins/lifecycle", scopes: ["plugin:admin"], modes: [.web]),
         ParityMatrixRow(page: "Plugins", action: "Verify uploaded bundle", endpoint: "POST /api/plugins/verify", scopes: ["plugin:verify"], modes: [.web]),
-        ParityMatrixRow(page: "Publishing", action: "Delete binding", endpoint: "POST /api/storage/bindings/delete", scopes: ["kv:write", "static:write"], modes: [.nativeT4]),
-        ParityMatrixRow(page: "Publishing", action: "Revoke storage token", endpoint: "POST /api/storage/tokens/revoke", scopes: ["kv:write", "static:write"], modes: [.nativeT4]),
+        ParityMatrixRow(page: "Publishing", action: "Delete binding", endpoint: "POST /api/storage/bindings/delete", scopes: ["kv:admin", "static:admin"], modes: [.nativeT4]),
+        ParityMatrixRow(page: "Publishing", action: "Revoke storage token", endpoint: "POST /api/storage/tokens/revoke", scopes: ["kv:admin", "static:admin"], modes: [.nativeT4]),
         ParityMatrixRow(page: "Publishing", action: "Share create", endpoint: "POST /api/subscription-shares", scopes: ["proxy:admin"], modes: [.web]),
         ParityMatrixRow(page: "Publishing", action: "Share edit expiry or interval", endpoint: "PATCH /api/subscription-shares/{id}", scopes: ["proxy:admin"], modes: [.web]),
         ParityMatrixRow(page: "Publishing", action: "Share rotate", endpoint: "POST /api/subscription-shares/{id}/rotate", scopes: ["proxy:admin"], modes: [.nativeT3]),
@@ -219,6 +219,7 @@ public enum TokenPresets {
     /// Scopes no preset carries, and which the phone must never hold by default.
     public static let deliberatelyExcluded: Set<String> = [
         "token:admin", "user:admin", "plugin:admin", "oidc:admin", "notify:send", "secrets:reveal",
+        "kv:admin", "static:admin",
     ]
 
     public static let triage = TokenPreset(
