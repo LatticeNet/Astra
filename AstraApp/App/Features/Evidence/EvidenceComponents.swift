@@ -240,7 +240,7 @@ struct EvidenceConnectionRow: View {
     var body: some View {
         let close = EvidenceCloseState.of(record)
         let style = StatusStyle.evidenceClose(close)
-        let time = record.startedAt.map { TimeDisplay.clock($0, mode: mode, locale: locale) }
+        let time = record.startedAt.map { EvidenceText.stamp($0, mode: mode, locale: locale) }
         StatusRow(
             style: style,
             title: title,
@@ -258,7 +258,7 @@ struct EvidenceConnectionRow: View {
     /// wraps without a limit there.
     private var title: String {
         let destination = record.destination.isEmpty ? "unknown destination" : record.destination
-        if typeSize.isAccessibilitySize { return DetailRow.breakable(destination) }
+        if typeSize.isAccessibilitySize { return EvidenceText.breakableAddress(destination) }
         return "\(record.srcIP.isEmpty ? "unknown source" : record.srcIP) \u{2192} \(destination)"
     }
 

@@ -68,6 +68,7 @@ struct ConnectionDetailScreen: View {
     @Environment(NetworkMonitor.self) private var network
     @Environment(\.timeZoneMode) private var mode
     @Environment(\.locale) private var locale
+    @Environment(\.dynamicTypeSize) private var typeSize
 
     @State private var model: EvidenceConnectionModel
 
@@ -137,6 +138,13 @@ struct ConnectionDetailScreen: View {
         }
     }
 
+    /// "198.51.100.150:40000 to api.example.org:443". At accessibility sizes
+    /// the addresses may wrap after a separator rather than hyphenate.
+    private func header(_ record: EvidenceConnRecord, breakable: Bool) -> String {
+        func shown(_ value: String) -> String { breakable ? EvidenceText.breakableAddress(value) : value }
+        return "\(record.source.isEmpty ? "Unknown source" : shown(record.source)) to \(record.destination.isEmpty ? "an unknown destination" : shown(record.destination))"
+    }
+
     private func list(_ record: EvidenceConnRecord, hops: EvidenceHopsResponse) -> some View {
         let close = EvidenceCloseState.of(record)
         let nodeName = nodes.name(for: record.nodeID)
@@ -145,10 +153,10 @@ struct ConnectionDetailScreen: View {
                 Section { ErrorRow(message: "Could not refresh: \(error.localizedDescription)", retry: refresh) }
             }
             Section {
-                // Addresses break anywhere rather than hyphenate at accessibility sizes.
-                Text("\(record.source.isEmpty ? "Unknown source" : DetailRow.breakable(record.source)) to \(record.destination.isEmpty ? "an unknown destination" : DetailRow.breakable(record.destination))")
+                Text(header(record, breakable: typeSize.isAccessibilitySize))
                     .textRole(.detailHeader)
                     .frame(minHeight: Spacing.minimumTarget, alignment: .leading)
+                    .accessibilityLabel(header(record, breakable: false))
                     .accessibilityAddTraits(.isHeader)
                 StatusRow(style: .evidenceClose(close), title: nodeName, detail: summary(record), reason: closeReason(record, close),
                           accessibilityPhrase: "\(closeTitle(close)) on \(nodeName), \(spokenSummary(record))")
@@ -191,7 +199,7 @@ struct ConnectionDetailScreen: View {
     }
 
     private func closeReason(_ record: EvidenceConnRecord, _ close: EvidenceCloseState) -> String? {
-        if let stalled = record.stalledAt { return "Went quiet in both directions at \(TimeDisplay.clock(stalled, mode: mode, locale: locale))." }
+        if let stalled = record.stalledAt { return "Went quiet in both directions at \(EvidenceText.stamp(stalled, mode: mode, locale: locale))." }
         if !close.certain { return close.raw.isEmpty ? "The connection produced no terminal line." : "The server said \(close.raw)." }
         return record.closeError.isEmpty ? nil : record.closeError
     }
@@ -338,7 +346,7 @@ struct ConnectionDetailScreen: View {
                 if let markers = model.markers.value {
                     ForEach(markers) { marker in
                         StatusRow(style: markerStyle(marker), title: marker.title.isEmpty ? marker.kind : marker.title, detail: marker.detail.isEmpty ? nil : marker.detail,
-                                  trailing: marker.at.map { TimeDisplay.clock($0, mode: mode, locale: locale) })
+                                  trailing: marker.at.map { EvidenceText.stamp($0, mode: mode, locale: locale) })
                     }
                 } else {
                     LoadingRows(label: "Loading markers", count: 1)

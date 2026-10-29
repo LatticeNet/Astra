@@ -399,7 +399,7 @@ struct LogExplorerScreen: View {
 
     private func lineRow(_ line: LogLine, isMatch: Bool) -> some View {
         let isCurrent = currentMatch == line.id
-        let time = line.at.map { TimeDisplay.clock($0, mode: mode, locale: locale) }
+        let time = line.at.map { EvidenceText.stamp($0, mode: mode, locale: locale) }
         return VStack(alignment: .leading, spacing: Spacing.xxs) {
             if let time {
                 Text(time + (line.truncated ? ", truncated" : "")).textRole(.stamp)
