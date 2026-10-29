@@ -15,6 +15,7 @@ public func checkShared() async throws {
     try checkDeepLinks()
     try await checkWriteFlowCancel()
     try checkIncidentFilters()
+    try checkQueryVectors()
 }
 
 private func checkNodeDecoding() throws {
@@ -440,4 +441,196 @@ private func checkIncidentFilters() throws {
     try expectEqual(snoozed.displayState(now: now), .snoozed(until: snoozed.snoozedUntil), "snoozed display state")
     try expectEqual(IncidentActions.of(Incident(id: "pending:k", state: "open"), now: now, canAdmin: true), .none, "derived pending accepts no writes")
     try expectEqual(IncidentServerState.allCases.map(\.rawValue), ["pending", "open", "acknowledged", "resolved"], "only the server's four states exist")
+}
+
+// MARK: - Query vectors
+
+/// Runs the console's portable query vectors (`src/lib/query/vectors.json`,
+/// copied byte for byte) against the port, as the console's `vectors.ts`
+/// runner does, except the autocomplete cases.
+private func checkQueryVectors() throws {
+    let root = try expectUnwrapped(try JSONSerialization.jsonObject(with: fixture("query-vectors.json")) as? [String: Any], "query vectors object")
+    let schema = try expectUnwrapped(root["schema"] as? [String: Any], "vector schema")
+    let textPaths = try expectUnwrapped(schema["text"] as? [String], "vector text paths")
+    let fieldSpecs = try expectUnwrapped(schema["fields"] as? [[String: Any]], "vector fields")
+    let fields = fieldSpecs.map(vectorField)
+    let text: @Sendable (VectorRow) -> [String] = { row in textPaths.flatMap { vectorTexts(row.values[$0]) } }
+    let now = try expectUnwrapped(AstraTestDates.parse(root["now"] as? String ?? ""), "vector now")
+    let sharedRows = (root["rows"] as? [[String: Any]] ?? []).map(VectorRow.init)
+    var failures: [String] = []
+
+    for vector in root["parse"] as? [[String: Any]] ?? [] {
+        let query = vector["query"] as? String ?? ""
+        let parsed = LatticeQuery.parse(query)
+        if let error = vector["error"] as? [Any] {
+            let got: String
+            switch parsed {
+            case .success: got = "ok"
+            case .failure(let failure): got = vectorRender([failure.code.rawValue, failure.start, failure.end])
+            }
+            if got != vectorRender(error) { failures.append("parse \(query): want \(vectorRender(error)), got \(got)") }
+            continue
+        }
+        guard case .success(let result) = parsed else {
+            failures.append("parse \(query): refused")
+            continue
+        }
+        if vector.keys.contains("tree") {
+            let want = vectorRender(vector["tree"] ?? NSNull())
+            let got = vectorRender(result.tree.map(vectorShape) ?? NSNull())
+            if want != got { failures.append("parse \(query): want \(want), got \(got)") }
+        }
+        if let sorts = vector["sorts"] as? [[Any]] {
+            let got = vectorRender(result.sorts.map { [$0.field, $0.descending] as [Any] })
+            if got != vectorRender(sorts) { failures.append("parse \(query) sorts: want \(vectorRender(sorts)), got \(got)") }
+        }
+    }
+
+    for pair in root["withoutSorts"] as? [[String]] ?? [] {
+        let got = LatticeQuery.withoutSorts(pair[0])
+        if got != pair[1] { failures.append("withoutSorts \(pair[0]): want \(pair[1]), got \(got)") }
+    }
+
+    for vector in root["run"] as? [[String: Any]] ?? [] {
+        let query = vector["query"] as? String ?? ""
+        let compiled = LatticeQueryEngine.compile(query, fields: fields, text: text)
+        if let want = vector["error"] as? [String: Any] {
+            switch compiled {
+            case .success:
+                failures.append("run \(query): want \(want["code"] ?? ""), got a query")
+            case .failure(let error):
+                var mismatch = error.code.rawValue != want["code"] as? String
+                if let start = want["start"] as? Int, start != error.start { mismatch = true }
+                if let end = want["end"] as? Int, end != error.end { mismatch = true }
+                for (key, value) in want["params"] as? [String: String] ?? [:] where error.params[key] ?? "" != value { mismatch = true }
+                if mismatch { failures.append("run \(query): want \(want), got \(error)") }
+            }
+            continue
+        }
+        guard case .success(let compiledQuery) = compiled else {
+            if case .failure(let error) = compiled { failures.append("run \(query): refused with \(error)") }
+            continue
+        }
+        let rows = (vector["rows"] as? [[String: Any]]).map { $0.map(VectorRow.init) } ?? sharedRows
+        let kept = LatticeQueryEngine.apply(compiledQuery, to: rows, now: now).map(\.id)
+        if let ids = vector["ids"] as? [String], kept != ids { failures.append("run \(query): want \(ids), got \(kept)") }
+        if let set = vector["set"] as? [String], kept.sorted() != set.sorted() { failures.append("run \(query) (any order): want \(set), got \(kept)") }
+    }
+
+    let values = root["values"] as? [String: Any] ?? [:]
+    for entry in values["number"] as? [[Any]] ?? [] {
+        let unit = LatticeQueryNumberUnit(rawValue: entry[1] as? String ?? "plain") ?? .plain
+        let got = LatticeQueryValues.parseNumber(entry[0] as? String ?? "", unit: unit)
+        if got != (entry[2] as? Double) { failures.append("parseNumber \(entry[0]) \(unit): want \(entry[2]), got \(String(describing: got))") }
+    }
+    for entry in values["duration"] as? [[Any]] ?? [] {
+        let got = LatticeQueryValues.parseDuration(entry[0] as? String ?? "")
+        if got != (entry[1] as? Double) { failures.append("parseDuration \(entry[0]): want \(entry[1]), got \(String(describing: got))") }
+    }
+    for entry in values["time"] as? [[Any]] ?? [] {
+        var expected: Double?
+        if let want = entry[1] as? [String: Any] {
+            if let utc = want["utc"] as? Double {
+                expected = utc
+            } else if let local = want["local"] as? [Int] {
+                var parts = local + Array(repeating: 0, count: max(0, 7 - local.count))
+                if local.count < 3 { parts[2] = 1 }
+                var calendar = Calendar(identifier: .gregorian)
+                calendar.timeZone = .current
+                let date = calendar.date(from: DateComponents(year: parts[0], month: parts[1] + 1, day: parts[2], hour: parts[3], minute: parts[4], second: parts[5]))
+                expected = date.map { ($0.timeIntervalSince1970 * 1_000).rounded() + Double(parts[6]) }
+            }
+        }
+        let got = LatticeQueryValues.parseTime(entry[0] as? String ?? "")
+        if got != expected { failures.append("parseTime \(entry[0]): want \(String(describing: expected)), got \(String(describing: got))") }
+    }
+    for entry in values["versions"] as? [[Any]] ?? [] {
+        let got = LatticeQueryValues.compareVersions(entry[0] as? String ?? "", entry[1] as? String ?? "")
+        if got != entry[2] as? Int { failures.append("compareVersions \(entry[0]) \(entry[1]): want \(entry[2]), got \(got)") }
+    }
+
+    if !failures.isEmpty {
+        throw CheckFailure.failed("query vectors: \(failures.count) failed\n" + failures.joined(separator: "\n"))
+    }
+}
+
+/// One row of the vector file; the values are plain JSON.
+private struct VectorRow: @unchecked Sendable {
+    let values: [String: Any]
+    init(_ values: [String: Any]) { self.values = values }
+    var id: String { values["id"].map { "\($0)" } ?? "" }
+}
+
+private enum AstraTestDates {
+    static func parse(_ text: String) -> Date? {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter.date(from: text)
+    }
+}
+
+private func vectorField(_ spec: [String: Any]) -> LatticeQueryField<VectorRow> {
+    let path = spec["path"] as? String ?? ""
+    return LatticeQueryField(
+        key: spec["key"] as? String ?? "",
+        aliases: spec["aliases"] as? [String] ?? [],
+        type: LatticeQueryFieldType(rawValue: spec["type"] as? String ?? "string") ?? .string,
+        unit: LatticeQueryNumberUnit(rawValue: spec["unit"] as? String ?? "plain") ?? .plain,
+        values: spec["values"] as? [String] ?? [],
+        valueAliases: spec["valueAliases"] as? [String: String] ?? [:],
+        flag: spec["flag"] as? Bool ?? false,
+        sortable: (spec["sort"] as? Bool) != false,
+        get: { row in vectorValue(row.values[path]) }
+    )
+}
+
+private func isJSONBool(_ value: Any) -> Bool {
+    guard let number = value as? NSNumber else { return false }
+    return CFGetTypeID(number) == CFBooleanGetTypeID()
+}
+
+private func vectorValue(_ value: Any?) -> LatticeQueryFieldValue {
+    switch value {
+    case let text as String: return .string(text)
+    case let number as NSNumber where isJSONBool(number): return .bool(number.boolValue)
+    case let number as NSNumber: return .number(number.doubleValue)
+    case let list as [Any]:
+        if list.allSatisfy({ $0 is NSNumber && !isJSONBool($0) }) { return .numbers(list.compactMap { ($0 as? NSNumber)?.doubleValue }) }
+        return .strings(list.map { "\($0)" })
+    default: return .none
+    }
+}
+
+private func vectorTexts(_ value: Any?) -> [String] {
+    switch value {
+    case nil, is NSNull: return []
+    case let list as [Any]: return list.flatMap { vectorTexts($0) }
+    case let text as String: return text.isEmpty ? [] : [text]
+    case let number as NSNumber: return [number.stringValue]
+    default: return []
+    }
+}
+
+/// The tree without offsets, as nested arrays, as the console's tests print it.
+private func vectorShape(_ node: LatticeQueryNode) -> Any {
+    switch node {
+    case .and(let items): return ["and"] + items.map(vectorShape)
+    case .or(let items): return ["or"] + items.map(vectorShape)
+    case .not(let item): return ["not", vectorShape(item)]
+    case .text(let value, let quoted): return quoted ? "\"\(value)\"" : value
+    case .term(let term): return term.compact
+    }
+}
+
+private func vectorRender(_ value: Any) -> String {
+    switch value {
+    case is NSNull: return "null"
+    case let number as Int where type(of: value) == Int.self: return String(number)
+    case let flag as Bool where type(of: value) == Bool.self: return flag ? "true" : "false"
+    case let text as String: return "\"\(text)\""
+    case let number as NSNumber where isJSONBool(number): return number.boolValue ? "true" : "false"
+    case let number as NSNumber: return number.stringValue
+    case let list as [Any]: return "[" + list.map(vectorRender).joined(separator: ",") + "]"
+    default: return "\(value)"
+    }
 }
