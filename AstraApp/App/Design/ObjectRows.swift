@@ -52,8 +52,10 @@ struct IncidentRow: View {
 
     private func detail(now: Date) -> String? {
         guard let since = incident.since ?? incident.openedAt else { return nil }
-        let clock = TimeDisplay.clock(since, mode: mode, locale: locale)
-        return "since \(clock), \(RelativeDateFormatter.shortDuration(now.timeIntervalSince(since)))"
+        // A clock time alone reads as today; older starts carry their date.
+        let age = now.timeIntervalSince(since)
+        let when = age < 20 * 3_600 ? TimeDisplay.clock(since, mode: mode, locale: locale) : TimeDisplay.dateTime(since, mode: mode, locale: locale)
+        return "since \(when), \(RelativeDateFormatter.shortDuration(age))"
     }
 
     nonisolated static func acknowledgeIntent(_ incident: Incident) -> WriteIntent {
