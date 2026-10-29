@@ -52,7 +52,7 @@ struct GateDetailScreen: View {
                 }
                 ForEach(gate.refused) { node in
                     NavigationLink(value: AppRoute.fleet(.nodeCapabilities(id: node.nodeID))) {
-                        StatusRow(style: StatusStyle(word: "would be refused", symbol: "hand.raised", tone: gate.enforced ? .warn : .quiet),
+                        StatusRow(style: StatusStyle(word: gate.enforced ? "refused" : "would be refused", symbol: "hand.raised", tone: gate.enforced ? .warn : .quiet),
                                   title: node.displayName, reason: node.reason.isEmpty ? nil : node.reason)
                     }
                 }

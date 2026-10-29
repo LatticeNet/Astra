@@ -60,13 +60,23 @@ struct MapScreen: View {
 
     @ToolbarContentBuilder
     private var toolbar: some ToolbarContent {
-        ToolbarItem(placement: verticalSizeClass == .compact ? .topBarLeading : .principal) {
-            Picker("View", selection: $mode) {
-                Text("Map").tag("map")
-                Text("List").tag("list")
+        if verticalSizeClass == .compact {
+            // Landscape already carries the scope picker; a second segmented
+            // control there gets squeezed to clipped letters, so one button switches.
+            ToolbarItem(placement: .topBarLeading) {
+                Button(mode == "list" ? "Show map" : "Show list", systemImage: mode == "list" ? "map" : "list.bullet") {
+                    mode = mode == "list" ? "map" : "list"
+                }
             }
-            .pickerStyle(.segmented)
-            .frame(maxWidth: 180)
+        } else {
+            ToolbarItem(placement: .principal) {
+                Picker("View", selection: $mode) {
+                    Text("Map").tag("map")
+                    Text("List").tag("list")
+                }
+                .pickerStyle(.segmented)
+                .frame(maxWidth: 180)
+            }
         }
         ToolbarItem(placement: .topBarLeading) {
             let unlocated = MapClusters.unlocated(store.geo.value ?? []).count
@@ -116,8 +126,14 @@ struct MapScreen: View {
             // Frame every located node once; after that the operator's pan and zoom stay.
             guard !framed, let fit = FleetMapRegion.fitting(latitudes: clusters.map(\.latitude), longitudes: clusters.map(\.longitude)) else { return }
             framed = true
+            // Centre on where the nodes are, not the middle of their bounding box,
+            // so a worldwide fleet opens over its densest area on a narrow screen.
+            let weight = clusters.map { Double($0.members.count) }
+            let total = max(1, weight.reduce(0, +))
+            let latitude = zip(clusters, weight).reduce(0) { $0 + $1.0.latitude * $1.1 } / total
+            let longitude = zip(clusters, weight).reduce(0) { $0 + $1.0.longitude * $1.1 } / total
             position = .region(MKCoordinateRegion(
-                center: CLLocationCoordinate2D(latitude: fit.centerLatitude, longitude: fit.centerLongitude),
+                center: CLLocationCoordinate2D(latitude: latitude, longitude: longitude),
                 span: MKCoordinateSpan(latitudeDelta: fit.latitudeDelta, longitudeDelta: fit.longitudeDelta)
             ))
         }
@@ -276,19 +292,25 @@ struct FleetArcLegend: View {
             if let denied {
                 Label("Paths need \(denied)", systemImage: "lock").font(.footnote).foregroundStyle(.secondary)
             } else {
-                HStack(spacing: Spacing.m) {
-                    item("up", .up)
-                    item("degraded", .degraded(nil))
-                    item("down", .down)
+                // At large text sizes the three keys stack rather than break words.
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: Spacing.m) { items }
+                    VStack(alignment: .leading, spacing: Spacing.xs) { items }
                 }
             }
         }
         .padding(.horizontal, Spacing.m)
         .padding(.vertical, Spacing.s)
-        .background(Color(uiColor: .secondarySystemGroupedBackground), in: Capsule())
-        .overlay(Capsule().stroke(Color(uiColor: .separator), lineWidth: 1))
+        .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(Color(uiColor: .separator), lineWidth: 1))
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(denied.map { "Paths need \($0)" } ?? "Legend: solid line up, dashed degraded, dotted down")
+    }
+
+    @ViewBuilder private var items: some View {
+        item("up", .up)
+        item("degraded", .degraded(nil))
+        item("down", .down)
     }
 
     private func item(_ word: String, _ state: PathDisplayState) -> some View {
@@ -300,7 +322,7 @@ struct FleetArcLegend: View {
                 context.stroke(path, with: .color(MapScreen.arcColor(state)), style: MapScreen.arcStroke(state))
             }
             .frame(width: 24, height: 8)
-            Text(word).font(.footnote)
+            Text(word).font(.footnote).fixedSize()
         }
     }
 }

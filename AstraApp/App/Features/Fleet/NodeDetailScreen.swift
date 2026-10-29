@@ -283,14 +283,16 @@ struct FleetNodeHeader: View {
         }
     }
 
-    /// "seen 15s ago at 02:40, agent 0.3.10, Tokyo, JP, Northwind Cloud"
+    /// "seen 15s ago at 02:40, agent 0.3.10, Tokyo, JP, Northwind Cloud", or
+    /// "seen 2d ago, Oct 27 at 03:52, ..." once the clock alone is ambiguous.
     private func detail(_ node: LatticeNode) -> String {
         var parts: [String] = []
         if let seen = node.lastSeen {
+            // The date form already reads "Oct 27 at 03:52", so it follows a comma, not "at".
             let when = Date().timeIntervalSince(seen) > 20 * 3_600
-                ? TimeDisplay.dateTime(seen, mode: mode, locale: locale)
-                : TimeDisplay.clock(seen, mode: mode, locale: locale)
-            parts.append("seen \(FleetAge.short(seen) ?? "") ago at \(when)")
+                ? ", " + TimeDisplay.dateTime(seen, mode: mode, locale: locale)
+                : " at " + TimeDisplay.clock(seen, mode: mode, locale: locale)
+            parts.append("seen \(FleetAge.short(seen) ?? "") ago\(when)")
         }
         if let agent = node.agentVersion, !agent.isEmpty { parts.append("agent \(agent)") }
         let place = [node.geo?.city, node.geo?.country, record.facts.provider.isEmpty ? nil : record.facts.provider]
