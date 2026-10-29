@@ -8,7 +8,11 @@ struct SettingsDestination: View {
         // Stated here rather than inherited from the inline root: a deep link
         // opens the sheet with its path already set, the root is never laid
         // out, and an inherited large title then overlaps the first section.
-        content.navigationBarTitleDisplayMode(.inline)
+        // For the same reason every page hosts its own write gates; the root's
+        // host would never register.
+        content
+            .navigationBarTitleDisplayMode(.inline)
+            .actionHost(inSheet: true)
     }
 
     @ViewBuilder

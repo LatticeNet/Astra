@@ -25,9 +25,6 @@ struct TokenDetailScreen: View {
             }
         }
         .navigationTitle(store.token(id: id)?.displayName ?? "Token")
-        // A link opens the Settings sheet with its path set, so the sheet's
-        // root never appears to register itself; this page hosts its own gates.
-        .actionHost(inSheet: true)
         .navigationSubtitle(subtitle)
         .toolbar { toolbar }
         .polling(.standard, version: changes.version([.tokens, .account])) {

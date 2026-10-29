@@ -43,9 +43,6 @@ struct AccountStepUpPage: View {
             }
         }
         .navigationTitle("Confirm with your code")
-        // A link opens the Settings sheet with its path set, so the sheet's
-        // root never appears to register itself; this page hosts its own gates.
-        .actionHost(inSheet: true)
         .announcing(message)
         .polling(.standard, version: changes.version([.account, .session])) {
             await store.refreshPasskeys()
