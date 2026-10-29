@@ -283,7 +283,7 @@ struct ActivityOutputText: UIViewRepresentable {
             out.append(NSAttributedString(attachment: NSTextAttachment(image: symbol)))
             add(" ", headline)
         }
-        add("\(document.nodeName): ", headline)
+        add("\(document.nodeName.activityUnbroken): ", headline)
         add(style.word.activityCapitalized, headline, word)
         add(", exit code \(document.row.result.exitCode)\n", headline, word)
         var timing: [String] = []
