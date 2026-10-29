@@ -91,9 +91,20 @@ extension SharedFixtures {
         GuardRow(node: "dns-iad-1", stage: "idle", posture: "partial", enrolled: false, knock: "no_knock"),
     ]
 
+    /// The server answers a row for every node the caller may see. Nodes the
+    /// demo gives no SSH Guard story sit idle: key-only sshd when reporting,
+    /// nothing reported otherwise.
+    private static var allGuardRows: [GuardRow] {
+        let storied = Set(guardRows.map(\.node))
+        let idle = DemoWorld.nodes.filter { !storied.contains($0.name) }.map { node in
+            GuardRow(node: node.name, stage: "idle", posture: node.isReporting ? "secured" : "unknown", knock: "no_knock")
+        }
+        return (guardRows + idle).sorted { DemoWorld.node($0.node).id < DemoWorld.node($1.node).id }
+    }
+
     static func sshGuardBody(request: DemoRequest?) -> String {
         let quiet = request?.scenario == .quiet
-        var rows = guardRows.map { row -> GuardRow in
+        var rows = allGuardRows.map { row -> GuardRow in
             guard quiet else { return row }
             var calm = row
             calm.stage = row.enrolled ? "hardened" : "idle"
