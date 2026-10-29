@@ -133,8 +133,20 @@ private struct RevealFlowContent: View {
                     Button(role: .close) { close() }
                 }
             }
-            .task { await model.start(session: session, stepUp: stepUp) }
+            .task {
+                await model.start(session: session, stepUp: stepUp)
+                await autoConfirmIfAsked()
+            }
             .onDisappear { close() }
+    }
+
+    /// `-AstraAutoConfirm YES` (demo only) enters a demo code once, so the
+    /// value step can be captured without typing. The demo step-up accepts any
+    /// six digits except its wrong code.
+    private func autoConfirmIfAsked() async {
+        guard LaunchOverrides.current.autoConfirm, session.isDemo, model.step == .code else { return }
+        model.code = "246810"
+        await model.submitCode(session: session, stepUp: stepUp)
     }
 
     private var navigationTitle: String {
