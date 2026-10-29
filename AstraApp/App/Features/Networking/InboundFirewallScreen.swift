@@ -163,7 +163,12 @@ struct InboundFirewallScreen: View {
                 case .companionBehind(let surface): CompanionBehindRow(surface: surface)
                 case .failed(let error, nil, _): ErrorRow(message: "Could not load zones: \(error.localizedDescription)") { Task { await store.refreshFirewall() } }
                 default:
-                    if store.guardZones.value == nil { LoadingRows(label: "Loading zones", count: 2) }
+                    NetworkingRefreshError(state: store.guardZones, noun: "zones") { Task { await store.refreshFirewall() } }
+                    if store.guardZones.value == nil {
+                        LoadingRows(label: "Loading zones", count: 2)
+                    } else if store.guardZones.value?.isEmpty ?? false {
+                        Text("No zones").foregroundStyle(.secondary).frame(minHeight: Spacing.minimumTarget)
+                    }
                     ForEach(store.guardZones.value ?? []) { zone in
                         NetworkingZoneRow(zone: zone)
                     }
@@ -302,8 +307,9 @@ struct NetworkingSecurityGroupRow: View {
         if !group.viaNodeGroupName.isEmpty { parts.append("via \(group.viaNodeGroupName)") }
         if group.inactive { parts.append("inactive here") }
         let style = StatusStyle(word: group.inactive ? "inactive" : "", symbol: group.isLegacy ? "shield.lefthalf.filled" : "shield", tone: .quiet)
-        return StatusRow(style: style, title: group.displayName, detail: parts.joined(separator: ", "),
-                         trailing: boundCount.map { NetworkingText.plural($0, "node") })
+        let trailing = boundCount.map { NetworkingText.plural($0, "node") }
+        return StatusRow(style: style, title: group.displayName, detail: parts.joined(separator: ", "), trailing: trailing,
+                         accessibilityPhrase: ([group.displayName] + parts + [trailing].compactMap { $0 }).joined(separator: ", "))
     }
 }
 
@@ -312,6 +318,7 @@ struct NetworkingZoneRow: View {
 
     var body: some View {
         StatusRow(style: StatusStyle(word: zone.builtin ? "built in" : "", symbol: "circle.dashed.inset.filled", tone: .quiet),
-                  title: zone.displayName, detail: zone.summary)
+                  title: zone.displayName, detail: zone.summary,
+                  accessibilityPhrase: ([zone.displayName, zone.builtin ? "built in" : "", zone.summary].filter { !$0.isEmpty }).joined(separator: ", "))
     }
 }

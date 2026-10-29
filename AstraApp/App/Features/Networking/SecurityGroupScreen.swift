@@ -78,7 +78,7 @@ struct SecurityGroupScreen: View {
                                                  tone: .quiet),
                               title: "\(rule.direction == "egress" ? "To" : "From") \(remote)",
                               detail: rule.comment.isEmpty ? rule.trafficText : "\(rule.trafficText), \(rule.comment)",
-                              accessibilityPhrase: "\(rule.action) \(rule.direction == "egress" ? "to" : "from") \(remote), \(rule.trafficText)\(rule.comment.isEmpty ? "" : ", \(rule.comment)")")
+                              accessibilityPhrase: "\(rule.action) \(rule.direction == "egress" ? "to" : "from") \(remote), \(rule.trafficText)\(rule.disabled ? ", rule off" : "")\(rule.comment.isEmpty ? "" : ", \(rule.comment)")")
                 }
             } header: {
                 Text("Rules (\(group.visibleRuleCount))")
