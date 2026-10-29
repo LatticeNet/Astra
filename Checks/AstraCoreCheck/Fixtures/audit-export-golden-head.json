@@ -1,0 +1,14 @@
+{
+  "type": "lattice.audit_head.v1",
+  "verified_at": "2026-10-28T12:00:00.000Z",
+  "ok": true,
+  "count": 5760,
+  "head": "9f2c9f2c9f2c9f2c9f2c9f2c9f2c9f2c9f2c9f2c9f2c9f2c9f2c9f2c9f2c9f2c",
+  "anchored": true,
+  "anchor_count": 5760,
+  "anchor_head": "9f2c9f2c9f2c9f2c9f2c9f2c9f2c9f2c9f2c9f2c9f2c9f2c9f2c9f2c9f2c9f2c",
+  "anchor_pending": {
+    "count": 5761,
+    "head": "ab01ab01ab01ab01ab01ab01ab01ab01ab01ab01ab01ab01ab01ab01ab01ab01"
+  }
+}

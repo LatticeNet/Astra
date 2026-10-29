@@ -70,3 +70,20 @@ Agents cannot tap, swipe or rotate a simulator, and they cannot run VoiceOver, V
 - Incident detail: the Acknowledge, Snooze and Start maintenance bar replaces the tab bar in portrait (the tab bar returns on back); in landscape Acknowledge and Snooze sit in the navigation bar and Start maintenance in its menu; a failed acknowledge stays on screen with Retry; pending and resolved incidents show no actions.
 - Start maintenance: the node picker, name, presets and Until picker are reachable at AX5 with the keyboard up; Start asks once naming the node and the end time; the window appears under Incidents > Maintenance.
 - Maintenance window: End now and Delete each ask once naming the window.
+
+## M4 Activity: tasks and audit
+
+- Tasks: the headings rotor jumps Running and waiting, then Finished and stopped; each row reads its id, state word, targets, the "9 ok, 1 failed" count, who queued it and the first failure line; a row filed by an approval offers "Plan seal" in the rotor's more content. A poll that reorders the list while VoiceOver runs waits behind "n updates. Show".
+- Tasks: typing `status:failed origin:approval node:edge-tyo-1` filters, and a free word or an unknown status shows a sentence above the list saying it was left out; the range menu and "Show all" work; the Inbox "1 failed task" button lands here with `status:failed`.
+- Tasks: long press a row shows the glance preview with Open, Copy link, Copy ID, Open on web, Cancel task (live runs) and Rerun; with a token without task:run those two stay in the menu, disabled, with "Needs task:run".
+- Task run: while the run is live the count ("10 of 12 finished, 1 failed") updates every 3 s and nothing spins; failed, stalled and expired nodes come first; an expired node reads "Expired: the node never picked it up", never failed; a lease past the run's timeout reads "No heartbeat for ..." in the warning color.
+- Task run, with an "Operator plus root" token: swipe "Rerun on this node" is listed once in the actions rotor and opens the ConfirmSheet naming the node, then Face ID (cancelling sends nothing); Cancel task asks once in a dialog naming the task and task:run; Rerun and "Rerun n failed nodes" open the ConfirmSheet, the second saying "Each node becomes a separate task run" and reporting per node; Delete task runs Face ID and closes the screen after the server confirms.
+- Task run: Reveal script runs the code step, then shows the script masked until Show, Copy only, cleared after 60 seconds and when the app goes to the background.
+- Task run: an approval-filed run shows the approval title and its plan seal with a Copy button; tapping the title opens Review.
+- Output: Find opens the find bar and steps through matches; Jump to end scrolls to the last line and is announced; Copy and Share in the menu carry stdout then stderr; text is selectable and grows with Dynamic Type.
+- Audit: pulling down shows the search field with the Changes, All and Integrity scopes; the range menu filters by time; the More menu exports CSV and NDJSON to the share sheet (Files names them lattice-audit.csv and lattice-audit.ndjson), and a capped scan's file and share title start with "Partial: scanned N events".
+- Audit: the headings rotor jumps between day sections; long press a row shows Open, Copy link, Copy ID, Open on web and Open trace.
+- Audit event: the time shows in both zones; an event that names an approval shows its seal with Copy; Node, Task and Trace push their screens.
+- Trace: the timeline reads oldest first, each step one element with time, action, decision and actor; the rail is decorative and silent.
+- Verify chain: opens from the More menu or Integrity's "Verify now", runs at once with no confirmation, announces "Chain intact" or "Chain broken", and the head hash copies on tap; Share audit head offers lattice-audit-head.json.
+- Voice Control "Show names": Range, Export and verify, New task on web, Cancel task, More, Find and Jump to end all have names.

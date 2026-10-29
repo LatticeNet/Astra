@@ -1,0 +1,7 @@
+at,decision,action,scope,actor_id,token_id,node_id,correlation_id,reason,metadata
+2026-10-28T11:58:31.123456789Z,allow,task.create,task:run,admin,tok_demo0001phone,n-edge-tyo-1,corr_x1,,"{""targets"":""3"",""task_id"":""task_x01""}"
+2026-10-28T11:40:00Z,deny,api.deny,terminal:open,admin,,n-core-lon-1,,"token lacks terminal:open, so ""open"" was refused
+second line","{""path"":""/api/terminal/sessions"",""why"":""scope, missing""}"
+2026-10-28T10:00:00.5Z,allow,network.sshguard.approve,"network:apply,sshguard:admin",lattice-server,,,corr_x2,,"{""approval_id"":""approval_x9"",""note"":""café résumé""}"
+2026-10-27T09:15:00Z,allow,node.disable,node:admin,admin,tok_demo0001phone,n-edge-iad-2,,token leaked,
+2026-10-20T00:00:00Z,observe,login,,admin,,,,,{}
