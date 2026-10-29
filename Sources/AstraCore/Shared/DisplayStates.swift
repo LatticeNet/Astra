@@ -36,9 +36,9 @@ public struct PathReason: Sendable, Hashable, RawRepresentable {
     public var rawValue: String
 
     public init(rawValue: String) {
+        // `reasonCode`: runs of spaces and hyphens become one underscore.
         let normalized = rawValue.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-            .replacingOccurrences(of: "-", with: "_")
-            .replacingOccurrences(of: " ", with: "_")
+            .replacingOccurrences(of: #"[\s-]+"#, with: "_", options: .regularExpression)
         if Self.sentences[normalized] != nil {
             self.rawValue = normalized
         } else if let alias = Self.aliases[normalized] {
@@ -49,9 +49,28 @@ public struct PathReason: Sendable, Hashable, RawRepresentable {
     }
 
     /// True for the reasons that read as "paused" rather than "unknown".
+    /// Section 4.2 adds `packet_budget`, which the console counts as skipped.
     public var isPause: Bool {
         Self.pauseReasons.contains(rawValue)
     }
+
+    /// The operator's own choice (`pathsModel.ts` `CHOSEN`): listed, never a problem.
+    public var isChosen: Bool {
+        Self.chosenReasons.contains(rawValue)
+    }
+
+    /// A pair its check skips (`pathsModel.ts` `SKIPPED`): configuration, not health.
+    public var isSkip: Bool {
+        Self.skipReasons.contains(rawValue)
+    }
+
+    static let chosenReasons: Set<String> = ["source_paused", "path_paused", "path_set_paused", "check_paused"]
+
+    static let skipReasons: Set<String> = [
+        "not_probeable", "no_tcp_line", "udp_only", "no_public_address", "no_inventory", "agent_too_old",
+        "icmp_not_permitted", "packet_budget", "beacon_not_enabled", "firewall_pending", "beacon_source_pending",
+        "refused_by_node",
+    ]
 
     /// The sentence for this reason; anything unknown is shown as sent.
     public var sentence: String {
@@ -150,6 +169,22 @@ public enum PathDisplayState: Sendable, Hashable {
         }
     }
 
+    /// Whether the path is measured, skipped by its check, or paused
+    /// (`pathsModel.ts` `pathMeasure`). Skipped and paused paths are never
+    /// counted as problems or shown by the default views.
+    public var measure: PathMeasure {
+        let reason: PathReason?
+        switch self {
+        case .up, .down, .degraded: return .measured
+        case .paused(let paused): reason = paused
+        case .unknown(let unknown): reason = unknown
+        }
+        guard let reason else { return .measured }
+        if reason.isSkip { return .skipped }
+        if reason.isChosen { return .paused }
+        return .measured
+    }
+
     /// Worst first, the `topologyModel` order: down, degraded, unknown, paused, up.
     public var severityRank: Int {
         switch self {
@@ -160,6 +195,11 @@ public enum PathDisplayState: Sendable, Hashable {
         case .up: 4
         }
     }
+}
+
+/// `pathsModel.ts` `PathMeasure`.
+public enum PathMeasure: String, Sendable, Hashable, CaseIterable {
+    case measured, skipped, paused
 }
 
 /// An incident's display state. Precedence when several apply: held, then

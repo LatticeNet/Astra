@@ -12,6 +12,9 @@ public struct AuditEvent: Identifiable, Codable, Equatable, Hashable, Sendable {
     public var reason: String
     public var correlationID: String
     public var metadata: [String: String]
+    /// The event exactly as the server sent it, for the NDJSON export.
+    /// Filled by `fetchAudit(query:)`; empty for events built any other way.
+    public var rawJSON: String = ""
 
     public init(id: String, at: Date? = nil, actorID: String = "", tokenID: String = "", nodeID: String = "", action: String = "", scope: String = "", decision: String = "", reason: String = "", correlationID: String = "", metadata: [String: String] = [:]) {
         self.id = id
@@ -161,8 +164,25 @@ public struct AuditQuery: Sendable, Hashable {
 }
 
 public extension LatticeClient {
+    /// `GET /api/audit` with filters. Each event keeps its raw JSON slice,
+    /// so the NDJSON export writes the server's bytes, not a re-encoding.
     func fetchAudit(query: AuditQuery) async throws -> AuditQueryResponse {
-        // M0a: keep each event's raw JSON slice for the NDJSON export (section 3.2).
-        try await perform(AuditQueryResponse.self, path: "/api/audit", query: query.queryItems)
+        let data = try await performData(path: "/api/audit", query: query.queryItems)
+        var response: AuditQueryResponse
+        do {
+            if let events = try? JSONDecoder().decode([AuditEvent].self, from: data) {
+                response = AuditQueryResponse(events: events, total: events.count, limit: query.limit, offset: query.offset)
+            } else {
+                response = try JSONDecoder().decode(AuditQueryResponse.self, from: data)
+            }
+        } catch {
+            throw LatticeAPIError.invalidResponse
+        }
+        if let slices = JSONArraySlicer.elements(of: data, key: "events"), slices.count == response.events.count {
+            for index in response.events.indices {
+                response.events[index].rawJSON = String(decoding: slices[index], as: UTF8.self)
+            }
+        }
+        return response
     }
 }

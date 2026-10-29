@@ -26,32 +26,66 @@ public struct DemoTransport: HTTPTransport {
         self.routes = routes
     }
 
+    /// The scopes `/api/me` reports for a demo identity: the Operator preset
+    /// on the token (Triage in Limited token) and `*` on the session.
+    public static func scopes(for identity: DemoIdentity, scenario: DemoScenario) -> ScopeSet {
+        switch identity {
+        case .session: ScopeSet(scopes: ["*"])
+        case .pat: ScopeSet(scopes: scenario == .limitedToken ? TokenPresets.triage.scopes : TokenPresets.operator.scopes)
+        }
+    }
+
+    public var scopes: ScopeSet { Self.scopes(for: identity, scenario: scenario) }
+
     public func data(for request: URLRequest) async throws -> (Data, URLResponse) {
         guard let url = request.url else { throw URLError(.badURL) }
-        let demoRequest = Self.demoRequest(from: request, identity: identity)
+        let demoRequest = Self.demoRequest(from: request, identity: identity, scenario: scenario)
         if !clock.isPinned {
             try await Task.sleep(for: .milliseconds(Int.random(in: 80...300)))
         }
         let response = try await answer(demoRequest)
         let body = Data(clock.substitute(response.body).utf8)
-        let http = HTTPURLResponse(url: url, statusCode: response.status, httpVersion: "HTTP/1.1", headerFields: ["Content-Type": "application/json"])
+        var headers = ["Content-Type": "application/json"]
+        headers.merge(response.headers) { _, new in new }
+        let http = HTTPURLResponse(url: url, statusCode: response.status, httpVersion: "HTTP/1.1", headerFields: headers)
         return (body, http ?? URLResponse(url: url, mimeType: "application/json", expectedContentLength: body.count, textEncodingName: "utf-8"))
     }
 
     /// The route answer for a request, after the scenario's overrides.
     public func answer(_ request: DemoRequest) async throws -> DemoResponse {
-        // M0a: implement every scenario of section 8.6 (Quiet, Stale, Limited
-        // token and No session are not yet applied here).
-        switch scenario {
-        case .offline:
+        var request = request
+        request.scenario = scenario
+        if case .offline = scenario {
             throw URLError(.notConnectedToInternet)
-        case .failing(let prefix) where Self.matches(request.path, prefix: prefix, defaults: ["/api/incidents", "/api/tasks"]):
+        }
+        if case .noSession = scenario, request.identity == .session {
+            return .error(status: 401, code: "unauthorized", message: "authentication required")
+        }
+        if case .failing(let prefix) = scenario, Self.matches(request.path, prefix: prefix, defaults: ["/api/incidents", "/api/tasks"]) {
             return .error(status: 503, code: "unavailable", message: "service unavailable")
-        default:
-            break
         }
         guard let route = bestRoute(for: request) else {
             return .error(status: 404, code: "not_found", message: "not found")
+        }
+        switch scenario {
+        case .stale:
+            // The first answer per route lands; every later one times out, so
+            // screens keep their data and turn stale.
+            if await state.recordHit("stale " + route.uniquenessKey) > 1 { throw URLError(.timedOut) }
+        case .forbidden(let prefix):
+            if Self.matches(request.path, prefix: prefix, defaults: ["/api/incidents"]),
+               await state.recordHit("forbidden " + route.uniquenessKey) > 1 {
+                return .error(status: 403, code: "forbidden", message: "forbidden")
+            }
+        case .companionBehind(let prefix):
+            let hit = prefix.map { request.path.hasPrefix($0) }
+                ?? (request.path == "/api/network/approvals" && request.query["id"] != nil)
+            if hit { return DemoResponse(status: 200, body: "<!doctype html><title>Lattice</title>") }
+        default:
+            break
+        }
+        if let scope = route.requiredScope, !scopes.allows(scope) {
+            return .error(status: 403, code: "forbidden", message: "missing scope \(scope)")
         }
         if case .empty = scenario, request.method == "GET" {
             return DemoResponse(status: route.status, body: route.emptyBody ?? "[]")
@@ -74,19 +108,21 @@ public struct DemoTransport: HTTPTransport {
         return best?.route
     }
 
-    static func demoRequest(from request: URLRequest, identity: DemoIdentity) -> DemoRequest {
+    static func demoRequest(from request: URLRequest, identity: DemoIdentity, scenario: DemoScenario = .normal) -> DemoRequest {
         let components = request.url.flatMap { URLComponents(url: $0, resolvingAgainstBaseURL: false) }
         var query: [String: String] = [:]
         for item in components?.queryItems ?? [] where query[item.name] == nil {
             query[item.name] = item.value ?? ""
         }
-        return DemoRequest(
+        var demoRequest = DemoRequest(
             identity: identity,
             method: request.httpMethod ?? "GET",
             path: components?.path ?? "/",
             query: query,
             body: request.httpBody
         )
+        demoRequest.scenario = scenario
+        return demoRequest
     }
 
     private static func matches(_ path: String, prefix: String?, defaults: [String]) -> Bool {

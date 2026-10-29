@@ -225,6 +225,14 @@ public struct LatticeNode: Identifiable, Codable, Equatable, Hashable, Sendable 
     public var hostFacts: LatticeHostFacts
     public var geo: LatticeGeo?
     public var createdAt: Date?
+    public var comment: String = ""
+    public var internalIP: String = ""
+    public var internalIPv6: String = ""
+    /// When the node's token last authenticated.
+    public var tokenLastUsedAt: Date?
+    /// Probe methods the agent can run, and why it refuses the others.
+    public var probeMethods: [String] = []
+    public var probeRefusals: [String: String] = [:]
 
     public init(
         id: String,
@@ -356,6 +364,12 @@ public struct LatticeNode: Identifiable, Codable, Equatable, Hashable, Sendable 
         case hostFacts = "host_facts"
         case geo
         case createdAt = "created_at"
+        case comment
+        case internalIP = "internal_ip"
+        case internalIPv6 = "internal_ipv6"
+        case tokenLastUsedAt = "token_last_used_at"
+        case probeMethods = "probe_methods"
+        case probeRefusals = "probe_refusals"
     }
 
     public init(from decoder: Decoder) throws {
@@ -383,6 +397,12 @@ public struct LatticeNode: Identifiable, Codable, Equatable, Hashable, Sendable 
         hostFacts = try container.decodeIfPresent(LatticeHostFacts.self, forKey: .hostFacts) ?? LatticeHostFacts()
         geo = try container.decodeIfPresent(LatticeGeo.self, forKey: .geo)
         createdAt = try DateValue.decodeIfPresent(from: container, forKey: .createdAt)
+        comment = try container.decodeIfPresent(String.self, forKey: .comment) ?? ""
+        internalIP = try container.decodeIfPresent(String.self, forKey: .internalIP) ?? ""
+        internalIPv6 = try container.decodeIfPresent(String.self, forKey: .internalIPv6) ?? ""
+        tokenLastUsedAt = try DateValue.decodeIfPresent(from: container, forKey: .tokenLastUsedAt)
+        probeMethods = try container.decodeIfPresent([String].self, forKey: .probeMethods) ?? []
+        probeRefusals = try container.decodeIfPresent([String: String].self, forKey: .probeRefusals) ?? [:]
     }
 }
 

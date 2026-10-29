@@ -81,6 +81,46 @@ public struct SSHGuardKnockView: Codable, Equatable, Hashable, Sendable {
     }
 }
 
+/// The history a status row carries about one SSH Guard approval
+/// (`sshGuardApprovalRef`). `outcome` folds status and dismissal reason into
+/// one word: pending, approved, applied, rejected, dismissed, superseded.
+public struct SSHGuardApprovalRef: Codable, Equatable, Hashable, Sendable {
+    public var approvalID: String
+    public var status: String
+    public var outcome: String
+    public var reason: String
+    public var createdAt: Date?
+    public var updatedAt: Date?
+    /// Arm only.
+    public var durable: Bool
+    public var gatesFirewall: Bool
+    public var knock: Bool
+    public var confirmWindowSec: Int
+
+    enum CodingKeys: String, CodingKey {
+        case status, outcome, reason, durable, knock
+        case approvalID = "approval_id"
+        case createdAt = "created_at"
+        case updatedAt = "updated_at"
+        case gatesFirewall = "gates_firewall"
+        case confirmWindowSec = "confirm_window_sec"
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        approvalID = try c.decodeIfPresent(String.self, forKey: .approvalID) ?? ""
+        status = try c.decodeIfPresent(String.self, forKey: .status) ?? ""
+        outcome = try c.decodeIfPresent(String.self, forKey: .outcome) ?? ""
+        reason = try c.decodeIfPresent(String.self, forKey: .reason) ?? ""
+        createdAt = try DateValue.decodeIfPresent(from: c, forKey: .createdAt)
+        updatedAt = try DateValue.decodeIfPresent(from: c, forKey: .updatedAt)
+        durable = try c.decodeIfPresent(Bool.self, forKey: .durable) ?? false
+        gatesFirewall = try c.decodeIfPresent(Bool.self, forKey: .gatesFirewall) ?? false
+        knock = try c.decodeIfPresent(Bool.self, forKey: .knock) ?? false
+        confirmWindowSec = try c.decodeIfPresent(Int.self, forKey: .confirmWindowSec) ?? 0
+    }
+}
+
 public struct SSHGuardNodeStatus: Identifiable, Codable, Equatable, Hashable, Sendable {
     public var nodeID: String
     public var nodeName: String
@@ -95,6 +135,10 @@ public struct SSHGuardNodeStatus: Identifiable, Codable, Equatable, Hashable, Se
     public var revertDeadline: Date?
     public var actionableApprovalID: String
     public var knock: SSHGuardKnockView?
+    /// When the node's guard-reality report was collected.
+    public var realityCollectedAt: Date?
+    public var lastArm: SSHGuardApprovalRef?
+    public var lastConfirm: SSHGuardApprovalRef?
 
     public var id: String { nodeID }
 
@@ -108,6 +152,9 @@ public struct SSHGuardNodeStatus: Identifiable, Codable, Equatable, Hashable, Se
         case revertArmed = "revert_armed"
         case revertDeadline = "revert_deadline"
         case actionableApprovalID = "actionable_approval_id"
+        case realityCollectedAt = "reality_collected_at"
+        case lastArm = "last_arm"
+        case lastConfirm = "last_confirm"
     }
 
     public init(from decoder: Decoder) throws {
@@ -125,6 +172,9 @@ public struct SSHGuardNodeStatus: Identifiable, Codable, Equatable, Hashable, Se
         revertDeadline = try DateValue.decodeIfPresent(from: c, forKey: .revertDeadline)
         actionableApprovalID = try c.decodeIfPresent(String.self, forKey: .actionableApprovalID) ?? ""
         knock = try c.decodeIfPresent(SSHGuardKnockView.self, forKey: .knock)
+        realityCollectedAt = try DateValue.decodeIfPresent(from: c, forKey: .realityCollectedAt)
+        lastArm = try c.decodeIfPresent(SSHGuardApprovalRef.self, forKey: .lastArm)
+        lastConfirm = try c.decodeIfPresent(SSHGuardApprovalRef.self, forKey: .lastConfirm)
     }
 }
 

@@ -126,3 +126,133 @@ struct LatticeCodingKey: CodingKey {
 extension CodingUserInfoKey {
     static let latticeListKey = CodingUserInfoKey(rawValue: "astra.list.key")!
 }
+
+/// Finds the exact bytes of each element of a JSON array, so an export can
+/// write what the server sent instead of a re-encoding with its keys
+/// reordered. Reads the top-level array, or the array under `key` of a
+/// top-level object. Returns nil when the text is not shaped that way.
+public enum JSONArraySlicer {
+    public static func elements(of data: Data, key: String? = nil) -> [Data]? {
+        let bytes = [UInt8](data)
+        var scanner = Scanner(bytes: bytes)
+        scanner.skipWhitespace()
+        guard let first = scanner.peek() else { return nil }
+        if first == UInt8(ascii: "[") {
+            return scanner.arrayElements().map { $0.map { Data(bytes[$0]) } }
+        }
+        guard let key, first == UInt8(ascii: "{") else { return nil }
+        scanner.index += 1
+        while true {
+            scanner.skipWhitespace()
+            guard let next = scanner.peek() else { return nil }
+            if next == UInt8(ascii: "}") { return nil }
+            if next == UInt8(ascii: ",") {
+                scanner.index += 1
+                continue
+            }
+            guard let name = scanner.string() else { return nil }
+            scanner.skipWhitespace()
+            guard scanner.peek() == UInt8(ascii: ":") else { return nil }
+            scanner.index += 1
+            scanner.skipWhitespace()
+            if name == key {
+                guard scanner.peek() == UInt8(ascii: "[") else { return nil }
+                return scanner.arrayElements().map { $0.map { Data(bytes[$0]) } }
+            }
+            guard scanner.skipValue() else { return nil }
+        }
+    }
+
+    private struct Scanner {
+        let bytes: [UInt8]
+        var index = 0
+
+        func peek() -> UInt8? { index < bytes.count ? bytes[index] : nil }
+
+        mutating func skipWhitespace() {
+            while let byte = peek(), byte == 0x20 || byte == 0x09 || byte == 0x0A || byte == 0x0D { index += 1 }
+        }
+
+        /// A string at the cursor, decoded; the cursor ends after its closing quote.
+        mutating func string() -> String? {
+            let start = index
+            guard skipString() else { return nil }
+            let slice = Data(bytes[start..<index])
+            return try? JSONDecoder().decode(String.self, from: slice)
+        }
+
+        mutating func skipString() -> Bool {
+            guard peek() == UInt8(ascii: "\"") else { return false }
+            index += 1
+            while let byte = peek() {
+                index += 1
+                if byte == UInt8(ascii: "\\") {
+                    index += 1
+                } else if byte == UInt8(ascii: "\"") {
+                    return true
+                }
+            }
+            return false
+        }
+
+        /// Skips one value of any kind; false on malformed input.
+        mutating func skipValue() -> Bool {
+            skipWhitespace()
+            guard let byte = peek() else { return false }
+            switch byte {
+            case UInt8(ascii: "\""):
+                return skipString()
+            case UInt8(ascii: "["), UInt8(ascii: "{"):
+                var depth = 0
+                while let current = peek() {
+                    switch current {
+                    case UInt8(ascii: "\""):
+                        guard skipString() else { return false }
+                        continue
+                    case UInt8(ascii: "["), UInt8(ascii: "{"):
+                        depth += 1
+                    case UInt8(ascii: "]"), UInt8(ascii: "}"):
+                        depth -= 1
+                        if depth == 0 {
+                            index += 1
+                            return true
+                        }
+                    default:
+                        break
+                    }
+                    index += 1
+                }
+                return false
+            default:
+                // A number, true, false or null runs to the next delimiter.
+                let start = index
+                while let current = peek(), ![UInt8(ascii: ","), UInt8(ascii: "]"), UInt8(ascii: "}"), 0x20, 0x09, 0x0A, 0x0D].contains(current) {
+                    index += 1
+                }
+                return index > start
+            }
+        }
+
+        /// The byte ranges of the elements of the array at the cursor.
+        mutating func arrayElements() -> [Range<Int>]? {
+            guard peek() == UInt8(ascii: "[") else { return nil }
+            index += 1
+            var ranges: [Range<Int>] = []
+            while true {
+                skipWhitespace()
+                guard let byte = peek() else { return nil }
+                if byte == UInt8(ascii: "]") {
+                    index += 1
+                    return ranges
+                }
+                if byte == UInt8(ascii: ",") {
+                    index += 1
+                    continue
+                }
+                let start = index
+                guard skipValue() else { return nil }
+                ranges.append(start..<index)
+            }
+        }
+    }
+}

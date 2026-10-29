@@ -17,6 +17,20 @@ public struct LatticeTask: Identifiable, Codable, Equatable, Hashable, Sendable 
     public var createdAt: Date?
     public var startedAt: Date?
     public var finishedAt: Date?
+    /// The approval that queued the task, when one did.
+    public var approvalID: String = ""
+    /// `approval`, `rerun` or `direct`; empty from an older server.
+    public var origin: String = ""
+    public var rerunOfTaskID: String = ""
+    public var rerunOfNodeID: String = ""
+    /// Lease progress of a single-target task (servers that count attempts).
+    public var attempts: Int = 0
+    public var maxAttempts: Int = 0
+    public var leaseAgeSeconds: Double?
+    /// Why the store stopped re-leasing, verbatim from the server.
+    public var stalledReason: String = ""
+    /// The same progress per node for a fan-out.
+    public var targetStates: [String: LatticeTaskTargetState] = [:]
 
     public init(id: String, actorID: String = "", tokenID: String = "", targets: [String] = [], interpreter: String = "", scriptSHA256: String = "", scriptSizeBytes: Int = 0, timeoutSec: Int = 0, outputLimit: Int = 0, status: String = "", leasedBy: String = "", createdAt: Date? = nil, startedAt: Date? = nil, finishedAt: Date? = nil) {
         self.id = id
@@ -47,6 +61,14 @@ public struct LatticeTask: Identifiable, Codable, Equatable, Hashable, Sendable 
         case createdAt = "created_at"
         case startedAt = "started_at"
         case finishedAt = "finished_at"
+        case approvalID = "approval_id"
+        case origin, attempts
+        case rerunOfTaskID = "rerun_of_task_id"
+        case rerunOfNodeID = "rerun_of_node_id"
+        case maxAttempts = "max_attempts"
+        case leaseAgeSeconds = "lease_age_seconds"
+        case stalledReason = "stalled_reason"
+        case targetStates = "target_states"
     }
 
     public init(from decoder: Decoder) throws {
@@ -65,6 +87,104 @@ public struct LatticeTask: Identifiable, Codable, Equatable, Hashable, Sendable 
         createdAt = try DateValue.decodeIfPresent(from: container, forKey: .createdAt)
         startedAt = try DateValue.decodeIfPresent(from: container, forKey: .startedAt)
         finishedAt = try DateValue.decodeIfPresent(from: container, forKey: .finishedAt)
+        approvalID = try container.decodeIfPresent(String.self, forKey: .approvalID) ?? ""
+        origin = try container.decodeIfPresent(String.self, forKey: .origin) ?? ""
+        rerunOfTaskID = try container.decodeIfPresent(String.self, forKey: .rerunOfTaskID) ?? ""
+        rerunOfNodeID = try container.decodeIfPresent(String.self, forKey: .rerunOfNodeID) ?? ""
+        attempts = try container.decodeIfPresent(Int.self, forKey: .attempts) ?? 0
+        maxAttempts = try container.decodeIfPresent(Int.self, forKey: .maxAttempts) ?? 0
+        leaseAgeSeconds = try container.decodeIfPresent(Double.self, forKey: .leaseAgeSeconds)
+        stalledReason = try container.decodeIfPresent(String.self, forKey: .stalledReason) ?? ""
+        targetStates = try container.decodeIfPresent([String: LatticeTaskTargetState].self, forKey: .targetStates) ?? [:]
+    }
+}
+
+/// One node's share of a fan-out task (`TaskTargetStateView`).
+public struct LatticeTaskTargetState: Codable, Equatable, Hashable, Sendable {
+    /// `queued`, `leased`, `finished`, `failed` or `stalled`.
+    public var status: String
+    public var attempts: Int
+    public var maxAttempts: Int
+    public var leaseAgeSeconds: Double?
+    public var stalledReason: String
+
+    public init(status: String, attempts: Int = 0, maxAttempts: Int = 0, leaseAgeSeconds: Double? = nil, stalledReason: String = "") {
+        self.status = status
+        self.attempts = attempts
+        self.maxAttempts = maxAttempts
+        self.leaseAgeSeconds = leaseAgeSeconds
+        self.stalledReason = stalledReason
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case status, attempts
+        case maxAttempts = "max_attempts"
+        case leaseAgeSeconds = "lease_age_seconds"
+        case stalledReason = "stalled_reason"
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        status = try c.decodeIfPresent(String.self, forKey: .status) ?? ""
+        attempts = try c.decodeIfPresent(Int.self, forKey: .attempts) ?? 0
+        maxAttempts = try c.decodeIfPresent(Int.self, forKey: .maxAttempts) ?? 0
+        leaseAgeSeconds = try c.decodeIfPresent(Double.self, forKey: .leaseAgeSeconds)
+        stalledReason = try c.decodeIfPresent(String.self, forKey: .stalledReason) ?? ""
+    }
+}
+
+/// How far a leased task has got on one node (`lib/taskLease.ts`
+/// `TaskLeaseProgress`): the attempts the store counted and why it gave up.
+public struct TaskLeaseProgress: Sendable, Hashable {
+    /// Per-target status when the server sent one; nil for the task-level scalars.
+    public var status: String?
+    public var attempts: Int
+    public var maxAttempts: Int
+    public var leaseAgeSeconds: Double?
+    public var stalledReason: String?
+
+    public init(status: String? = nil, attempts: Int, maxAttempts: Int, leaseAgeSeconds: Double? = nil, stalledReason: String? = nil) {
+        self.status = status
+        self.attempts = attempts
+        self.maxAttempts = maxAttempts
+        self.leaseAgeSeconds = leaseAgeSeconds
+        self.stalledReason = stalledReason
+    }
+
+    /// `formatLeaseAge`: "30 s", "41 min", "2 h 5 min", "6 d 2 h"; two units at most.
+    public static func formatLeaseAge(_ seconds: Double) -> String {
+        let total = max(0, Int(seconds.rounded(.down)))
+        let days = total / 86_400
+        let hours = (total % 86_400) / 3_600
+        let minutes = (total % 3_600) / 60
+        if days > 0 { return hours > 0 ? "\(days) d \(hours) h" : "\(days) d" }
+        if hours > 0 { return minutes > 0 ? "\(hours) h \(minutes) min" : "\(hours) h" }
+        if minutes > 0 { return "\(minutes) min" }
+        return "\(total) s"
+    }
+
+    /// `leaseAttemptLabel`: "leased 41 min, attempt 2 of 3" while a lease is
+    /// held, the stalled reason once the store gave up (attempt count kept as
+    /// its evidence), and "" when there is nothing to say.
+    public var label: String {
+        var parts: [String] = []
+        if let stalledReason, !stalledReason.isEmpty {
+            parts.append(Self.unterminate(stalledReason))
+        } else if let leaseAgeSeconds {
+            parts.append("leased \(Self.formatLeaseAge(leaseAgeSeconds))")
+        }
+        if attempts > 0, maxAttempts > 0 {
+            parts.append("attempt \(attempts) of \(maxAttempts)")
+        }
+        return parts.joined(separator: ", ")
+    }
+
+    /// Strips the punctuation a sentence ends on, so the attempt count joins with a comma.
+    private static func unterminate(_ sentence: String) -> String {
+        let trailing: Set<Character> = [" ", "\t", "\n", ".", ";", ",", "\u{3002}", "\u{FF1B}", "\u{FF0C}"]
+        var text = Substring(sentence)
+        while let last = text.last, trailing.contains(last) { text = text.dropLast() }
+        return String(text)
     }
 }
 
@@ -203,10 +323,45 @@ public struct TaskListResponse: Decodable, Equatable, Sendable {
 }
 
 public extension LatticeTask {
-    /// The run state of `lib/taskLease.ts`, including pending, stalled and expired.
+    /// The run state of `lib/taskLease.ts`, including pending, stalled and
+    /// expired. The server derives all three (expired when the queue
+    /// deadline passed, stalled when the store stopped re-leasing after its
+    /// attempts), so the phone reads the word rather than guessing from
+    /// clocks; `now` is kept for the frozen signature.
     func runState(now: Date) -> TaskRunState {
-        // M0a: implement. Port taskLease.ts (stalled from lease heartbeats, expired from the lease deadline).
         TaskRunState(serverValue: status)
+    }
+
+    /// One node's share: its target record when the server sent one, else
+    /// the task's own state. A node that has a result is settled by it.
+    func runState(nodeID: String, result: LatticeTaskResult? = nil, now: Date) -> TaskRunState {
+        if let result, result.finishedAt != nil || !result.error.isEmpty || result.exitCode != 0 {
+            return result.exitCode == 0 && result.error.isEmpty ? .finished : .failed
+        }
+        if let target = targetStates[nodeID] { return TaskRunState(serverValue: target.status) }
+        return runState(now: now)
+    }
+
+    /// `taskLeaseProgress`: the per-target record, or the task-level scalars
+    /// when the task has one target or no node is named.
+    func leaseProgress(nodeID: String? = nil) -> TaskLeaseProgress? {
+        if let nodeID, let target = targetStates[nodeID] {
+            return TaskLeaseProgress(
+                status: target.status,
+                attempts: target.attempts,
+                maxAttempts: target.maxAttempts,
+                leaseAgeSeconds: target.leaseAgeSeconds,
+                stalledReason: target.stalledReason.isEmpty ? nil : target.stalledReason
+            )
+        }
+        if nodeID != nil, targets.count != 1 { return nil }
+        if attempts == 0, stalledReason.isEmpty { return nil }
+        return TaskLeaseProgress(
+            attempts: attempts,
+            maxAttempts: maxAttempts,
+            leaseAgeSeconds: leaseAgeSeconds,
+            stalledReason: stalledReason.isEmpty ? nil : stalledReason
+        )
     }
 }
 

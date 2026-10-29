@@ -115,9 +115,11 @@ public struct PathView: Codable, Equatable, Hashable, Sendable, Identifiable {
     public var expected: Int
     public var previous: PathPrevious?
     public var lastAt: Date?
+    /// Deprecated by the server (design 32 R1); key a path by its pair instead.
+    public var managed: Bool
 
     enum CodingKeys: String, CodingKey {
-        case source, target, method, state, reason, degraded, loss, samples, expected
+        case source, target, method, state, reason, degraded, loss, samples, expected, managed
         case targetNode = "target_node"
         case monitorID = "monitor_id"
         case checkDefinitionID = "check_definition_id"
@@ -147,6 +149,7 @@ public struct PathView: Codable, Equatable, Hashable, Sendable, Identifiable {
         expected = try c.decodeIfPresent(Int.self, forKey: .expected) ?? 0
         previous = try c.decodeIfPresent(PathPrevious.self, forKey: .previous)
         lastAt = try DateValue.decodeIfPresent(from: c, forKey: .lastAt)
+        managed = try c.decodeIfPresent(Bool.self, forKey: .managed) ?? false
     }
 
     /// The path's address: a node pair when the target is a node and the
@@ -165,6 +168,39 @@ public struct PathView: Codable, Equatable, Hashable, Sendable, Identifiable {
     }
 }
 
+/// One node whose beacon sources differ from what its applied plan approved
+/// (`BeaconReplan`, `monitor_paths.go` `beaconReplans`).
+public struct PathBeaconReplan: Decodable, Equatable, Hashable, Sendable {
+    public var nodeID: String
+    public var name: String
+    /// `firewall_pending` when NetGuard manages the node, else `beacon_source_pending`.
+    public var reason: String
+    /// Sources using the beacon that the applied plan did not approve, as node ids.
+    public var added: [String]
+    /// Under NetGuard, approved sources that no longer use the beacon.
+    public var removed: [String]
+    /// An open beacon approval that may already settle the difference.
+    public var pendingApprovalID: String
+    public var request: BeaconPlanRequest?
+
+    enum CodingKeys: String, CodingKey {
+        case name, reason, added, removed, request
+        case nodeID = "node_id"
+        case pendingApprovalID = "pending_approval_id"
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        nodeID = try c.decodeIfPresent(String.self, forKey: .nodeID) ?? ""
+        name = try c.decodeIfPresent(String.self, forKey: .name) ?? ""
+        reason = try c.decodeIfPresent(String.self, forKey: .reason) ?? ""
+        added = try c.decodeIfPresent([String].self, forKey: .added) ?? []
+        removed = try c.decodeIfPresent([String].self, forKey: .removed) ?? []
+        pendingApprovalID = try c.decodeIfPresent(String.self, forKey: .pendingApprovalID) ?? ""
+        request = try c.decodeIfPresent(BeaconPlanRequest.self, forKey: .request)
+    }
+}
+
 /// `GET /api/monitors/paths?window=`.
 public struct PathsResponse: Decodable, Equatable, Sendable {
     public var window: String
@@ -174,6 +210,9 @@ public struct PathsResponse: Decodable, Equatable, Sendable {
     public var paths: [PathView]
     /// When the degraded evaluator last ran.
     public var degradedAt: Date?
+    /// Nodes whose beacon sources drifted from the applied plan, with the
+    /// request that would replan each.
+    public var beaconReplans: [PathBeaconReplan]
     /// The key is absent on a server that does not judge degraded; present
     /// (even null) means `degraded` states count.
     public var judgesDegraded: Bool
@@ -182,6 +221,7 @@ public struct PathsResponse: Decodable, Equatable, Sendable {
         case window, sources, targets, paths
         case observedAt = "observed_at"
         case degradedAt = "degraded_at"
+        case beaconReplans = "beacon_replans"
     }
 
     public init(from decoder: Decoder) throws {
@@ -193,7 +233,7 @@ public struct PathsResponse: Decodable, Equatable, Sendable {
         paths = try c.decodeIfPresent([PathView].self, forKey: .paths) ?? []
         degradedAt = try DateValue.decodeIfPresent(from: c, forKey: .degradedAt)
         judgesDegraded = c.contains(.degradedAt)
-        // M0a: decode `beacon_replans` once its shape is recorded in api-shapes.md.
+        beaconReplans = try c.decodeIfPresent([PathBeaconReplan].self, forKey: .beaconReplans) ?? []
     }
 
     /// The path with this key, if the response has it.

@@ -45,8 +45,16 @@ public enum ApprovalVisibility {
         scopes.allows(readRequirement(plugin: plugin), nodeID: nodeID)
     }
 
+    /// The plugin's read rule on the approval's node, plus `network:plan` on
+    /// every other target (`approvalNodeReachAllows`). The server also checks
+    /// each plan's own reach, which the phone cannot see; it filters those
+    /// rows out before they arrive.
     public static func canList(_ approval: Approval, scopes: ScopeSet) -> Bool {
-        canList(plugin: approval.plugin, nodeID: approval.nodeID, scopes: scopes)
+        guard canList(plugin: approval.plugin, nodeID: approval.nodeID, scopes: scopes) else { return false }
+        return approval.targets.allSatisfy { target in
+            let trimmed = target.trimmingCharacters(in: .whitespaces)
+            return trimmed.isEmpty || target == approval.nodeID || scopes.allows("network:plan", nodeID: target)
+        }
     }
 
     /// The scope a decision needs beyond `network:apply`, or nil when none.

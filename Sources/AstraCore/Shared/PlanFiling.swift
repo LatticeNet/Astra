@@ -29,7 +29,7 @@ public enum BeaconPlanAction: String, Codable, Sendable, Hashable, CaseIterable 
 }
 
 /// `POST /api/nodes/beacon/plan` (lattice-sdk `model.BeaconPlanRequest`).
-public struct BeaconPlanRequest: Encodable, Equatable, Sendable {
+public struct BeaconPlanRequest: Encodable, Equatable, Hashable, Sendable {
     public var nodeID: String
     public var action: BeaconPlanAction
     public var port: Int?
@@ -47,6 +47,17 @@ public struct BeaconPlanRequest: Encodable, Equatable, Sendable {
     enum CodingKeys: String, CodingKey {
         case action, port, bind, endpoint
         case nodeID = "node_id"
+    }
+}
+
+extension BeaconPlanRequest: Decodable {
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        nodeID = try c.decodeIfPresent(String.self, forKey: .nodeID) ?? ""
+        action = try c.decodeIfPresent(BeaconPlanAction.self, forKey: .action) ?? .change
+        port = try c.decodeIfPresent(Int.self, forKey: .port)
+        bind = try c.decodeIfPresent(String.self, forKey: .bind)
+        endpoint = try c.decodeIfPresent(String.self, forKey: .endpoint)
     }
 }
 
