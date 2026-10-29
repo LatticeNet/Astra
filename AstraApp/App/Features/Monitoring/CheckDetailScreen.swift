@@ -249,7 +249,7 @@ struct CheckDetailScreen: View {
     private func actionsSection(_ monitor: Monitor) -> some View {
         let missing = store.missing(ScopeRequirement(MonitoringStore.adminScope))
         Section {
-            if monitor.isEditable {
+            if monitor.isEditable && store.serverEditsChecks {
                 Button {
                     Task { await runner.run(MonitoringIntents.setEnabled(monitor, enabled: !monitor.enabled)) }
                 } label: {
@@ -257,7 +257,7 @@ struct CheckDetailScreen: View {
                 }
                 .disabled(!missing.isEmpty)
             } else {
-                Label("This server does not support pausing from here. Edit on web.", systemImage: "info.circle")
+                Label("This server cannot pause checks from the phone. Edit on web.", systemImage: "info.circle")
                     .foregroundStyle(.secondary)
             }
             Button(role: .destructive) {

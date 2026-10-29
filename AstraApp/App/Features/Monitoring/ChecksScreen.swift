@@ -203,7 +203,7 @@ struct ChecksScreen: View {
 
     private func row(_ item: MonitoringCheckItem) -> some View {
         let monitor = item.monitor
-        let editable = monitor.isEditable
+        let editable = monitor.isEditable && store.serverEditsChecks
         return NavigationLink(value: AppRoute.monitoring(.check(id: monitor.id))) {
             MonitoringCheckRow(item: item)
         }

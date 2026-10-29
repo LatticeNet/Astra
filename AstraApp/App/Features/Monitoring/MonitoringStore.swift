@@ -117,6 +117,13 @@ final class MonitoringStore {
         ((windows.value?.windows ?? []) + (incidents.value?.windows ?? [])).first { $0.id == id }
     }
 
+    /// The check edit route shipped with the paths read (design 29): a server
+    /// that answers 404 there cannot pause a check either (`canEditCheck`).
+    var serverEditsChecks: Bool {
+        if case .failed(.notFound, _, _) = paths { return false }
+        return true
+    }
+
     /// True when the token may write monitoring (unknown scopes let the server decide).
     var canAdmin: Bool {
         session.missing(ScopeRequirement(Self.adminScope))?.isEmpty ?? true

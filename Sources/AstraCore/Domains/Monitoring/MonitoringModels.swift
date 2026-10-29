@@ -159,8 +159,10 @@ public struct Monitor: Identifiable, Codable, Equatable, Hashable, Sendable {
     /// offers neither.
     public var isGenerated: Bool { !managedBy.isEmpty || !checkDefinitionID.isEmpty }
 
-    /// Whether the server supports editing this monitor (it sends `version`).
-    public var isEditable: Bool { !isGenerated && version > 0 }
+    /// Whether the operator may edit this check: it is theirs, not generated.
+    /// A check never edited since versioning reads version 0, which the
+    /// server accepts as the expected version (`checksModel.ts` canEditCheck).
+    public var isEditable: Bool { !isGenerated }
 
     /// The type word as the list shows it ("tls"), or the raw value.
     public var typeWord: String { typeRaw.isEmpty ? "check" : typeRaw.lowercased() }

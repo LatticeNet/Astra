@@ -90,8 +90,8 @@ private func checkMonitorDecoding() throws {
     let operatorCheck = try decode(Monitor.self, #"{"id":"m2","name":"api","type":"tls","target":"x:443","enabled":false,"version":3,"latest":[]}"#)
     try expect(operatorCheck.isEditable, "an operator check with a version is editable")
     try expectEqual(operatorCheck.type, .tls, "tls monitor type")
-    let legacy = try decode(Monitor.self, #"{"id":"m3","type":"http","enabled":true}"#)
-    try expect(!legacy.isEditable, "a server without version offers no edit")
+    let legacy = try decode(Monitor.self, #"{"id":"m3","type":"http","enabled":true,"version":0}"#)
+    try expect(legacy.isEditable && legacy.version == 0, "an operator check never edited since versioning is editable at version 0")
 
     let bare = try LatticeListDecoder.decode(Monitor.self, from: json("[\(monitorViewJSON)]"), key: "monitors")
     let envelope = try LatticeListDecoder.decode(Monitor.self, from: json(#"{"monitors":[\#(monitorViewJSON)]}"#), key: "monitors")
@@ -203,6 +203,12 @@ private func checkMonitoringRequestBodies() async throws {
     try expect(urls.contains { $0.contains("compare=previous") }, "compare asks for the previous period")
     try expect(urls.contains { $0.hasSuffix("limit=2000") }, "results limit is capped at the server maximum")
     try expectEqual(await transport.methods.prefix(3).map { $0 ?? "" }, ["POST", "POST", "POST"], "monitoring writes are POST")
+
+    let legacy = try decode(Monitor.self, #"{"id":"m","type":"http","enabled":true,"version":0}"#)
+    let (legacyAPI, legacyTransport) = client(["https://lattice.example.com/api/monitors/update": (200, json(#"{"id":"m","type":"http","enabled":false,"version":1}"#))])
+    _ = try await legacyAPI.monitoringSetEnabled(id: legacy.id, version: legacy.version, enabled: false)
+    let legacyBody = try await bodyObject(try expectUnwrapped(legacyTransport.bodies.first, "version 0 pause body"))
+    try expectEqual(legacyBody["version"] as? Int, 0, "a version 0 check sends version 0 as read")
 }
 
 private func checkSeriesSubjects() async throws {
