@@ -113,6 +113,7 @@ final class ActionRunner {
             outcome = await commitDirectly(intent, client: client)
         case .t2:
             pendingDialog = PendingDialog(host: host, intent: intent)
+            autoConfirmDialogIfAsked()
             let confirmed = await withCheckedContinuation { dialogContinuation = $0 }
             outcome = confirmed ? await commitDirectly(intent, client: client) : nil
         case .t3, .t4, .plan:
@@ -121,6 +122,21 @@ final class ActionRunner {
         }
         guard let outcome else { return Self.cancelled }
         return report(outcome, intent: intent)
+    }
+
+    /// `-AstraAutoConfirm YES` (demo only) confirms the first T2 dialog of the
+    /// launch once it has been on screen, so after-states can be captured. The
+    /// ConfirmSheet does the same for T3, T4 and plans.
+    @ObservationIgnored private var dialogAutoConfirmed = false
+
+    private func autoConfirmDialogIfAsked() {
+        guard LaunchOverrides.current.autoConfirm, session.isDemo, !dialogAutoConfirmed, let dialog = pendingDialog else { return }
+        dialogAutoConfirmed = true
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .milliseconds(1200))
+            guard let self, self.pendingDialog?.id == dialog.id else { return }
+            self.answerDialog(true)
+        }
     }
 
     /// Called by the T2 dialog.

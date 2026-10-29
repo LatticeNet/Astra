@@ -1645,7 +1645,7 @@ Agents cannot tap, swipe or rotate a simulator, and the project has no UI test t
 | `-AstraRoute <lattice:// URL>` | Opens a route after launch, including the scope and segment links of 2.5 (`lattice://monitor?segment=paths&view=chains`) |
 | `-AstraPresent <sheet>[:<args>]` | Opens any global or module sheet: `review:<id>`, `batch:<groupKey>`, `confirm:<intentID>` (each module registers its intents' ids in its route file), `reveal:<intentID>`, `renew:<machineID>`, `maintenanceStart:<nodeID>`, `settings:<page>`, and module sheets by name (`sshguardArm:<nodeID>`, `nodeIdentity:<nodeID>`, `reminders`) |
 | `-AstraAuth succeed\|cancel` | Stub authenticator for D, T3, T4 and unlock |
-| `-AstraAutoConfirm YES` | After `-AstraPresent`, runs the primary action once (with `-AstraAuth succeed`) so after-states can be captured |
+| `-AstraAutoConfirm YES` | After `-AstraPresent`, runs the primary action once (with `-AstraAuth succeed`) so after-states can be captured; for a T2 write it confirms the first dialog of the launch about a second after it appears |
 | `-AstraDemoScenario <name>[:<path prefix>]` | Scenario of 8.6 |
 | `-AstraDemoNow <RFC3339>` | Pins the demo clock |
 | `-AstraOrientation landscape` | Calls `UIWindowScene.requestGeometryUpdate(.iOS(interfaceOrientations: .landscapeRight))` |
