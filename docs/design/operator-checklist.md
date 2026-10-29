@@ -70,3 +70,16 @@ Agents cannot tap, swipe or rotate a simulator, and they cannot run VoiceOver, V
 - Incident detail: the Acknowledge, Snooze and Start maintenance bar replaces the tab bar in portrait (the tab bar returns on back); in landscape Acknowledge and Snooze sit in the navigation bar and Start maintenance in its menu; a failed acknowledge stays on screen with Retry; pending and resolved incidents show no actions.
 - Start maintenance: the node picker, name, presets and Until picker are reachable at AX5 with the keyboard up; Start asks once naming the node and the end time; the window appears under Incidents > Maintenance.
 - Maintenance window: End now and Delete each ask once naming the window.
+
+## M5 Inventory and upcoming
+
+- Machines: the headings rotor jumps between the sections of the Group menu (Region, Country, Role, Group, Status, Tag, None), and each header reads its name, machine count and monthly spend ("Tokyo, 5 machines, USD 54.00 a month"), never "slash mo"; each row reads name, countdown, vendor and the monthly figure in one element.
+- Machines: swipe Renew on a machine opens the Renew sheet and is listed once in the actions rotor; a free or one-time machine offers no swipe; with a Triage token there is no swipe and the context menu shows Record renewal disabled with "Needs inventory:admin".
+- Machines: a query such as `vendor:fabrikam`, `renews_in<7d`, `is:autoroll` or `-is:profiled` filters, the subtitle reads "Filtered: ...", and a misspelt field (`vendr:x`) shows a sentence under the header instead of an empty list.
+- Machines: while VoiceOver runs, a poll that moves a machine between Status sections shows "1 update. Show" instead of moving focus.
+- Machine: the More menu holds Record renewal, Reveal console link, Copy link, Open on web, Edit on web and Delete machine profile; Delete runs the ConfirmSheet with what is removed, then Face ID, and the screen closes only after the server confirms.
+- Machine: Reveal console link asks for the authenticator code (or Sign in for reveals first), shows the link masked until Show, opens it with Open in an in-app browser that keeps no history, and clears it after 60 seconds, on leaving the app, or when the sheet closes.
+- Renew: opens at half height (full height at accessibility sizes) with the date one cycle on; Record asks in a dialog naming the machine and the date; picking the date already recorded keeps Record off with the reason; a past date warns and offers the first renewal after today.
+- Reminders: lists today's reminders worked out on the phone; Send asks once naming the count, then lists each reminder the server says it sent; a second send the same day reports that nothing went out.
+- Upcoming: the Filter menu narrows to Machines, VPN users, Shares or Certificates and a "Showing ... only. Show all" row appears; with a Triage token the note under the summary names the hidden kinds; swipe Renew on a machine row opens the Renew sheet.
+- Voice Control "Show names": the Group menu, the More menus, the Filter menu and every Reveal and Record button have names.
