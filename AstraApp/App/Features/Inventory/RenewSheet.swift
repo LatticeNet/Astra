@@ -91,7 +91,8 @@ struct RenewSheet: View {
         return Form {
             Section {
                 LabeledContent {
-                    VStack(alignment: .trailing, spacing: Spacing.xxs) {
+                    // LabeledContent stacks at accessibility sizes; the value then reads from the leading edge.
+                    VStack(alignment: typeSize.isAccessibilitySize ? .leading : .trailing, spacing: Spacing.xxs) {
                         Text(machine.renewalDay?.formatted(locale: locale) ?? "No date")
                         if machine.renewalDay != nil {
                             Text(state.word.inventoryCapitalized)
@@ -99,7 +100,7 @@ struct RenewSheet: View {
                                 .foregroundStyle(state.inventoryTone.isProblem ? state.inventoryTone.word : Color.secondary)
                         }
                     }
-                    .multilineTextAlignment(.trailing)
+                    .multilineTextAlignment(typeSize.isAccessibilitySize ? .leading : .trailing)
                 } label: {
                     Text("Current renewal")
                 }
@@ -111,10 +112,12 @@ struct RenewSheet: View {
                         .frame(minHeight: Spacing.minimumTarget)
                 }
             } header: {
-                if !billing.isEmpty { Text(billing) }
+                // At accessibility sizes the header would push the picker off an iPhone SE; it moves under the preview.
+                if !billing.isEmpty, !typeSize.isAccessibilitySize { Text(billing) }
             } footer: {
                 VStack(alignment: .leading, spacing: Spacing.xs) {
                     preview(machine).announcing(problem(machine))
+                    if !billing.isEmpty, typeSize.isAccessibilitySize { Text(billing) }
                     if machine.autoRoll {
                         Text("This machine renews by itself and its date moves forward when it passes. Record a renewal only to set a different date.")
                     }
