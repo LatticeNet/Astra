@@ -1,0 +1,249 @@
+import SwiftUI
+
+/// Plan witness (P), presented from Notifications. The phone asks only for
+/// what the server cannot default: the node, the Bark channel whose device
+/// key the witness pushes with, and the bark-server on that node's loopback
+/// address. References, level and timing are the server's defaults, and the
+/// watch URL is the default unless the web set one, which the plan keeps.
+/// A witness running custom timing or references is changed on the web,
+/// because a plan from here would reset them. Continue pushes the plan
+/// confirmation inside this sheet, and the filed approval opens in Review.
+struct NotifyWitnessPlanSheet: View {
+    /// The node whose settings change, or nil for a new witness.
+    let nodeID: String?
+
+    @Environment(NotifyStore.self) private var store
+    @Environment(ActionRunner.self) private var runner
+    @Environment(NetworkMonitor.self) private var network
+    @Environment(\.dismiss) private var dismiss
+
+    @State private var node = ""
+    @State private var channel = ""
+    @State private var barkURL = ""
+    @State private var filing = false
+    @State private var prepared = false
+    @FocusState private var urlFocused: Bool
+
+    var body: some View {
+        NavigationStack {
+            NotifyResourceScreen(state: store.witness, noun: "the witness", retry: { Task { await store.refreshRouting() } }) { status in
+                form(status)
+            }
+            .navigationTitle(nodeID == nil ? "Plan witness" : "Change the witness")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(role: .close) { dismiss() }
+                        .disabled(filing)
+                }
+            }
+            .safeAreaInset(edge: .bottom) {
+                if let status = store.witness.value { continueBar(status) }
+            }
+            .actionHost(inSheet: true)
+        }
+        .presentationDetents([.large])
+        .presentationBackground(Color(uiColor: .systemGroupedBackground))
+        .interactiveDismissDisabled(filing)
+        .task {
+            if store.witness.value == nil || store.channels.value == nil { await store.refreshRouting() }
+            prepare()
+        }
+        .onChange(of: store.witness.loadedAt) { prepare() }
+    }
+
+    private var barkChannels: [NotifyChannel] { NotifyChannels.bark(store.channels.value ?? []) }
+
+    /// The form a setup or change starts from (`witnessFormDefaults`): the
+    /// node and channel of the applied plan, or the only choice when there is one.
+    private func prepare() {
+        guard !prepared, let status = store.witness.value, store.channels.value != nil else { return }
+        prepared = true
+        let existing = status.nodes.first { $0.nodeID == nodeID }
+        node = nodeID ?? (status.capableNodes.count == 1 ? status.capableNodes[0].nodeID : "")
+        if let applied = existing?.configured?.channelID, barkChannels.contains(where: { $0.id == applied }) {
+            channel = applied
+        } else if barkChannels.count == 1 {
+            channel = barkChannels[0].id
+        }
+    }
+
+    /// What the chosen node's current witness carries into the plan.
+    private func basis(_ status: NotifyWitnessStatus) -> NotifyWitness.ChangeBasis {
+        NotifyWitness.changeBasis(status.nodes.first { $0.nodeID == node }, status: status)
+    }
+
+    private func problems(_ status: NotifyWitnessStatus) -> [NotifyWitness.FormProblem] {
+        NotifyWitness.formProblems(nodeID: node, channelID: channel, barkURL: barkURL, defaultHealthURL: status.healthURL, basis: basis(status))
+    }
+
+    @ViewBuilder
+    private func form(_ status: NotifyWitnessStatus) -> some View {
+        let d = status.defaults
+        let basis = basis(status)
+        List {
+            Section {
+                Text("Files a plan. Nothing changes on the node until someone approves it.")
+                    .foregroundStyle(.secondary)
+                    .frame(minHeight: Spacing.minimumTarget, alignment: .leading)
+            }
+
+            if basis.customSettings {
+                Section {
+                    Label {
+                        Text(NotifyWitness.FormProblem.customSettings.sentence)
+                            .foregroundStyle(Color.statusWarnText)
+                            .fixedSize(horizontal: false, vertical: true)
+                    } icon: {
+                        Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(Color.statusWarnFill)
+                    }
+                    WebLinkRow(title: "Change the witness on the web", path: .notifyNotifications(view: "routing"))
+                }
+            }
+
+            Section {
+                if status.capableNodes.isEmpty {
+                    Text("No node runs an agent with witness mode. Update the agent on the service node first.")
+                        .foregroundStyle(Color.statusWarnText)
+                } else {
+                    Picker("Node", selection: $node) {
+                        if node.isEmpty { Text("Choose").tag("") }
+                        ForEach(status.capableNodes) { candidate in
+                            Text(candidate.online ? candidate.nodeName : "\(candidate.nodeName), offline").tag(candidate.nodeID)
+                        }
+                    }
+                    .pickerStyle(.navigationLink)
+                    .disabled(nodeID != nil)
+                }
+            } header: {
+                Text("Node")
+            } footer: {
+                Text("The node that runs Bark. Only nodes whose agent has witness mode (control-plane-witness-v1) are listed.")
+            }
+
+            Section {
+                if barkChannels.isEmpty {
+                    Text("Create a Bark channel first; the witness pushes with its device key.")
+                        .foregroundStyle(Color.statusWarnText)
+                    WebLinkRow(title: "New channel on web", path: .notifyNotifications(view: "routing"))
+                } else {
+                    Picker("Bark channel", selection: $channel) {
+                        if channel.isEmpty { Text("Choose").tag("") }
+                        ForEach(barkChannels) { Text($0.displayName).tag($0.id) }
+                    }
+                    .pickerStyle(.navigationLink)
+                }
+            } header: {
+                Text("Bark channel")
+            } footer: {
+                Text("The witness pushes with this channel's device key. The plan shows a fingerprint of the key, never the key.")
+            }
+
+            Section {
+                TextField("Local bark-server URL", text: $barkURL, prompt: Text(verbatim: "http://127.0.0.1:8080").foregroundStyle(.tertiary))
+                    .keyboardType(.URL)
+                    .textContentType(.URL)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .font(TextRole.identifierInDetail.font)
+                    .focused($urlFocused)
+                    .submitLabel(.done)
+                    .frame(minHeight: Spacing.minimumTarget)
+                if !barkURL.isEmpty, !NotifyWitness.isLoopbackBaseURL(barkURL) {
+                    Text(NotifyWitness.FormProblem.barkURLLoopback.sentence)
+                        .foregroundStyle(Color.statusWarnText)
+                        .font(.subheadline)
+                }
+            } header: {
+                Text("Local bark-server URL")
+            } footer: {
+                Text("The bark-server on that node, on its loopback address, so the key never leaves the node. bark-server listens on 8080 unless its unit says otherwise.")
+            }
+
+            Section {
+                if !basis.healthURL.isEmpty {
+                    DetailRow(label: "Watches", value: basis.healthURL, monospaced: true, secondary: "Set on the web; this plan keeps it")
+                } else if status.healthURL.isEmpty {
+                    Text("This server has no public URL, so the witness needs a watch URL of its own.")
+                        .foregroundStyle(Color.statusWarnText)
+                } else {
+                    DetailRow(label: "Watches", value: status.healthURL, monospaced: true)
+                }
+                DetailRow(label: "Checks every", value: "\(d.intervalSeconds) s", copyable: false)
+                DetailRow(label: "Alerts after failing for", value: "\(d.holdSeconds) s", copyable: false)
+                DetailRow(label: "Recovery after answering for", value: "\(d.recoverSeconds) s", copyable: false)
+                DetailRow(label: "Alert level", value: d.barkLevel, copyable: false)
+                if !d.referenceURLs.isEmpty {
+                    DetailRow(label: "Reference URLs", value: d.referenceURLs.joined(separator: "\n"), monospaced: true)
+                }
+                WebLinkRow(title: "Change these on the web", path: .notifyNotifications(view: "routing"))
+            } header: {
+                Text("Watch and timing")
+            } footer: {
+                Text("Timing, alert level and reference URLs are the server's defaults.")
+            }
+
+            if let nodeID, let existing = status.nodes.first(where: { $0.nodeID == nodeID }), existing.configured != nil {
+                Section {
+                    Button(role: .destructive) {
+                        Task { await remove(existing) }
+                    } label: {
+                        Label("Remove the witness", systemImage: "trash")
+                            .frame(minHeight: Spacing.minimumTarget)
+                    }
+                    .disabled(store.witnessMissing != nil || filing || !network.isSatisfied)
+                } footer: {
+                    Text("Files a plan that stops the witness on this node. Nothing changes until it is approved.")
+                }
+            }
+        }
+        .listStyle(.insetGrouped)
+        .scrollDismissesKeyboard(.interactively)
+    }
+
+    private func continueBar(_ status: NotifyWitnessStatus) -> some View {
+        let problems = problems(status)
+        let missing = store.witnessMissing
+        // The custom-settings refusal is already spelled out above the form.
+        let first = problems.first.map { $0 == .customSettings ? "Change this witness on the web." : $0.sentence }
+        let note: String? = missing.map { "Needs \($0)" } ?? (network.isSatisfied ? first : "No connection")
+        return VStack(spacing: Spacing.s) {
+            if let note {
+                Text(note)
+                    .textRole(.footnote)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            Button {
+                Task { await file(status) }
+            } label: {
+                Text("Continue").frame(maxWidth: .infinity, minHeight: Spacing.minimumTarget)
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(Color.accentFill)
+            .disabled(!problems.isEmpty || missing != nil || filing || !network.isSatisfied)
+        }
+        .padding(.horizontal, Spacing.l)
+        .padding(.vertical, Spacing.s)
+        .background(Color(uiColor: .systemGroupedBackground))
+    }
+
+    private func file(_ status: NotifyWitnessStatus) async {
+        guard let picked = barkChannels.first(where: { $0.id == channel }) else { return }
+        let name = status.capableNodes.first { $0.nodeID == node }?.nodeName ?? status.nodes.first { $0.nodeID == node }?.nodeName ?? node
+        urlFocused = false
+        filing = true
+        let outcome = await runner.run(NotifyIntents.planWitness(node: ObjectRef(kind: "node", id: node, name: name), channel: picked,
+                                                                 barkURL: barkURL.trimmingCharacters(in: .whitespacesAndNewlines), status: status,
+                                                                 healthURL: basis(status).healthURL))
+        filing = false
+        if case .filed = outcome { dismiss() }
+    }
+
+    private func remove(_ existing: NotifyWitnessNode) async {
+        urlFocused = false
+        filing = true
+        let outcome = await runner.run(NotifyIntents.removeWitness(node: ObjectRef(kind: "node", id: existing.nodeID, name: existing.nodeName)))
+        filing = false
+        if case .filed = outcome { dismiss() }
+    }
+}
