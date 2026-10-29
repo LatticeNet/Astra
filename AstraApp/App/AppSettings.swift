@@ -14,7 +14,6 @@ struct AppSettings: Codable, Equatable {
     var barkServerURL: String
     var barkGroup: String
     var barkSound: String
-    var barkLevel: BarkInterruptionLevel
 
     init(
         latticeBaseURL: String,
@@ -28,8 +27,7 @@ struct AppSettings: Codable, Equatable {
         backgroundRefreshEnabled: Bool,
         barkServerURL: String,
         barkGroup: String,
-        barkSound: String,
-        barkLevel: BarkInterruptionLevel
+        barkSound: String
     ) {
         self.latticeBaseURL = latticeBaseURL
         self.pollInterval = pollInterval
@@ -43,7 +41,6 @@ struct AppSettings: Codable, Equatable {
         self.barkServerURL = barkServerURL
         self.barkGroup = barkGroup
         self.barkSound = barkSound
-        self.barkLevel = barkLevel
     }
 
     enum CodingKeys: String, CodingKey {
@@ -60,7 +57,6 @@ struct AppSettings: Codable, Equatable {
         case barkServerURL
         case barkGroup
         case barkSound
-        case barkLevel
     }
 
     init(from decoder: Decoder) throws {
@@ -80,7 +76,6 @@ struct AppSettings: Codable, Equatable {
         barkServerURL = try container.decodeIfPresent(String.self, forKey: .barkServerURL) ?? defaults.barkServerURL
         barkGroup = try container.decodeIfPresent(String.self, forKey: .barkGroup) ?? defaults.barkGroup
         barkSound = try container.decodeIfPresent(String.self, forKey: .barkSound) ?? defaults.barkSound
-        barkLevel = try container.decodeIfPresent(BarkInterruptionLevel.self, forKey: .barkLevel) ?? defaults.barkLevel
     }
 
     func encode(to encoder: Encoder) throws {
@@ -97,7 +92,6 @@ struct AppSettings: Codable, Equatable {
         try container.encode(barkServerURL, forKey: .barkServerURL)
         try container.encode(barkGroup, forKey: .barkGroup)
         try container.encode(barkSound, forKey: .barkSound)
-        try container.encode(barkLevel, forKey: .barkLevel)
     }
 
     static let defaults = AppSettings(
@@ -112,14 +106,12 @@ struct AppSettings: Codable, Equatable {
         backgroundRefreshEnabled: true,
         barkServerURL: "http://bark.roobli.org",
         barkGroup: "Lattice",
-        barkSound: "minuet",
-        barkLevel: .timeSensitive
+        barkSound: "minuet"
     )
 
-    var monitorConfiguration: MonitorConfiguration {
-        MonitorConfiguration(
+    var fleetThresholds: FleetThresholds {
+        FleetThresholds(
             offlineTimeout: offlineTimeout,
-            alertCooldown: alertCooldown,
             cpuCritical: cpuCritical,
             memoryCritical: memoryCritical,
             diskCritical: diskCritical
@@ -141,47 +133,6 @@ enum SettingsStore {
 
     static func save(_ settings: AppSettings) {
         guard let data = try? JSONEncoder().encode(settings) else {
-            return
-        }
-        UserDefaults.standard.set(data, forKey: key)
-    }
-}
-
-enum MonitorEngineStateStore {
-    private static let key = "astra.monitorEngineState.v1"
-
-    static func load() -> MonitorEngineState {
-        guard let data = UserDefaults.standard.data(forKey: key),
-              let state = try? JSONDecoder().decode(MonitorEngineState.self, from: data)
-        else {
-            return MonitorEngineState()
-        }
-        return state
-    }
-
-    static func save(_ state: MonitorEngineState) {
-        guard let data = try? JSONEncoder().encode(state) else {
-            return
-        }
-        UserDefaults.standard.set(data, forKey: key)
-    }
-}
-
-enum EventStore {
-    private static let key = "astra.events.v1"
-
-    static func load() -> [MonitorEvent] {
-        guard let data = UserDefaults.standard.data(forKey: key),
-              let events = try? JSONDecoder().decode([MonitorEvent].self, from: data)
-        else {
-            return []
-        }
-        return events
-    }
-
-    static func save(_ events: [MonitorEvent]) {
-        let trimmed = Array(events.prefix(100))
-        guard let data = try? JSONEncoder().encode(trimmed) else {
             return
         }
         UserDefaults.standard.set(data, forKey: key)

@@ -67,17 +67,6 @@ struct SettingsView: View {
 
 // MARK: - Settings helpers
 
-extension BarkInterruptionLevel {
-    var settingsTitle: String {
-        switch self {
-        case .passive: "Passive"
-        case .active: "Active"
-        case .timeSensitive: "Time Sensitive"
-        case .critical: "Critical"
-        }
-    }
-}
-
 struct ThresholdSlider: View {
     var title: String
     @Binding var value: Double

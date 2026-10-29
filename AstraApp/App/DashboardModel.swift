@@ -58,7 +58,6 @@ final class DashboardModel: ObservableObject {
     @Published var loginTOTPCode = ""
     @Published var barkDeviceKey: String
     @Published private(set) var nodes: [LatticeNode] = []
-    @Published private(set) var events: [MonitorEvent] = []
     @Published private(set) var isPolling = false
     @Published private(set) var isBusy = false
     @Published private(set) var lastRefresh: Date?
@@ -92,7 +91,6 @@ final class DashboardModel: ObservableObject {
 
     @Published private(set) var netPolicies: [NetPolicy] = []
     @Published var netGraph: NetGraph?
-    @Published private(set) var nftInputs: [NFTInputs] = []
     @Published private(set) var tunnels: [TunnelProfile] = []
     @Published private(set) var approvals: [Approval] = []
     @Published private(set) var sshGuardByNode: [String: SSHGuardNodeStatus] = [:]
@@ -114,7 +112,6 @@ final class DashboardModel: ObservableObject {
         barkDeviceKey = SecretStore.load(AppSecretAccount.barkDeviceKey)
         nodes = nodeSnapshot.nodes
         lastRefresh = nodeSnapshot.refreshedAt
-        events = EventStore.load()
         backgroundRefreshStatus = BackgroundRefreshStatusStore.load()
         lastInboxNotifyAt = InboxQuietStore.lastNotifyAt
     }
@@ -149,7 +146,7 @@ final class DashboardModel: ObservableObject {
     }
 
     var fleetSummary: FleetSummary {
-        FleetSummary(nodes: nodes, configuration: settings.monitorConfiguration)
+        FleetSummary(nodes: nodes, thresholds: settings.fleetThresholds)
     }
 
     var inventorySummary: InventorySummary {
@@ -204,7 +201,7 @@ final class DashboardModel: ObservableObject {
         latticeToken = latticeToken.trimmingCharacters(in: .whitespacesAndNewlines)
         latticeSessionCookie = latticeSessionCookie.trimmingCharacters(in: .whitespacesAndNewlines)
         latticeCSRFToken = latticeCSRFToken.trimmingCharacters(in: .whitespacesAndNewlines)
-        barkDeviceKey = BarkDeviceKeyNormalizer.deviceKey(from: barkDeviceKey)
+        barkDeviceKey = barkDeviceKey.trimmingCharacters(in: .whitespacesAndNewlines)
         SettingsStore.save(settings)
         SecretStore.save(latticeToken, account: AppSecretAccount.latticeToken)
         SecretStore.save(latticeSessionCookie, account: AppSecretAccount.latticeSessionCookie)
@@ -488,10 +485,9 @@ final class DashboardModel: ObservableObject {
         var failed: [String] = []
         do { netPolicies = try await client.listNetPolicies() } catch { failed.append("policies") }
         do { netGraph = try await client.netPolicyGraph() } catch { failed.append("graph") }
-        do { nftInputs = try await client.listNFTInputs() } catch { failed.append("nft") }
         do { tunnels = try await client.listTunnels() } catch { failed.append("tunnels") }
 
-        if failed.count == 4 {
+        if failed.count == 3 {
             sectionErrors["network"] = "Couldn't load network data — check your connection or token scopes."
         } else if !failed.isEmpty {
             sectionErrors["network"] = "Some sections need higher scopes: \(failed.joined(separator: ", "))."
@@ -574,12 +570,15 @@ final class DashboardModel: ObservableObject {
         switch link {
         case .approval(let id):
             openReview(id: id)
-        case .node(let id):
+        case .node(let id, _):
             selectedTab = .fleet
             fleetPath = [id]
-        case .monitor(let id):
+        case .monitor(let id), .check(let id):
             selectedTab = .more
             morePath = [.monitors, .monitor(id)]
+        default:
+            // The v2 shell has no screen for the other v3 links.
+            break
         }
     }
 

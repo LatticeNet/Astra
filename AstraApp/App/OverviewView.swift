@@ -122,17 +122,9 @@ struct OverviewView: View {
         }
     }
 
-    @ViewBuilder
+    // The on-device alert log was retired with MonitorEngine.
     private var recentActivitySection: some View {
-        if !model.events.isEmpty {
-            VStack(alignment: .leading, spacing: 12) {
-                SectionHeaderView("Recent alerts", systemImage: "bell.fill")
-                ForEach(model.events.prefix(5), id: \.timelineID) { event in
-                    EventRow(event: event)
-                }
-            }
-            .latticeCard()
-        }
+        EmptyView()
     }
 }
 
@@ -234,49 +226,3 @@ struct FleetMapCard: View {
     }
 }
 
-// MARK: - Event row (shared)
-
-struct EventRow: View {
-    var event: MonitorEvent
-
-    var body: some View {
-        HStack(alignment: .top, spacing: 10) {
-            Image(systemName: icon)
-                .foregroundStyle(color)
-                .frame(width: 22)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(event.title)
-                    .font(.subheadline.weight(.semibold))
-                Text(event.body)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(2)
-            }
-            Spacer()
-            Text(RelativeDateFormatter.string(from: event.date))
-                .font(.caption2)
-                .foregroundStyle(.tertiary)
-        }
-        .padding(.vertical, 4)
-    }
-
-    private var icon: String {
-        switch event.kind {
-        case .offline: "xmark.octagon.fill"
-        case .recovered: "checkmark.seal.fill"
-        case .cpuCritical: "cpu.fill"
-        case .memoryCritical: "memorychip.fill"
-        case .diskCritical: "internaldrive.fill"
-        }
-    }
-
-    private var color: Color {
-        switch event.kind {
-        case .recovered: Theme.online
-        case .offline: Theme.offline
-        case .cpuCritical: Theme.warning
-        case .memoryCritical: Theme.secondary
-        case .diskCritical: Theme.violet
-        }
-    }
-}

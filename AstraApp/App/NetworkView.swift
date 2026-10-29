@@ -12,7 +12,6 @@ struct NetworkView: View {
         List {
             policiesSection
             reachabilitySection
-            nftSection
             tunnelsSection
 
             Section {
@@ -64,21 +63,6 @@ struct NetworkView: View {
                             .foregroundStyle(.secondary)
                     }
                 }
-            }
-        }
-    }
-
-    // MARK: - nft inputs
-
-    @ViewBuilder
-    private var nftSection: some View {
-        if !model.nftInputs.isEmpty {
-            Section {
-                ForEach(model.nftInputs) { inputs in
-                    NavigationLink { NFTInputsDetailView(nodeID: inputs.nodeID) } label: { NFTInputsRow(inputs: inputs) }
-                }
-            } header: {
-                SectionHeaderView("nft baseline", systemImage: "shield.lefthalf.filled", accessory: "\(model.nftInputs.count)")
             }
         }
     }
@@ -182,21 +166,6 @@ struct NetPolicyRow: View {
     }
 }
 
-struct NFTInputsRow: View {
-    var inputs: NFTInputs
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(inputs.displayName)
-                .font(.subheadline.weight(.semibold))
-            Text("TCP \(NFTInputs.portList(inputs.publicTCP)) · iface \(inputs.interfaceName.isEmpty ? "—" : inputs.interfaceName)")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-        }
-        .padding(.vertical, 2)
-    }
-}
 
 struct TunnelRow: View {
     var tunnel: TunnelProfile
@@ -384,46 +353,6 @@ struct ReachabilityGraphView: View {
 
 // MARK: - nft inputs detail
 
-struct NFTInputsDetailView: View {
-    @EnvironmentObject private var model: DashboardModel
-    var nodeID: String
-
-    private var inputs: NFTInputs? { model.nftInputs.first { $0.nodeID == nodeID } }
-
-    var body: some View {
-        ScrollView {
-            if let inputs {
-                VStack(spacing: 16) {
-                    VStack(spacing: 0) {
-                        SectionHeaderView("Interface", systemImage: "network").padding(.bottom, 4)
-                        DetailRow(label: "Interface", value: inputs.interfaceName.isEmpty ? "—" : inputs.interfaceName, monospaced: true)
-                        Divider()
-                        DetailRow(label: "WireGuard CIDR", value: inputs.wireGuardCIDR.isEmpty ? "—" : inputs.wireGuardCIDR, monospaced: true, copyable: true)
-                    }
-                    .latticeCard()
-
-                    VStack(spacing: 0) {
-                        SectionHeaderView("Open ports", systemImage: "shield.lefthalf.filled").padding(.bottom, 4)
-                        DetailRow(label: "Public TCP", value: NFTInputs.portList(inputs.publicTCP), monospaced: true)
-                        Divider()
-                        DetailRow(label: "Public UDP", value: NFTInputs.portList(inputs.publicUDP), monospaced: true)
-                        Divider()
-                        DetailRow(label: "WireGuard TCP", value: NFTInputs.portList(inputs.wireGuardTCP), monospaced: true)
-                        Divider()
-                        DetailRow(label: "WireGuard UDP", value: NFTInputs.portList(inputs.wireGuardUDP), monospaced: true)
-                    }
-                    .latticeCard()
-                }
-                .padding(16)
-            } else {
-                AstraEmptyStateView(title: "Inputs unavailable", systemImage: "shield", message: "No nft baseline for this node.")
-                    .padding(.top, 60)
-            }
-        }
-        .navigationTitle(inputs?.displayName ?? "nft inputs")
-        .navigationBarTitleDisplayMode(.inline)
-    }
-}
 
 // MARK: - Tunnel detail
 
