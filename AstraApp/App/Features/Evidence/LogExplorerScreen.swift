@@ -113,6 +113,15 @@ struct LogExplorerScreen: View {
     @State private var findText = ""
     @State private var currentMatch: String?
     @FocusState private var findFocused: Bool
+    @State private var idle = EvidenceListIdle()
+    /// The newest line was on screen; a poll's new lines then keep it there.
+    @State private var atBottom = true
+    /// Whether the refresh in flight should keep the newest line on screen,
+    /// decided before its lines grow the list.
+    @State private var followTail = true
+    /// New lines a poll added below while the operator read elsewhere.
+    @State private var unseen = 0
+    @State private var handledRevision = 0
 
     var body: some View {
         content
@@ -164,7 +173,7 @@ struct LogExplorerScreen: View {
                     ok = await store.refreshSources()
                 }
                 guard let source else { return ok }
-                return await model.refresh(session: session, sourceID: source.id, search: submittedSearch)
+                return await refreshLines(source, follow: atBottom && idle.isIdle)
             }
     }
 
@@ -246,16 +255,55 @@ struct LogExplorerScreen: View {
             }
             .listStyle(.insetGrouped)
             .refreshable {
-                if let source { await model.refresh(session: session, sourceID: source.id, search: submittedSearch) }
+                if let source { await refreshLines(source, follow: true) }
+            }
+            .onScrollPhaseChange { _, phase in idle.note(phase) }
+            .onScrollGeometryChange(for: Bool.self) { geometry in
+                geometry.visibleRect.maxY >= geometry.contentSize.height - 60
+            } action: { _, bottom in
+                atBottom = bottom
+                if bottom { unseen = 0 }
+            }
+            .safeAreaBar(edge: .bottom) {
+                if unseen > 0 {
+                    Button {
+                        unseen = 0
+                        if let last = model.lines.last?.id { withAnimation { proxy.scrollTo(last, anchor: .bottom) } }
+                    } label: {
+                        Label(unseen == 1 ? "1 new line below" : "\(unseen.formatted()) new lines below", systemImage: "arrow.down")
+                            .frame(minHeight: Spacing.minimumTarget)
+                    }
+                    .buttonStyle(.glass)
+                    .padding(.bottom, Spacing.s)
+                    .accessibilityHint("Shows the newest line")
+                }
             }
             .task(id: model.newestRevision) {
+                guard model.newestRevision != handledRevision else { return }
+                handledRevision = model.newestRevision
                 // Rows must be laid out before the list can scroll to them.
                 try? await Task.sleep(for: .milliseconds(150))
-                if finding, !findText.isEmpty {
-                    if currentMatch == nil { currentMatch = EvidenceLogs.step(matches, from: nil, forward: false) }
-                    if let currentMatch { proxy.scrollTo(currentMatch, anchor: .center) }
-                } else if let last = model.lines.last?.id {
-                    proxy.scrollTo(last, anchor: .bottom)
+                let findActive = finding && !findText.isEmpty
+                switch model.lastMerge {
+                case .replaced:
+                    unseen = 0
+                    if findActive {
+                        if currentMatch.map({ !matches.contains($0) }) ?? true { currentMatch = EvidenceLogs.step(matches, from: nil, forward: false) }
+                        if let currentMatch { proxy.scrollTo(currentMatch, anchor: .center) }
+                    } else if let last = model.lines.last?.id {
+                        proxy.scrollTo(last, anchor: .bottom)
+                    }
+                case .appended(let count):
+                    // Follow the tail only when the operator was already there
+                    // and not reading a match; otherwise say what arrived.
+                    if followTail, !findActive, let last = model.lines.last?.id {
+                        proxy.scrollTo(last, anchor: .bottom)
+                    } else {
+                        if unseen == 0 { AccessibilityNotification.Announcement(count == 1 ? "1 new line below" : "\(count) new lines below").post() }
+                        unseen += count
+                    }
+                case .unchanged:
+                    break
                 }
             }
             .onChange(of: currentMatch) { _, id in
@@ -441,7 +489,13 @@ struct LogExplorerScreen: View {
 
     private func refreshLines() {
         guard let source else { return }
-        Task { await model.refresh(session: session, sourceID: source.id, search: submittedSearch) }
+        Task { await refreshLines(source, follow: true) }
+    }
+
+    @discardableResult
+    private func refreshLines(_ source: LogSource, follow: Bool) async -> Bool {
+        followTail = follow
+        return await model.refresh(session: session, sourceID: source.id, search: submittedSearch)
     }
 }
 

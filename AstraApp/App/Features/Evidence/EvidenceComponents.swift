@@ -40,6 +40,60 @@ extension StatusStyle {
     }
 }
 
+/// Section 5.0 stable lists: a poll may reorder, insert or remove rows only
+/// once the list has been still, with no touch or scroll, for 2 s.
+@MainActor @Observable
+final class EvidenceListIdle {
+    /// Bumped each time the list has been still for 2 s, so held updates can apply.
+    private(set) var settled = 0
+    @ObservationIgnored private var touching = false
+    @ObservationIgnored private var lastActivity = Date.distantPast
+    @ObservationIgnored private var settleTask: Task<Void, Never>?
+
+    var isIdle: Bool { !touching && Date().timeIntervalSince(lastActivity) >= 2 }
+
+    func note(_ phase: ScrollPhase) {
+        lastActivity = Date()
+        settleTask?.cancel()
+        touching = phase != .idle
+        guard !touching else { return }
+        settleTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(2))
+            guard !Task.isCancelled else { return }
+            self?.settled += 1
+        }
+    }
+
+    /// `rows` in the order last shown; rows that were not there go last.
+    static func ordered<Row: Identifiable>(_ rows: [Row], by held: [Row.ID]) -> [Row] {
+        guard !held.isEmpty else { return rows }
+        let place = Dictionary(held.enumerated().map { ($1, $0) }, uniquingKeysWith: { first, _ in first })
+        return rows.enumerated().sorted { a, b in
+            let pa = place[a.element.id] ?? held.count + a.offset, pb = place[b.element.id] ?? held.count + b.offset
+            return pa < pb
+        }.map(\.element)
+    }
+}
+
+enum EvidenceText {
+    /// A clock time alone reads as today, so stamps older than 20 hours carry their date.
+    static func stamp(_ date: Date, now: Date = Date(), mode: TimeZoneMode, locale: Locale) -> String {
+        now.timeIntervalSince(date) < 20 * 3_600 ? TimeDisplay.clock(date, mode: mode, locale: locale) : TimeDisplay.dateTime(date, mode: mode, locale: locale)
+    }
+
+    /// Break opportunities after the separators of an address or host name
+    /// (".", ":", "/", "-"), so "198.51.100.150:40000" wraps after a dot or the
+    /// colon and never inside a number or a word.
+    static func breakableAddress(_ value: String) -> String {
+        var out = ""
+        for character in value {
+            out.append(character)
+            if ".:/-".contains(character) { out.append("\u{200B}") }
+        }
+        return out
+    }
+}
+
 /// Copying and app links for Evidence objects.
 enum EvidenceCopy {
     static func copy(_ text: String) {
