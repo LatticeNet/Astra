@@ -254,6 +254,12 @@ private func checkNodeHonesty() throws {
 private func checkFormatters() throws {
     let now = ISO8601DateFormatter().date(from: "2026-06-17T02:00:00Z")!
     try expectEqual(UptimeFormatter.string(seconds: 90_061), "1d 1h", "uptime formats days+hours")
+    let posix = Locale(identifier: "en_US_POSIX")
+    let stamped = "No report since 2026-10-29T03:20:00Z; the control plane stops trusting a node after 1m30s of silence."
+    let local = TimeDisplay.localizingStamps(in: stamped, mode: .utc, locale: posix)
+    try expect(!local.contains("2026-10-29T03:20:00Z") && local.contains(TimeDisplay.dateTime(ISO8601DateFormatter().date(from: "2026-10-29T03:20:00Z")!, mode: .utc, locale: posix)), "reason stamps show in the chosen zone")
+    try expect(local.hasSuffix("after 1m30s of silence."), "the rest of the reason is kept")
+    try expectEqual(TimeDisplay.localizingStamps(in: "disk 94% full", mode: .utc, locale: posix), "disk 94% full", "text without a stamp is unchanged")
     try expectEqual(RelativeDateFormatter.shortDuration(3_600), "1h", "relative duration hours")
     try expectEqual(RelativeDateFormatter.string(from: now.addingTimeInterval(-120), now: now), "2m ago", "relative date ago")
 

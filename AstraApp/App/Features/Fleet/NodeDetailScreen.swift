@@ -343,6 +343,8 @@ struct FleetHonestyRow: View {
     var behind = 0
 
     @Environment(\.dynamicTypeSize) private var typeSize
+    @Environment(\.timeZoneMode) private var mode
+    @Environment(\.locale) private var locale
     @ScaledMetric(relativeTo: .title3) private var glyphWidth: CGFloat = 28
 
     var body: some View {
@@ -361,7 +363,7 @@ struct FleetHonestyRow: View {
                 .font(.headline)
                 .foregroundStyle(style.tone.isProblem ? style.tone.word : Color.primary)
                 if let reason {
-                    Text(reason).textRole(.rowReason(style.tone.word))
+                    Text(TimeDisplay.localizingStamps(in: reason, mode: mode, locale: locale)).textRole(.rowReason(style.tone.word))
                 }
                 if let detail, !detail.isEmpty {
                     Text(detail).textRole(.rowDetail)

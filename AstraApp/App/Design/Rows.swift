@@ -18,7 +18,14 @@ struct StatusRow: View {
     var accessibilityPhrase: String?
 
     @Environment(\.dynamicTypeSize) private var typeSize
+    @Environment(\.timeZoneMode) private var mode
+    @Environment(\.locale) private var locale
     @ScaledMetric(relativeTo: .title3) private var glyphWidth: CGFloat = 28
+
+    /// Server reasons embed RFC 3339 stamps; show them in the chosen zone.
+    private var shownReason: String? {
+        reason.map { TimeDisplay.localizingStamps(in: $0, mode: mode, locale: locale) }
+    }
 
     var body: some View {
         let accessible = typeSize.isAccessibilitySize
@@ -37,7 +44,7 @@ struct StatusRow: View {
                         .textRole(.rowDetail)
                         .lineLimit(accessible ? nil : 2)
                 }
-                if let reason {
+                if let reason = shownReason {
                     Text(reason)
                         .textRole(.rowReason(style.tone.word))
                         .lineLimit(accessible ? nil : 2)
@@ -84,7 +91,7 @@ struct StatusRow: View {
 
     private var spokenLabel: String {
         let phrase = accessibilityPhrase ?? "\(title), \(style.word)"
-        return [phrase, reason, trailing].compactMap { $0 }.joined(separator: ", ")
+        return [phrase, shownReason, trailing].compactMap { $0 }.joined(separator: ", ")
     }
 }
 

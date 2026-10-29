@@ -50,12 +50,13 @@ struct InboxAttentionItem: Identifiable, Hashable {
             let style = StatusStyle.node(honesty)
             let since = node.statusSince ?? node.lastSeen
             let age = since.map { RelativeDateFormatter.shortDuration(now.timeIntervalSince($0)) }
-            let detail = honesty == .offline ? age.map { "last reported \($0) ago" } : node.statusReason.inboxNonEmpty
+            let reasonText = TimeDisplay.localizingStamps(in: node.statusReason, mode: mode, locale: locale)
+            let detail = honesty == .offline ? age.map { "last reported \($0) ago" } : reasonText.inboxNonEmpty
             items.append(InboxAttentionItem(
                 id: "node:\(node.id)", style: style, title: node.displayName, detail: detail,
-                reason: honesty == .degraded ? nil : node.statusReason.inboxNonEmpty,
+                reason: honesty == .degraded ? nil : reasonText.inboxNonEmpty,
                 target: .route(.fleet(.node(id: node.id))),
-                phrase: honesty == .offline ? "\(node.displayName), offline" + (age.map { " for \($0)" } ?? "") : "\(node.displayName), degraded, \(node.statusReason)"
+                phrase: honesty == .offline ? "\(node.displayName), offline" + (age.map { " for \($0)" } ?? "") : "\(node.displayName), degraded, \(reasonText)"
             ))
         }
 

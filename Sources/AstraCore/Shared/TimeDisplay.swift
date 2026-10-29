@@ -62,6 +62,17 @@ public enum TimeDisplay {
         dateTime(date, mode: mode.other, locale: locale)
     }
 
+    /// Server prose with each RFC 3339 stamp ("No report since
+    /// 2026-10-29T03:20:00Z; ...") shown as `dateTime` in the chosen zone.
+    /// Node and waiting reasons embed stamps (stamp, node_status.go).
+    public static func localizingStamps(in text: String, mode: TimeZoneMode, locale: Locale) -> String {
+        guard text.contains("T"), let regex = try? Regex(#"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})"#) else { return text }
+        return text.replacing(regex) { match in
+            let raw = String(text[match.range])
+            return AstraDateParser.date(from: raw).map { dateTime($0, mode: mode, locale: locale) } ?? raw
+        }
+    }
+
     /// A relative age: "12 min. ago", "in 3 days".
     public static func relative(_ date: Date, now: Date, locale: Locale) -> String {
         let formatter = RelativeDateTimeFormatter()
