@@ -68,7 +68,9 @@ public enum ParityMatrix {
         ParityMatrixRow(page: "Node detail", action: "Delete node", endpoint: "POST /api/nodes/delete/plan then /delete {node_id}", scopes: ["node:admin"], modes: [.nativeT4]),
         ParityMatrixRow(page: "Node detail", action: "Auto-update policy", endpoint: "POST /api/nodes/agent-updates", scopes: ["node:admin"], modes: [.web]),
         ParityMatrixRow(page: "Node detail", action: "Agent update plan, force plan", endpoint: "POST /api/nodes/agent-updates/plan", scopes: ["node:admin", "network:plan"], modes: [.nativePlan]),
-        ParityMatrixRow(page: "Node detail", action: "Beacon plan", endpoint: "POST /api/nodes/beacon/plan {node_id, action, port?, bind?, endpoint?}", scopes: ["monitor:admin", "node:admin", "network:plan", "netguard:admin"], modes: [.nativePlan]),
+        ParityMatrixRow(page: "Node detail", action: "Beacon plan", endpoint: "POST /api/nodes/beacon/plan {node_id, action, port?, bind?, endpoint?}", scopes: ["monitor:admin", "node:admin", "network:plan"], modes: [.nativePlan]),
+        // netguard:admin is needed only when the plan carries a NetGuard companion; the
+        // beacon plan then answers 403 and the sheet names the scope.
         ParityMatrixRow(page: "Node detail", action: "Beacon rotate", endpoint: "POST /api/nodes/beacon/rotate", scopes: ["monitor:admin", "node:admin"], modes: [.nativeT3]),
         ParityMatrixRow(page: "Node groups", action: "Create or edit (selector or members)", endpoint: "POST /api/groups", scopes: ["group:admin"], modes: [.web]),
         ParityMatrixRow(page: "Node groups", action: "Preview selector", endpoint: "POST /api/groups/preview", scopes: ["group:read"], modes: [.web]),

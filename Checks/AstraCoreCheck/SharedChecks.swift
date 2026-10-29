@@ -16,6 +16,18 @@ public func checkShared() async throws {
     try await checkWriteFlowCancel()
     try checkIncidentFilters()
     try checkQueryVectors()
+    try checkScopeGoldens()
+    try checkApprovalVisibilityGoldens()
+    try checkTokenPresetCoverage()
+    try checkIncidentOrdering()
+    try await checkIncidentStatesNeverSent()
+    try checkSSHGuardBoard()
+    try checkPathDerivation()
+    try checkBadgeAndDDNS()
+    try checkTaskLease()
+    try checkVerdicts()
+    try checkDeepLinkGoldens()
+    try checkRawJSONSlices()
 }
 
 private func checkNodeDecoding() throws {
@@ -632,5 +644,383 @@ private func vectorRender(_ value: Any) -> String {
     case let number as NSNumber: return number.stringValue
     case let list as [Any]: return "[" + list.map(vectorRender).joined(separator: ",") + "]"
     default: return "\(value)"
+    }
+}
+
+// MARK: - Scopes, from internal/rbac/rbac_test.go
+
+private func checkScopeGoldens() throws {
+    let confined = ScopeSet(scopes: ["node:read", "task:*"], serverAllowlist: ["node-a"])
+    try expect(confined.allows("task:run", nodeID: "node-a"), "wildcard task scope on an allowed node")
+    try expect(!confined.allows("task:run", nodeID: "node-b"), "server allowlist denial")
+    try expect(!confined.allows("network:apply", nodeID: "node-a"), "missing scope denial")
+
+    let migration: [(granted: String, required: String, want: Bool)] = [
+        ("proxy:read", "vpncore:read", true), ("proxy:admin", "vpncore:admin", true),
+        ("proxy:read", "substore:read", true), ("proxy:admin", "substore:admin", true),
+        ("vpncore:read", "proxy:read", true), ("vpncore:admin", "proxy:admin", true),
+        ("vpncore:*", "proxy:admin", true), ("proxy:*", "substore:admin", true),
+        ("substore:read", "proxy:read", false), ("substore:admin", "vpncore:admin", false),
+        ("vpncore:read", "substore:read", false), ("proxy:read", "vpncore:admin", false),
+    ]
+    for row in migration {
+        try expectEqual(ScopeSet(scopes: [row.granted]).allows(row.required), row.want, "\(row.granted) allows \(row.required)")
+    }
+    for (scopes, want) in [(["secrets:reveal"], true), (["*"], false), (["secrets:*"], false), (["proxy:admin", "vpncore:admin", "substore:admin", "token:admin", "user:admin"], false)] {
+        try expectEqual(ScopeSet(scopes: scopes).allows("secrets:reveal"), want, "secrets:reveal held by \(scopes)")
+    }
+    try expect(ScopeSet(scopes: ["*"]).allows("proxy:admin"), "* still allows every ordinary scope")
+
+    // Every grantable scope the server knows has a description.
+    let known = [
+        "audit:read", "ddns:admin", "dns:admin", "geo:admin", "geo:read", "group:admin", "group:read", "inventory:admin",
+        "inventory:read", "kv:admin", "kv:read", "kv:write", "log:admin", "log:read", "log:write", "monitor:admin",
+        "monitor:read", "netguard:admin", "netguard:read", "netpolicy:admin", "netpolicy:read", "network:apply",
+        "network:plan", "node:admin", "node:read", "notify:admin", "notify:send", "oidc:admin", "plugin:admin",
+        "plugin:verify", "proxy:admin", "proxy:read", "secrets:reveal", "sshguard:admin", "sshguard:read",
+        "substore:admin", "substore:read", "static:admin", "static:read", "static:write", "task:read", "task:run",
+        "terminal:open", "token:admin", "tunnel:admin", "user:admin", "vpn:probe", "vpncore:admin", "vpncore:read",
+        "wireguard:admin", "wireguard:read",
+    ]
+    let described = Set(ScopeCatalogue.entries.map(\.scope))
+    try expectEqual(described.count, ScopeCatalogue.entries.count, "the catalogue names each scope once")
+    let undescribed = known.filter { !described.contains($0) }
+    // The console's catalogue leaves out the scopes it never offers in the token form.
+    try expect(undescribed.allSatisfy { ["kv:admin", "static:admin", "secrets:reveal"].contains($0) }, "every offered scope is described: missing \(undescribed)")
+    try expectEqual(ScopeCatalogue.entry(for: "network:apply")?.sensitive, true, "network:apply is marked sensitive")
+}
+
+// MARK: - Approval visibility, from server_approval_scope_test.go
+
+private func checkApprovalVisibilityGoldens() throws {
+    let planOnly = ScopeSet(scopes: ["network:plan"], serverAllowlist: ["node-a"])
+    try expect(!ApprovalVisibility.canList(plugin: "agentupdate", nodeID: "node-a", scopes: planOnly), "network:plan alone cannot list an agent update")
+    let nodeAdmin = ScopeSet(scopes: ["network:plan", "node:admin"], serverAllowlist: ["node-a"])
+    try expect(ApprovalVisibility.canList(plugin: "agentupdate", nodeID: "node-a", scopes: nodeAdmin), "node:admin and network:plan list an agent update")
+    try expect(ApprovalVisibility.canList(plugin: "nftpolicy", nodeID: "node-a", scopes: ScopeSet(scopes: ["netpolicy:admin"])), "netpolicy:admin lists its own approvals without network:plan")
+    try expect(ApprovalVisibility.canList(plugin: "sshguard", nodeID: "n", scopes: ScopeSet(scopes: ["sshguard:admin", "network:plan"])), "sshguard:admin implies the read")
+    try expect(!ApprovalVisibility.canList(plugin: "sshguard", nodeID: "n", scopes: ScopeSet(scopes: ["network:plan"])), "SSH Guard plans hold a knock sequence")
+
+    let decisions: [(plugin: String, action: String, want: String?)] = [
+        ("nft", "apply-ruleset:netguard-v1", "netguard:admin"), ("nft", "apply-ruleset", nil),
+        ("agentupdate", "", "node:admin"), ("selfdns", "", "dns:admin"), ("proxycore", "", "proxy:admin"),
+        ("singbox-lineuser", "", "vpncore:admin"), ("singbox-linemeta", "", "vpncore:admin"),
+        ("singbox-managedline", "", "vpncore:admin"), ("cftunnel", "", "tunnel:admin"),
+        ("nftpolicy", "", "netpolicy:admin"), ("wireguard", "", nil), ("singbox-linechain", "", nil),
+        ("sshguard", "sshguard-future:v9", "sshguard:admin"), ("beacon", "node.beacon", "monitor:admin"),
+        ("controlplane-witness", "", "notify:admin"), ("substore-plan", "", "proxy:admin"), ("agent.mirrors", "", "node:admin"),
+    ]
+    for row in decisions {
+        try expectEqual(ApprovalVisibility.decisionScope(plugin: row.plugin, action: row.action), row.want, "decision scope of \(row.plugin) \(row.action)")
+    }
+
+    let multi = Approval(id: "a", nodeID: "node-a", plugin: "nft", action: "apply-ruleset", status: "pending", targets: ["node-a", "node-b"])
+    try expect(!ApprovalVisibility.canList(multi, scopes: ScopeSet(scopes: ["network:plan"], serverAllowlist: ["node-a"])), "every other target needs network:plan too")
+    try expect(ApprovalVisibility.canList(multi, scopes: ScopeSet(scopes: ["network:plan"], serverAllowlist: ["node-a", "node-b"])), "a token on both targets lists it")
+}
+
+// MARK: - Token presets
+
+private func checkTokenPresetCoverage() throws {
+    try expect(ParityMatrix.rows.count > 100, "the parity matrix holds section 3.2 row by row")
+    try expectEqual(TokenPresets.uncoveredScopes(), [], "every native parity row's scopes are in a preset or deliberately excluded")
+    for preset in TokenPresets.all {
+        try expect(Set(preset.scopes).isDisjoint(with: TokenPresets.deliberatelyExcluded), "\(preset.title) carries no excluded scope")
+    }
+    try expect(!TokenPresets.operator.scopes.contains("task:run") && !TokenPresets.operator.scopes.contains("terminal:open"), "root scopes sit only in Operator plus root")
+    let sentinel = ParityMatrixRow(page: "Test", action: "Needs an odd scope", endpoint: "POST /api/x", scopes: ["wireguard:admin"], modes: [.nativeT2])
+    try expectEqual(TokenPresets.uncoveredScopes(rows: [sentinel]), ["wireguard:admin"], "an uncovered native scope is reported")
+    let web = ParityMatrixRow(page: "Test", action: "Desk only", endpoint: "POST /api/x", scopes: ["wireguard:admin"], modes: [.web])
+    try expectEqual(TokenPresets.uncoveredScopes(rows: [web].filter(\.isNative)), [], "web rows need no preset")
+}
+
+// MARK: - Incidents
+
+private func checkIncidentOrdering() throws {
+    let now = Date(timeIntervalSince1970: 1_800_000_000)
+    func incident(_ id: String, _ state: String, _ severity: String, since: Double, held: Bool = false) -> Incident {
+        var incident = Incident(id: id, severity: severity, state: state)
+        incident.since = now.addingTimeInterval(since)
+        if held { incident.maintenance = "window" }
+        if state == "resolved" { incident.resolvedAt = now.addingTimeInterval(since + 60) }
+        return incident
+    }
+    let rows = [
+        incident("resolved-old", "resolved", "critical", since: -9_000),
+        incident("resolved-new", "resolved", "warning", since: -600),
+        incident("pending", "pending", "warning", since: -60),
+        incident("acked", "acknowledged", "critical", since: -300),
+        incident("held", "open", "critical", since: -400, held: true),
+        incident("warn-old", "open", "warning", since: -800),
+        incident("crit-new", "open", "critical", since: -100),
+        incident("crit-old", "open", "critical", since: -500),
+    ]
+    let sorted = rows.sorted { IncidentFilter.areInIncreasingOrder($0, $1, now: now) }.map(\.id)
+    try expectEqual(sorted, ["crit-old", "crit-new", "warn-old", "held", "acked", "pending", "resolved-new", "resolved-old"], "compareIncidents order")
+    try expect(IncidentFilter.active.matches(rows[3], now: now) && !IncidentFilter.active.matches(rows[2], now: now), "active is open and acknowledged")
+}
+
+/// No Shared call can ask the server for a console-only incident filter.
+private func checkIncidentStatesNeverSent() async throws {
+    let transport = MockTransport(responses: [
+        "https://lattice.example.com/api/incidents": (200, json(#"{"incidents":[],"windows":[],"durable":true}"#)),
+        "https://lattice.example.com/api/incidents?state=pending,open,acknowledged,resolved": (200, json(#"{"incidents":[],"windows":[],"durable":true}"#)),
+        "https://lattice.example.com/api/incidents?state=open,acknowledged": (200, json(#"{"incidents":[],"windows":[],"durable":true}"#)),
+    ])
+    let client = LatticeClient(baseURL: URL(string: "https://lattice.example.com")!, transport: transport)
+    _ = try await client.listIncidents()
+    _ = try await client.listIncidents(states: IncidentServerState.allCases)
+    _ = try await client.listIncidents(states: [.open, .acknowledged])
+    for url in await transport.requestURLs {
+        let state = URLComponents(string: url)?.queryItems?.first { $0.name == "state" }?.value ?? ""
+        for word in state.split(separator: ",") {
+            try expect(IncidentServerState(rawValue: String(word)) != nil, "only the server's four states are sent, saw \(word) in \(url)")
+        }
+    }
+}
+
+// MARK: - SSH Guard, from __tests__/sshGuardBoardModel.test.ts
+
+private func checkSSHGuardBoard() throws {
+    let cases: [(SSHGuardBoardStage, SSHGuardScopeState, SSHGuardCoverage)] = [
+        (.idle, .enrolled, .open), (.armPending, .enrolled, .armPending), (.armApproved, .enrolled, .armPending),
+        (.awaitingConfirm, .enrolled, .reverting(deadline: nil)), (.confirmPending, .enrolled, .reverting(deadline: nil)),
+        (.confirmApproved, .enrolled, .reverting(deadline: nil)), (.reverted, .enrolled, .failed),
+        (.idle, .excluded, .excluded), (.armFailed, .excluded, .excluded), (.reverted, .excluded, .excluded),
+        (.confirmed, .excluded, .confirmed), (.awaitingConfirm, .excluded, .reverting(deadline: nil)),
+        (.hardened, .enrolled, .confirmed), (.inForce, .excluded, .confirmed), (.armFailed, .enrolled, .failed),
+    ]
+    for (stage, scope, want) in cases {
+        try expectEqual(SSHGuardBoard.coverageBucket(stage, scope: scope), want, "coverage of \(stage) \(scope)")
+    }
+    let now = Date(timeIntervalSince1970: 1_800_000_000)
+    let later = now.addingTimeInterval(3_600)
+    let reverting = try JSONDecoder().decode(SSHGuardNodeStatus.self, from: json(#"{"node_id":"reverting","stage":"awaiting_confirm","revert_armed":true,"revert_deadline":"\#(AstraTestDates.string(now.addingTimeInterval(600)))","posture":{"state":"secured"},"knock_gate":true,"stage_is_history":false,"enrolled":true,"knock":{}}"#))
+    try expectEqual(SSHGuardBoard.boardStage(reverting, now: now), .awaitingConfirm, "the timer is still running")
+    try expectEqual(SSHGuardBoard.boardStage(reverting, now: later), .reverted, "past the deadline the box reverted")
+    try expectEqual(SSHGuardBoard.revertingNodes([reverting], now: now).map(\.nodeID), ["reverting"], "the urgent card lists it")
+    try expectEqual(SSHGuardBoard.revertingNodes([reverting], now: later).count, 0, "the urgent card empties: there is no timer left to beat")
+    try expectEqual(SSHGuardBoard.coverage(for: reverting, scope: .enrolled, now: later), .failed, "a reverted arm counts as failed")
+    try expectEqual(SSHGuardBoard.coverage(for: reverting, scope: .enrolled, now: now), .reverting(deadline: reverting.revertDeadline), "the countdown carries the server's deadline")
+}
+
+// MARK: - Paths
+
+private func checkPathDerivation() throws {
+    try expectEqual(PathDisplayState(state: "up", reason: nil, judgesDegraded: false), .up, "up")
+    try expectEqual(PathDisplayState(state: "degraded", reason: "degraded_loss", judgesDegraded: true), .degraded(PathReason(rawValue: "degraded_loss")), "degraded from a judging server")
+    try expectEqual(PathDisplayState(state: "weird", reason: nil, judgesDegraded: true), .unknown(nil), "an unknown word is unknown, never up")
+    try expectEqual(PathDisplayState(state: "unknown", reason: "pair_off", judgesDegraded: true), .paused(PathReason(rawValue: "path_paused")), "aliases resolve to a pause")
+    try expectEqual(PathReason(rawValue: "Node - Offline").rawValue, "agent_offline", "runs of spaces and hyphens become one underscore")
+    try expectEqual(PathReason.sentence(for: "something_new"), "something_new", "an unknown reason is shown as sent")
+    try expectEqual(PathDisplayState(state: "unknown", reason: "udp_only", judgesDegraded: true).measure, .skipped, "a check skips a UDP-only pair")
+    try expectEqual(PathDisplayState(state: "unknown", reason: "packet_budget", judgesDegraded: true), .paused(PathReason(rawValue: "packet_budget")), "section 4.2 reads packet_budget as paused")
+    try expectEqual(PathDisplayState(state: "unknown", reason: "packet_budget", judgesDegraded: true).measure, .skipped, "and the console counts it as skipped")
+    try expectEqual(PathDisplayState(state: "unknown", reason: "check_paused", judgesDegraded: true).measure, .paused, "a paused check is the operator's choice")
+    try expectEqual(PathDisplayState(state: "unknown", reason: "no_data", judgesDegraded: true).measure, .measured, "no data yet is still a measured path")
+    try expectEqual(PathDisplayState(state: "down", reason: "path_paused", judgesDegraded: true).measure, .measured, "only unknown paths are skipped or paused")
+}
+
+// MARK: - Badge, DDNS, tasks
+
+private func checkBadgeAndDDNS() throws {
+    let now = Date(timeIntervalSince1970: 1_800_000_000)
+    var snoozed = Incident(id: "s", severity: "critical", state: "open")
+    snoozed.snoozedUntil = now.addingTimeInterval(60)
+    var held = Incident(id: "h", severity: "warning", state: "open")
+    held.maintenance = "window"
+    let incidents = [
+        Incident(id: "c", severity: "critical", state: "open"), Incident(id: "w", severity: "warning", state: "open"),
+        Incident(id: "i", severity: "info", state: "open"), Incident(id: "a", severity: "critical", state: "acknowledged"),
+        snoozed, held, Incident(id: "pending:x", severity: "warning", state: "pending"),
+    ]
+    let approvals = [
+        Approval(id: "p", nodeID: "n", plugin: "agentupdate", action: "update-agent", status: "pending"),
+        Approval(id: "m", nodeID: "n", plugin: "singbox-linemeta", action: "sync", status: "pending", actorID: "lattice-server"),
+        Approval(id: "d", nodeID: "n", plugin: "agentupdate", action: "update-agent", status: "applied"),
+    ]
+    try expectEqual(BadgeCount.compute(approvals: approvals, incidents: incidents, now: now), 3, "badge: one human approval, one critical and one warning")
+
+    func profile(_ fields: String) throws -> DDNSProfile {
+        try JSONDecoder().decode(DDNSProfile.self, from: json(#"{"id":"d","node_id":"n","enable_ipv4":true,"enable_ipv6":false,"interval_seconds":300,"created_at":"2026-01-01T00:00:00Z",\#(fields)}"#))
+    }
+    let node = DDNSNodeAddresses(publicIPv4: "192.0.2.9", publicIPv6: "", down: false)
+    let lastRun = AstraTestDates.string(now.addingTimeInterval(-3_600))
+    try expectEqual(try profile(#""last_ipv4":"192.0.2.9","last_run_at":"\#(lastRun)""#).health(now: now, node: node), .current, "an address that holds still is current however old the run")
+    try expectEqual(try profile(#""last_ipv4":"192.0.2.1","last_run_at":"\#(lastRun)""#).health(now: now, node: node), .stale, "moved and overdue is stale")
+    try expectEqual(try profile(#""last_ipv4":"192.0.2.1","last_run_at":"\#(AstraTestDates.string(now.addingTimeInterval(-200)))""#).assess(node: node, now: now).state, .waiting, "moved within two intervals is waiting")
+    try expectEqual(try profile(#""last_ipv4":"192.0.2.9","last_error":"403""#).health(now: now, node: node), .failing, "a last error is failing")
+    try expectEqual(try profile(#""last_ipv4":"192.0.2.9","last_run_at":"\#(lastRun)""#).assess(node: nil, now: now).state, .unchecked, "without node data an address profile is unchecked")
+    try expectEqual(try profile(#""record_type":"cname","cname_target":"Edge.Example.com.","last_target":"edge.example.com","last_run_at":"\#(lastRun)""#).health(now: now), .current, "a confirmed CNAME is current")
+    try expectEqual(try profile(#""interval_seconds":0,"record_type":"cname","cname_target":"edge.example.com""#).effectiveIntervalSeconds, 300, "the server's default interval")
+}
+
+private func checkTaskLease() throws {
+    try expectEqual(TaskLeaseProgress.formatLeaseAge(30), "30 s", "seconds")
+    try expectEqual(TaskLeaseProgress.formatLeaseAge(41 * 60 + 5), "41 min", "minutes")
+    try expectEqual(TaskLeaseProgress.formatLeaseAge(2 * 3_600 + 5 * 60), "2 h 5 min", "hours and minutes")
+    try expectEqual(TaskLeaseProgress.formatLeaseAge(6 * 86_400 + 2 * 3_600 + 59), "6 d 2 h", "two units at most")
+    try expectEqual(TaskLeaseProgress(attempts: 2, maxAttempts: 3, leaseAgeSeconds: 2_460).label, "leased 41 min, attempt 2 of 3", "a held lease")
+    try expectEqual(TaskLeaseProgress(attempts: 3, maxAttempts: 3, leaseAgeSeconds: 10, stalledReason: "stopped after 3 attempts (x).").label, "stopped after 3 attempts (x), attempt 3 of 3", "the reason wins and loses its full stop")
+    let fanOut = try JSONDecoder().decode(LatticeTask.self, from: json(#"{"id":"t","targets":["a","b"],"status":"leased","attempts":1,"target_states":{"a":{"status":"leased","attempts":2,"max_attempts":3,"lease_age_seconds":60}}}"#))
+    try expectEqual(fanOut.leaseProgress(nodeID: "a")?.label, "leased 1 min, attempt 2 of 3", "a target record")
+    try expectEqual(fanOut.leaseProgress(nodeID: "b"), nil, "no task-level fallback for one node of a fan-out")
+    try expectEqual(fanOut.runState(nodeID: "a", now: Date()), .leased, "a target's own state")
+    try expectEqual(TaskRunState(serverValue: "running"), .leased, "running reads as leased")
+    try expectEqual(TaskRunState(serverValue: "brand_new"), .queued, "an unknown word reads as queued")
+}
+
+// MARK: - Verdict, section 4.8
+
+private func checkVerdicts() throws {
+    let now = Date(timeIntervalSince1970: 1_800_000_000)
+    let locale = Locale(identifier: "en_US_POSIX")
+    let fresh = SectionCoverage.fresh(at: now)
+    func verdict(_ snapshot: InboxSnapshot) -> Verdict {
+        VerdictBuilder.verdict(for: snapshot, now: now, mode: .utc, locale: locale)
+    }
+    func allFresh(except overrides: [InboxSection: SectionCoverage] = [:]) -> [InboxSection: SectionCoverage] {
+        var coverage = Dictionary(uniqueKeysWithValues: InboxSection.allCases.map { ($0, fresh) })
+        coverage.merge(overrides) { _, new in new }
+        return coverage
+    }
+    let since = now.addingTimeInterval(-1_800)
+    let clock = TimeDisplay.clock(since, mode: .utc, locale: locale)
+
+    try expectEqual(verdict(InboxSnapshot()).sentence, "Checking the fleet.", "rule 1: nothing loaded")
+    try expectEqual(verdict(InboxSnapshot(coverage: allFresh(except: [.tasks: .notLoaded]))).sentence, "Checking the fleet.", "rule 1: a section still loading")
+
+    let failed = InboxSnapshot(coverage: allFresh(except: [.incidents: .failed(lastGoodAt: now.addingTimeInterval(-720))]), approvalsNeedingYou: 2)
+    try expectEqual(verdict(failed).sentence, "2 need you. Cannot confirm the rest: incidents did not load.", "rule 2 with approvals")
+    var noApprovals = failed
+    noApprovals.approvalsNeedingYou = 0
+    try expectEqual(verdict(noApprovals).sentence, "Cannot confirm. Last good refresh 12 minutes ago.", "rule 2: the oldest good refresh")
+    let offline = InboxSnapshot(coverage: allFresh(except: [.nodes: .offline(lastGoodAt: since)]))
+    try expectEqual(verdict(offline).sentence, "Cannot confirm. Offline since \(clock).", "rule 2 offline")
+
+    let operatorSnapshot = InboxSnapshot(
+        coverage: allFresh(),
+        approvalsNeedingYou: 2,
+        approvalsWaiting: 3,
+        problems: [
+            VerdictProblem(kind: .offlineNode, summary: "fra-2 offline", since: now.addingTimeInterval(-7_200)),
+            VerdictProblem(kind: .degradedPath, summary: "Path tokyo-1 to fra-2 degraded", since: since),
+        ],
+        nodeCount: 35, onlineCount: 33, failedTasks: 1, dueCount: 3
+    )
+    let operatorVerdict = verdict(operatorSnapshot)
+    let offlineSince = TimeDisplay.clock(now.addingTimeInterval(-7_200), mode: .utc, locale: locale)
+    try expectEqual(operatorVerdict.sentence, "2 need you. fra-2 offline since \(offlineSince).", "rule 3: the worst problem by precedence")
+    try expectEqual(operatorVerdict.segments.map(\.text), ["33 of 35 online", "3 waiting", "1 failed task", "3 due"], "the four count segments")
+    try expectEqual(operatorVerdict.segments.first?.query, "-status:online", "the node segment filters to the rest")
+    if case .failure(let error) = LatticeQuery.parse(operatorVerdict.segments.first?.query ?? "") {
+        throw CheckFailure.failed("the node segment query must parse: \(error)")
+    }
+
+    var critical = operatorSnapshot
+    critical.approvalsNeedingYou = 0
+    critical.problems.append(VerdictProblem(kind: .sshGuardReverting, summary: "edge-tyo-2 reverts unless confirmed", since: nil))
+    critical.problems.append(VerdictProblem(kind: .criticalIncident, summary: "relay-fra-2 offline", since: since))
+    try expectEqual(verdict(critical).sentence, "relay-fra-2 offline since \(clock).", "a critical incident leads")
+
+    let quiet = InboxSnapshot(coverage: allFresh(), nodeCount: 35, onlineCount: 35, newestResolvedAt: since)
+    try expectEqual(verdict(quiet).sentence, "Quiet since \(clock).", "rule 4")
+    try expectEqual(verdict(quiet).segments.first?.query, nil, "all online needs no filter")
+    try expectEqual(verdict(InboxSnapshot(coverage: allFresh())).sentence, "Quiet. Nothing needs you.", "rule 4 without a resolution")
+
+    let triage = InboxSnapshot(coverage: allFresh(except: [
+        .approvals: .denied(scope: "network:plan"), .ddns: .denied(scope: "ddns:admin"), .sshGuard: .denied(scope: "sshguard:read"),
+    ]), nodeCount: 35, onlineCount: 35, newestResolvedAt: since)
+    let triageVerdict = verdict(triage)
+    try expectEqual(triageVerdict.sentence, "Quiet for what this token can see. Not covered: approvals, DDNS, SSH Guard.", "the Triage golden")
+    try expect(!triageVerdict.segments.contains { $0.target == .approvals }, "a denied section has no segment, never a zero")
+
+    let confined = InboxSnapshot(coverage: allFresh(), nodeCount: 12, onlineCount: 12, confinedTo: 12)
+    try expectEqual(verdict(confined).sentence, "Quiet for what this token can see.", "a confined token qualifies quiet")
+    try expectEqual(verdict(confined).segments.first?.text, "12 of 12 visible nodes online", "and its node clause")
+
+    let partial = InboxSnapshot(coverage: allFresh(except: [.approvals: .partial(hiddenPlugins: ["Self-host DNS"], at: now)]), newestResolvedAt: since)
+    try expectEqual(verdict(partial).sentence, "Quiet since \(clock). Hidden from this token: Self-host DNS approvals.", "hidden plugins qualify the sentence")
+}
+
+// MARK: - Deep links, section 2.5
+
+private func checkDeepLinkGoldens() throws {
+    let tricky = ["ap1", "pending:node.offline/edge 1", "a~b@c:d", "_~@m1", "x/y z"]
+    var links: [LatticeDeepLink] = [.inbox, .upcoming, .settingsConnection]
+    for id in tricky {
+        links += [
+            .approval(id: id), .node(id: id, view: nil), .node(id: id, view: .activity), .monitor(id: id), .check(id: id),
+            .definition(id: id), .path(key: id), .incident(id: id), .maintenanceWindow(id: id), .task(id: id),
+            .taskNode(taskID: id, nodeID: id), .auditEvent(id: id), .trace(correlationID: id), .machine(id: id),
+            .group(id: id), .policy(id: id), .dnsDeployment(id: id), .ddnsProfile(id: id), .geoRoute(id: id),
+            .tunnel(id: id), .sshGuardNode(nodeID: id), .agentUpdateNode(nodeID: id), .plugin(id: id), .share(id: id),
+            .notifyChannel(id: id), .notifyDelivery(id: id), .webhook(id: id), .token(id: id), .user(id: id),
+            .terminalSession(id: id), .vpnUser(id: id), .connection(id: id),
+        ]
+    }
+    links += [
+        .fleet(scope: .machines, query: "region:tyo"), .fleet(scope: nil, query: nil),
+        .monitoring(segment: .incidents, view: "all", query: nil), .activity(scope: .tasks, view: nil, query: "status:failed"),
+    ]
+    for link in links {
+        let url = try expectUnwrapped(link.customURL, "custom URL for \(link)")
+        try expectEqual(LatticeDeepLink(url: url), link, "round trip \(url.absoluteString)")
+        try expectEqual(LatticeDeepLink(url: url)?.customURL, url, "build after parse returns the input for \(url.absoluteString)")
+    }
+
+    let console = URL(string: "https://lattice.example.org")!
+    let builders: [(LatticeConsolePath, String)] = [
+        (.inbox, "/"), (.approval(id: "a1"), "/approvals?open=a1"), (.node(id: "n1", view: .settings), "/nodes/n1?view=settings"),
+        (.check(id: "m1"), "/monitoring?view=checks&open=m1"), (.definition(id: "d1"), "/monitoring?view=checks&open=d1"),
+        (.path(key: "_~@m1"), "/monitoring?view=topology&path=_~@m1"),
+        (.incident(id: "i1", query: "relay-fra-2"), "/monitoring?view=incidents&state=all&q=relay-fra-2"),
+        (.maintenance, "/monitoring?view=incidents&state=all"), (.task(id: "t1"), "/tasks?open=t1"),
+        (.taskNode(taskID: "t1", nodeID: "n1"), "/tasks?open=t1"), (.auditEvent(id: "e1"), "/audit?open=e1"),
+        (.trace(correlationID: "c1"), "/audit?view=all&q=trace:c1"), (.machine(id: "m1"), "/inventory?machine=m1"),
+        (.upcoming, "/upcoming"), (.group(id: "g1"), "/node-groups?open=g1"), (.policy(id: "p1"), "/network/outbound?policy=p1"),
+        (.dnsDeployment(id: "d1"), "/network/dns?open=d1"), (.ddnsProfile(id: "d1"), "/network/ddns?open=d1"),
+        (.geoRoute(id: "g1"), "/network/geo-routing?open=g1"), (.tunnel(id: "t1"), "/network/tunnels?open=t1"),
+        (.sshGuardNode(nodeID: "n1"), "/network/ssh-guard?node_id=n1"), (.agentUpdates(nodeName: "edge-tyo-3"), "/platform/agent-updates?view=nodes&q=edge-tyo-3"),
+        (.plugin(id: "p1"), "/platform/plugins?open=p1"), (.share(id: "s1"), "/platform/publishing?view=routes&origin=share&open=s1"),
+        (.notifyChannel(id: "c1"), "/platform/notifications?view=routing&channel=c1"), (.notifyDelivery(id: "d1"), "/platform/notifications?view=sent&open=d1"),
+        (.webhook(id: "w1"), "/platform/webhooks?open=w1"), (.tokens, "/settings/access?view=tokens"), (.users, "/settings/access?view=users"),
+        (.terminalSession(id: "s1"), "/terminal?session_id=s1"), (.vpnUsers, "/plugins/latticenet.vpn-core/users"),
+        (.connection(id: "c1"), "/platform/evidence?view=explore&lens=connections&conn=c1"), (.settingsSecurity, "/settings/security"),
+    ]
+    for (path, want) in builders {
+        try expectEqual(path.url(console: console).absoluteString, "https://lattice.example.org" + want, "console route \(want)")
+    }
+
+    let parsed: [(String, LatticeDeepLink)] = [
+        ("/approvals?open=a1", .approval(id: "a1")), ("/monitoring/m1", .check(id: "m1")),
+        ("/monitoring?view=checks&open=m1", .check(id: "m1")), ("/monitoring?view=topology&path=_~@m1", .path(key: "_~@m1")),
+        ("/nodes/n1", .node(id: "n1")), ("/nodes/n1?view=activity", .node(id: "n1", view: .activity)),
+        ("/tasks?open=t1", .task(id: "t1")), ("/audit?open=e1", .auditEvent(id: "e1")), ("/inventory?machine=m1", .machine(id: "m1")),
+        ("/node-groups?open=g1", .group(id: "g1")), ("/network/ssh-guard?node_id=n1", .sshGuardNode(nodeID: "n1")),
+        ("/platform/plugins?open=p1", .plugin(id: "p1")),
+    ]
+    for (path, want) in parsed {
+        try expectEqual(LatticeDeepLink(url: URL(string: "https://lattice.example.org" + path)!, console: console), want, "console link \(path)")
+    }
+    try expectEqual(LatticeDeepLink(url: URL(string: "https://lattice.example.org:8443/nodes/n1")!, console: console), nil, "another port is another host")
+    try expectEqual(LatticeDeepLink(url: URL(string: "https://lattice.example.org/settings/about")!, console: console), nil, "an unmapped console route opens in the browser")
+}
+
+// MARK: - Raw JSON
+
+private func checkRawJSONSlices() throws {
+    let text = #"{"total":2,"events":[{"id":"a","metadata":{"k":"v]}"}} , {"id":"b","n":[1,{"x":"\""}]}],"limit":2}"#
+    let slices = try expectUnwrapped(JSONArraySlicer.elements(of: json(text), key: "events"), "events slices")
+    try expectEqual(slices.map { String(decoding: $0, as: UTF8.self) }, [#"{"id":"a","metadata":{"k":"v]}"}}"#, #"{"id":"b","n":[1,{"x":"\""}]}"#], "elements keep their exact bytes")
+    try expectEqual(JSONArraySlicer.elements(of: json(#"[1,"two",{"three":3}]"#))?.count, 3, "a top-level array")
+    try expectEqual(JSONArraySlicer.elements(of: json(#"{"other":[]}"#), key: "events") == nil, true, "a missing key is nil")
+}
+
+extension AstraTestDates {
+    static func string(_ date: Date) -> String {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime]
+        return formatter.string(from: date)
     }
 }
