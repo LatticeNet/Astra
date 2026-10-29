@@ -353,7 +353,11 @@ public enum FleetIntents {
             tier: .t4, verb: "Delete group", object: group, scopes: ["group:admin"],
             consequence: "Deletes the node group \(group.name). Its nodes stay; checks and policies cannot target it any more. This cannot be undone.",
             affected: [group],
-            dryRun: { client in usedByReport(try await client.fleetGroupUsedBy(groupID: group.id)) },
+            dryRun: { client in
+                // The server also refuses a group that still has child groups, which used-by does not report.
+                async let children = client.fleetGroups().groups.filter { $0.parentID == group.id }
+                return usedByReport(try await client.fleetGroupUsedBy(groupID: group.id), children: try await children)
+            },
             changes: [.groups, .policies, .checks],
             perform: { client, _ in
                 try await client.fleetDeleteGroup(groupID: group.id)
@@ -362,18 +366,20 @@ public enum FleetIntents {
         )
     }
 
-    public static func usedByReport(_ usedBy: FleetGroupUsedBy) -> DryRunReport {
+    public static func usedByReport(_ usedBy: FleetGroupUsedBy, children: [FleetGroupView] = []) -> DryRunReport {
         var lines = usedBy.usedBy.map { DetailLine(label: $0.label, value: "\($0.kindTitle), \($0.roleWord)", group: "Used by") }
         if usedBy.hidden > 0 {
             lines.append(DetailLine(label: "Hidden from this token", value: usedBy.hidden == 1 ? "1 more use" : "\(usedBy.hidden) more uses", group: "Used by"))
         }
+        lines += children.map { DetailLine(label: $0.displayName, value: "Child group", group: "Used by") }
+        let blocked = usedBy.blocksDelete || !children.isEmpty
         if lines.isEmpty {
             lines.append(DetailLine(label: "Used by", value: "Nothing names this group", group: "Used by"))
         } else {
-            lines.append(DetailLine(label: "Before deleting", value: "Remove these references on web", group: "Blocked"))
+            lines.append(DetailLine(label: "Before deleting", value: children.isEmpty ? "Remove these references on web" : "Remove these references and move its child groups on web", group: "Blocked"))
         }
-        let fingerprint = (usedBy.usedBy.map { "\($0.kind):\($0.id)" } + ["hidden=\(usedBy.hidden)"]).joined(separator: ",")
-        return DryRunReport(lines: lines, blocking: usedBy.blocksDelete, fingerprint: fingerprint)
+        let fingerprint = (usedBy.usedBy.map { "\($0.kind):\($0.id)" } + children.map { "child:\($0.id)" } + ["hidden=\(usedBy.hidden)"]).joined(separator: ",")
+        return DryRunReport(lines: lines, blocking: blocked, fingerprint: fingerprint)
     }
 
     /// N-T2: static members only; the dialog names the group and the nodes.

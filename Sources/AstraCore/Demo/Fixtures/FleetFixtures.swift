@@ -837,13 +837,13 @@ public enum FleetFixtures {
         switch groupID {
         case "g-asia-edge":
             return ([
-                .object(["kind": "check", "id": "def_asia_mesh", "label": "Asia edge mesh", "role": "source_and_target"]),
+                .object(["kind": "check", "id": "chk_asia_mesh", "label": "Asia edge mesh", "role": "source_and_target"]),
                 .object(["kind": "outbound_policy", "id": "gp_asia-edge", "label": "Asia edge egress", "role": "target"]),
             ], 0)
         case "g-europe-relays":
             return ([.object(["kind": "outbound_policy", "id": "gp_europe-relays", "label": "Europe relays egress", "role": "target"])], 0)
         case "g-dns":
-            return ([.object(["kind": "check", "id": "def_dns_answers", "label": "DNS answers", "role": "source"])], 0)
+            return ([.object(["kind": "check", "id": "chk_dns_answers", "label": "DNS answers", "role": "source"])], 0)
         case "g-home-lab":
             return ([], 1)
         default:

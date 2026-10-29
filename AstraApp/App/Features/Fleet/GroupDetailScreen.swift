@@ -57,12 +57,18 @@ struct GroupDetailScreen: View {
             Button("Copy link", systemImage: "link") { FleetCopy.copy(FleetCopy.groupLink(id)) }
             Button("Copy ID", systemImage: "number") { FleetCopy.copy(id) }
             Divider()
-            FleetGatedButton(title: "Delete group", systemImage: "trash", missing: groups.canAdmin ? nil : "group:admin", role: .destructive) {
+            FleetGatedButton(title: "Delete group", systemImage: "trash", missing: deleteMissing(groups.group(id: id)), role: .destructive) {
                 Task { await delete() }
             }
         } label: {
             Label("More", systemImage: "ellipsis")
         }
+    }
+
+    /// Built-in groups are never deleted from here, as in the console and the Groups list.
+    private func deleteMissing(_ group: FleetGroupView?) -> String? {
+        guard groups.canAdmin else { return "group:admin" }
+        return group?.system == true ? "a group that is not built in" : nil
     }
 
     private func content(_ group: FleetGroupView) -> some View {
@@ -80,7 +86,8 @@ struct GroupDetailScreen: View {
                 if group.kind != .selector {
                     DetailRow(label: "Static members", value: group.members.count == 1 ? "1 node" : "\(group.members.count) nodes", copyable: false)
                 }
-                DetailRow(label: "Health", value: group.rollup.sentence, copyable: false)
+                let degraded = FleetGroupHealth.degraded(group, nodes: nodes)
+                DetailRow(label: "Health", value: group.rollup.sentence + (degraded > 0 ? ", \(degraded) degraded" : ""), copyable: false)
                 if !group.description.isEmpty { DetailRow(label: "Description", value: group.description, copyable: false) }
             } header: {
                 Text("Definition")
@@ -95,16 +102,16 @@ struct GroupDetailScreen: View {
                 }
                 ForEach(members) { node in
                     let record = fleet.record(id: node.id) ?? FleetNodeRecord(node: node)
+                    let removable = canAdmin && staticIDs.contains(node.id)
+                    let remove = { Task { await runner.run(FleetIntents.setGroupMembers(ref, remove: [FleetIntents.nodeRef(node)])) } }
                     NavigationLink(value: AppRoute.fleet(.node(id: node.id))) {
                         NodeRow(node: node)
                     }
-                    .fleetNodeMenu(record)
+                    .fleetNodeMenu(record, extra: removable ? (title: "Remove from \(group.displayName)", action: { _ = remove() }) : nil)
                     .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                        if canAdmin, staticIDs.contains(node.id) {
-                            Button("Remove", systemImage: "minus.circle") {
-                                Task { await runner.run(FleetIntents.setGroupMembers(ref, remove: [FleetIntents.nodeRef(node)])) }
-                            }
-                            .tint(.destructiveFill)
+                        if removable {
+                            Button("Remove", systemImage: "minus.circle") { _ = remove() }
+                                .tint(.destructiveFill)
                         }
                     }
                 }
@@ -125,7 +132,7 @@ struct GroupDetailScreen: View {
             }
             usedBySection
             Section {
-                FleetActionRow(title: "Delete group", systemImage: "trash", missing: canAdmin ? nil : "group:admin", destructive: true) {
+                FleetActionRow(title: "Delete group", systemImage: "trash", missing: deleteMissing(group), destructive: true) {
                     Task { await delete() }
                 }
                 WebLinkRow(title: "Edit on web", path: .group(id: id))
@@ -171,7 +178,8 @@ struct GroupDetailScreen: View {
         switch use.kind {
         case "outbound_policy": .networking(.policy(id: use.id))
         case "security_group_binding": .networking(.securityGroup(id: use.id))
-        default: use.id.hasPrefix("def") ? .monitoring(.definition(id: use.id)) : .monitoring(.check(id: use.id))
+        // The server's only "check" use is a check definition (checkDefinitionGroupUses).
+        default: .monitoring(.definition(id: use.id))
         }
     }
 

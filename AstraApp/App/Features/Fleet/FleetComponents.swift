@@ -79,6 +79,8 @@ struct FleetNodeGlance: View {
 /// (shown disabled with the missing scope when the token cannot).
 struct FleetNodeMenu: ViewModifier {
     let record: FleetNodeRecord
+    /// A row-specific item that mirrors the row's own swipe ("Remove from Asia edge").
+    var extra: (title: String, action: () -> Void)?
 
     @Environment(FleetStore.self) private var store
     @Environment(Router.self) private var router
@@ -109,6 +111,9 @@ struct FleetNodeMenu: ViewModifier {
                     Task { await runner.run(FleetIntents.disable(ref)) }
                 }
             }
+            if let extra {
+                Button(extra.title, systemImage: "minus.circle", role: .destructive, action: extra.action)
+            }
         } preview: {
             FleetNodeGlance(record: record)
         }
@@ -116,8 +121,8 @@ struct FleetNodeMenu: ViewModifier {
 }
 
 extension View {
-    func fleetNodeMenu(_ record: FleetNodeRecord) -> some View {
-        modifier(FleetNodeMenu(record: record))
+    func fleetNodeMenu(_ record: FleetNodeRecord, extra: (title: String, action: () -> Void)? = nil) -> some View {
+        modifier(FleetNodeMenu(record: record, extra: extra))
     }
 
     /// The trailing swipe on a node row: Disable (T3) or Enable (T2), never a full swipe.

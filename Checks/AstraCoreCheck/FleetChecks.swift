@@ -418,6 +418,10 @@ private func checkFleetIntentFlows() async throws {
     try expect(used.blocking, "a used group cannot be deleted")
     let free = try expectUnwrapped(try await WriteFlow(intent: FleetIntents.deleteGroup(ObjectRef(kind: "group", id: "g-us-edge", name: "US edge")), client: client, authenticator: pass).dryRun(), "free group dry run")
     try expect(!free.blocking, "an unused group can be deleted")
+    var child = FleetGroupView(id: "g-tyo", name: "Tokyo edge")
+    child.parentID = "g-us-edge"
+    let parent = FleetIntents.usedByReport(FleetGroupUsedBy(groupID: "g-us-edge", usedBy: []), children: [child])
+    try expect(parent.blocking && parent.lines.contains { $0.label == "Tokyo edge" }, "a group with child groups cannot be deleted")
 
     // Static members: add then remove.
     let lab1 = ObjectRef(kind: "node", id: DemoWorld.node("edge-fra-3").id, name: "edge-fra-3")

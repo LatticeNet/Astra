@@ -303,6 +303,12 @@ public enum FleetGroupHealth {
         FleetNodeGrouping.ordered(group.resolvedMembers.compactMap { nodes[$0] }.map { FleetNodeRecord(node: $0) }).map(\.node)
     }
 
+    /// Resolved members that are degraded. The server rollup has no degraded
+    /// count, so it comes from the node list.
+    public static func degraded(_ group: FleetGroupView, nodes: [String: LatticeNode]) -> Int {
+        group.resolvedMembers.filter { nodes[$0]?.honesty == .degraded }.count
+    }
+
     /// Nodes the static list can still take: readable, not already a static member.
     public static func candidates(_ group: FleetGroupView, nodes: [LatticeNode]) -> [LatticeNode] {
         let members = Set(group.members)
