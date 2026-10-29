@@ -39,6 +39,8 @@ final class MonitoringSeriesModel {
 /// M3-04 Path.
 struct PathDetailScreen: View {
     let key: String
+    /// The check the row that opened this screen showed; nil opens the pair's first in `pairOrder`.
+    var monitor: String?
 
     static let compareKey = "monitor.path.compare"
 
@@ -53,6 +55,8 @@ struct PathDetailScreen: View {
     @Environment(\.locale) private var locale
 
     @State private var model = MonitoringSeriesModel()
+    /// The check the operator switched the chart to, when the pair has several.
+    @State private var chosen: String?
     @SceneStorage(PathDetailScreen.compareKey) private var compare = false
 
     var body: some View {
@@ -67,6 +71,10 @@ struct PathDetailScreen: View {
         .navigationBarTitleDisplayMode(.inline)
         .navigationSubtitle(item.map { StatusStyle.path($0.display).word } ?? "")
         .toolbar { ToolbarItem(placement: .topBarTrailing) { menu } }
+        .onChange(of: chosen) {
+            guard let item else { return }
+            Task { await model.load(MonitoringSeriesSubject(path: item.path), window: appState.monitorWindow, compare: compare, session: session) }
+        }
         .onAppear {
             // Demo only: `-AstraDemoCompare YES` turns the comparison on for screenshots.
             if session.isDemo, UserDefaults.standard.bool(forKey: "AstraDemoCompare") { compare = true }
@@ -94,7 +102,7 @@ struct PathDetailScreen: View {
     }
 
     private var item: MonitoringPathItem? {
-        items.first { $0.key == key }
+        MonitoringPaths.cell(key: key, monitorID: chosen ?? monitor, in: items)
     }
 
     private var title: String {
@@ -149,12 +157,30 @@ struct PathDetailScreen: View {
     private func headerSection(_ item: MonitoringPathItem) -> some View {
         let style = StatusStyle.path(item.display)
         let since = item.path.degraded?.since.map { TimeDisplay.clock($0, mode: mode, locale: locale) }
+        let pair = MonitoringPaths.checks(onPair: key, in: items)
         return Section {
             MonitoringStateHeader(style: style, reason: item.reason?.sentence)
             if let evidence = MonitoringPathEvidence.sentence(item.path.degraded, since: since) {
                 Text(evidence).font(.body)
             }
+            if pair.count > 1 {
+                Picker(selection: Binding(get: { item.path.monitorID }, set: { chosen = $0 })) {
+                    ForEach(pair) { cell in
+                        Text("\(checkName(cell)), \(StatusStyle.path(cell.display).word)").tag(cell.path.monitorID)
+                    }
+                } label: {
+                    Text("Charted check")
+                }
+                .pickerStyle(.menu)
+                .frame(minHeight: Spacing.minimumTarget)
+                .accessibilityHint("\(pair.count) checks measure this pair. Choose which one the chart and state show.")
+            }
         }
+    }
+
+    private func checkName(_ cell: MonitoringPathItem) -> String {
+        let name = store.monitor(id: cell.path.monitorID)?.displayName ?? cell.path.monitorID
+        return cell.path.method.isEmpty ? name : "\(cell.path.method) \(name)"
     }
 
     private func factsSection(_ item: MonitoringPathItem) -> some View {
@@ -251,7 +277,7 @@ struct PathDetailScreen: View {
     private func relatedSection(_ item: MonitoringPathItem) -> some View {
         Section {
             if let reverse = MonitoringPaths.reverse(of: item, in: items) {
-                NavigationLink(value: AppRoute.monitoring(.path(key: reverse.key))) {
+                NavigationLink(value: AppRoute.monitoring(.cell(reverse))) {
                     StatusRow(style: .path(reverse.display), title: "Reverse: \(reverse.spokenTitle)",
                               trailing: MonitoringStyle.figures(reverse), accessibilityPhrase: "Reverse direction, \(reverse.spokenTitle), \(StatusStyle.path(reverse.display).word)")
                 }
@@ -380,7 +406,10 @@ struct PathDetailScreen: View {
     private func incidents(for item: MonitoringPathItem) -> [Incident] {
         let list = store.incidents.value?.incidents ?? []
         return list.filter { IncidentFilter.isActive($0) || $0.state == "pending" }
-            .filter { MonitoringIncidentLink.pathKey(for: $0, in: items) == item.key }
+            .filter { incident in
+                MonitoringIncidentLink.item(for: incident, in: items)?.key == item.key
+                    && (incident.monitorID.isEmpty || incident.monitorID == item.path.monitorID)
+            }
     }
 
     /// Windows that name either end of the path.

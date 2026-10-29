@@ -13,6 +13,14 @@ enum MonitoringRoute: Hashable, Codable, Sendable {
     case maintenanceWindow(id: String)
     /// Paths filtered by a query, pushed from a matrix header (M3-03).
     case paths(query: String)
+    /// One check's cell on a pair: a pair several checks measure opens the
+    /// row's own check, not whichever cell the server listed first.
+    case pathCheck(key: String, monitor: String)
+
+    /// The route for a path row: its pair and the check behind it.
+    static func cell(_ item: MonitoringPathItem) -> MonitoringRoute {
+        item.path.monitorID.isEmpty ? .path(key: item.key) : .pathCheck(key: item.key, monitor: item.path.monitorID)
+    }
 }
 
 /// M3's demo intents for `-AstraPresent confirm:<id>` (section 9.2). They

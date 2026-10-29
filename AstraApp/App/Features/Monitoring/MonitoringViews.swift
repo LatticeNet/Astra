@@ -261,7 +261,7 @@ struct MonitoringObjectMenu: View {
 /// An incident row's context menu items beyond the shared ones.
 struct MonitoringIncidentMenu: View {
     let incident: Incident
-    let pathKey: String?
+    let path: MonitoringPathItem?
     let canAdmin: Bool
     let snooze: (Incident) -> Void
 
@@ -298,9 +298,9 @@ struct MonitoringIncidentMenu: View {
             .disabled(!canAdmin)
             Button("Open node", systemImage: "server.rack") { router.push(.fleet(.node(id: incident.nodeID))) }
         }
-        if let pathKey {
+        if let path {
             Button("Open path", systemImage: "point.topleft.down.to.point.bottomright.curvepath") {
-                router.push(.monitoring(.path(key: pathKey)))
+                router.push(.monitoring(.cell(path)))
             }
         }
         if !canAdmin {

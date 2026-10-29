@@ -387,7 +387,37 @@ public enum MonitoringPaths {
     /// The reverse direction of a node pair, when the matrix measures it.
     public static func reverse(of item: MonitoringPathItem, in items: [MonitoringPathItem]) -> MonitoringPathItem? {
         guard !item.path.targetNode.isEmpty, !item.path.source.isEmpty else { return nil }
-        return items.first { $0.path.source == item.path.targetNode && $0.path.targetNode == item.path.source }
+        return pairOrder(items.filter { $0.path.source == item.path.targetNode && $0.path.targetNode == item.path.source }).first
+    }
+
+    /// `topologyModel.pairOrder`: the cells of one pair in the order they
+    /// speak, the live ones (up, degraded, down) first and the worst first
+    /// within each, so a check that cannot run never greys a measured pair.
+    public static func pairOrder(_ items: [MonitoringPathItem]) -> [MonitoringPathItem] {
+        func live(_ item: MonitoringPathItem) -> Int {
+            switch item.display {
+            case .up, .degraded, .down: 0
+            case .unknown, .paused: 1
+            }
+        }
+        return items.sorted { a, b in
+            if live(a) != live(b) { return live(a) < live(b) }
+            if a.display.severityRank != b.display.severityRank { return a.display.severityRank < b.display.severityRank }
+            return a.id < b.id
+        }
+    }
+
+    /// The cell a path screen shows: the named check's cell on the pair, or
+    /// the pair's first cell in `pairOrder` when none is named or it is gone.
+    public static func cell(key: String, monitorID: String?, in items: [MonitoringPathItem]) -> MonitoringPathItem? {
+        let pair = items.filter { $0.key == key }
+        if let monitorID, !monitorID.isEmpty, let named = pair.first(where: { $0.path.monitorID == monitorID }) { return named }
+        return pairOrder(pair).first
+    }
+
+    /// Every cell of a pair, in `pairOrder`.
+    public static func checks(onPair key: String, in items: [MonitoringPathItem]) -> [MonitoringPathItem] {
+        pairOrder(items.filter { $0.key == key })
     }
 
     /// Down and degraded paths, the most recent problem first, for Overview.
@@ -562,20 +592,28 @@ public enum MonitoringIncidentLink {
     /// check the server keyed it on, then the path key a derived pending id
     /// carries, then the "source to target" names of its subject or title.
     public static func pathKey(for incident: Incident, in items: [MonitoringPathItem]) -> String? {
+        item(for: incident, in: items)?.key
+    }
+
+    /// The cell an incident is about: the exact check when the server keyed
+    /// the incident on its source and monitor, else the pair's first cell in
+    /// `pairOrder`.
+    public static func item(for incident: Incident, in items: [MonitoringPathItem]) -> MonitoringPathItem? {
         guard incident.kind.hasPrefix("path.") else { return nil }
         if !incident.nodeID.isEmpty, !incident.monitorID.isEmpty,
            let match = items.first(where: { $0.path.source == incident.nodeID && $0.path.monitorID == incident.monitorID }) {
-            return match.key
+            return match
         }
         let prefix = "path.degraded/"
         let keyed = incident.key.hasPrefix(prefix) ? String(incident.key.dropFirst(prefix.count)) : ""
-        if !keyed.isEmpty, decodePathKey(keyed) != nil, items.contains(where: { $0.key == keyed }) {
-            return keyed
+        if !keyed.isEmpty, decodePathKey(keyed) != nil, let match = MonitoringPaths.cell(key: keyed, monitorID: nil, in: items) {
+            return match
         }
         for text in [incident.subject, incident.title] {
             guard let (source, target) = names(in: text) else { continue }
-            if let match = items.first(where: { $0.sourceName == source && $0.targetName == target }) {
-                return match.key
+            let named = items.filter { $0.sourceName == source && $0.targetName == target }
+            if let match = MonitoringPaths.pairOrder(named).first {
+                return match
             }
         }
         return nil

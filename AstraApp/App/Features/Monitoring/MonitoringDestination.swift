@@ -7,6 +7,7 @@ struct MonitoringDestination: View {
     var body: some View {
         switch route {
         case .path(let key): PathDetailScreen(key: key)
+        case .pathCheck(let key, let monitor): PathDetailScreen(key: key, monitor: monitor)
         case .matrix: PathMatrixScreen()
         case .chain(let id): ChainDetailScreen(id: id)
         case .check(let id): CheckDetailScreen(id: id)

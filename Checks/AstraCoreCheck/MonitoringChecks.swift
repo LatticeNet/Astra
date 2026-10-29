@@ -365,6 +365,14 @@ private func checkPathItems() throws {
     try expectEqual(MonitoringPaths.reverse(of: items[1], in: items)?.path.monitorID, nil, "no reverse when the matrix lacks it")
     try expectEqual(MonitoringPaths.reverse(of: items[6], in: items)?.path.monitorID, "m1", "fra-2 to tyo-1 reverses to tyo-1 to fra-2")
 
+    let pair = MonitoringPaths.checks(onPair: "n-sin~n-fra", in: items)
+    try expectEqual(pair.map(\.path.monitorID), ["m4", "m5"], "pairOrder: a pair's live checks, worst first")
+    try expectEqual(MonitoringPaths.cell(key: "n-sin~n-fra", monitorID: "m5", in: items)?.path.monitorID, "m5", "a named check opens its own cell, not the pair's first")
+    try expectEqual(MonitoringPaths.cell(key: "n-sin~n-fra", monitorID: nil, in: items)?.path.monitorID, "m4", "no check named: the pair's first in pairOrder")
+    try expectEqual(MonitoringPaths.cell(key: "n-sin~n-fra", monitorID: "gone", in: items)?.path.monitorID, "m4", "a check no longer on the pair falls back to pairOrder")
+    let reordered = MonitoringPaths.pairOrder(pair.reversed())
+    try expectEqual(reordered.map(\.path.monitorID), ["m4", "m5"], "pairOrder does not depend on the server's order")
+
     let notJudged = try decode(PathsResponse.self, #"{"paths":[{"source":"a","target_node":"b","state":"degraded","reason":"degraded_loss"}]}"#)
     try expectEqual(MonitoringPaths.items(notJudged).first?.stateWord, "unknown", "degraded counts only from a server that judges it")
 }
@@ -393,6 +401,8 @@ private func checkEvidenceAndLinks() throws {
 
     var byMonitor = Incident(id: "i1", kind: "path.degraded", nodeID: "n-sin", monitorID: "m4")
     try expectEqual(MonitoringIncidentLink.pathKey(for: byMonitor, in: items), "n-sin~n-fra", "server key: source and check")
+    let upCheck = Incident(id: "i1b", kind: "path.degraded", nodeID: "n-sin", monitorID: "m5")
+    try expectEqual(MonitoringIncidentLink.item(for: upCheck, in: items)?.path.monitorID, "m5", "the incident opens its own check's cell, not the pair's first")
     byMonitor.monitorID = "unknown"
     byMonitor.subject = "tyo-1 → hkg-1"
     try expectEqual(MonitoringIncidentLink.pathKey(for: byMonitor, in: items), "n-tyo~n-hkg", "subject names as a fallback")

@@ -33,7 +33,7 @@ struct MonitorOverviewScreen: View {
                             .frame(minHeight: Spacing.minimumTarget)
                     } else {
                         ForEach(recent) { item in
-                            NavigationLink(value: AppRoute.monitoring(.path(key: item.key))) {
+                            NavigationLink(value: AppRoute.monitoring(.cell(item))) {
                                 MonitoringPathListRow(item: item)
                             }
                         }

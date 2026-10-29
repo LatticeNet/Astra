@@ -120,11 +120,11 @@ struct MonitoringPathsList: View {
                         .accessibilityHint("Lists the paths that are up")
                     } else {
                         ForEach(entry.items) { item in
-                            NavigationLink(value: AppRoute.monitoring(.path(key: item.key))) {
+                            NavigationLink(value: AppRoute.monitoring(.cell(item))) {
                                 MonitoringPathListRow(item: item)
                             }
                             .contextMenu {
-                                MonitoringObjectMenu(route: .monitoring(.path(key: item.key)), link: .path(key: item.key), web: .path(key: item.key), objectID: item.key)
+                                MonitoringObjectMenu(route: .monitoring(.cell(item)), link: .path(key: item.key), web: .path(key: item.key), objectID: item.key)
                                 if !item.path.source.isEmpty {
                                     Button("Open source node", systemImage: "server.rack") { router.push(.fleet(.node(id: item.path.source))) }
                                 }
@@ -280,10 +280,10 @@ struct MonitoringHopRow: View {
     let items: [MonitoringPathItem]
 
     var body: some View {
-        let path = next.flatMap { next in items.first { $0.key == MonitoringChain.pathKey(from: hop, to: next) } }
+        let path = next.flatMap { next in MonitoringPaths.cell(key: MonitoringChain.pathKey(from: hop, to: next), monitorID: nil, in: items) }
         let role = hop.role.rawValue
         if let path {
-            NavigationLink(value: AppRoute.monitoring(.path(key: path.key))) { row(path: path, role: role) }
+            NavigationLink(value: AppRoute.monitoring(.cell(path))) { row(path: path, role: role) }
         } else {
             row(path: nil, role: role)
         }

@@ -128,7 +128,7 @@ struct IncidentsScreen: View {
                         IncidentRow(incident: incident, canAdmin: store.canAdmin) { snoozeTarget = $0 }
                     }
                     .contextMenu {
-                        MonitoringIncidentMenu(incident: incident, pathKey: MonitoringIncidentLink.pathKey(for: incident, in: pathItems),
+                        MonitoringIncidentMenu(incident: incident, path: MonitoringIncidentLink.item(for: incident, in: pathItems),
                                                canAdmin: store.canAdmin) { snoozeTarget = $0 }
                     } preview: {
                         MonitoringIncidentGlance(incident: incident)

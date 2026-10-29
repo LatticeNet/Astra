@@ -104,7 +104,7 @@ struct IncidentDetailScreen: View {
 
     private func detail(_ incident: Incident) -> some View {
         let style = style(incident)
-        let pathKey = MonitoringIncidentLink.pathKey(for: incident, in: store.pathItems { nodes.nodes[$0]?.displayName })
+        let path = MonitoringIncidentLink.item(for: incident, in: store.pathItems { nodes.nodes[$0]?.displayName })
         return List {
             if let failure {
                 ErrorRow(message: failure) {
@@ -132,7 +132,7 @@ struct IncidentDetailScreen: View {
                     Label("Opens at \(TimeDisplay.clock(opens, mode: mode, locale: locale)) if still failing", systemImage: "hourglass")
                         .foregroundStyle(.secondary)
                 }
-                subjectRow(incident, pathKey: pathKey)
+                subjectRow(incident, path: path)
                 if let opened = incident.openedAt ?? incident.since {
                     DetailRow(label: incident.state == "pending" ? "Failing since" : "Opened", value: TimeDisplay.dateTime(opened, mode: mode, locale: locale),
                               secondary: TimeDisplay.otherZone(opened, mode: mode, locale: locale), copyable: false)
@@ -142,7 +142,7 @@ struct IncidentDetailScreen: View {
                     DetailRow(label: "Flaps", value: String(incident.flaps), copyable: false)
                 }
             }
-            evidenceSection(incident, pathKey: pathKey)
+            evidenceSection(incident, path: path)
             notificationSection(incident)
             deliveriesSection
             timelineSection(incident)
@@ -173,9 +173,9 @@ struct IncidentDetailScreen: View {
     }
 
     @ViewBuilder
-    private func subjectRow(_ incident: Incident, pathKey: String?) -> some View {
-        if let pathKey {
-            NavigationLink(value: AppRoute.monitoring(.path(key: pathKey))) {
+    private func subjectRow(_ incident: Incident, path: MonitoringPathItem?) -> some View {
+        if let path {
+            NavigationLink(value: AppRoute.monitoring(.cell(path))) {
                 LabeledContent("Path", value: Self.shortSubject(incident)).frame(minHeight: Spacing.minimumTarget)
             }
         }
@@ -192,13 +192,13 @@ struct IncidentDetailScreen: View {
     }
 
     @ViewBuilder
-    private func evidenceSection(_ incident: Incident, pathKey: String?) -> some View {
+    private func evidenceSection(_ incident: Incident, path: MonitoringPathItem?) -> some View {
         Section {
             if !incident.detail.isEmpty {
                 Text(incident.detail)
             }
-            if let pathKey {
-                NavigationLink(value: AppRoute.monitoring(.path(key: pathKey))) {
+            if let path {
+                NavigationLink(value: AppRoute.monitoring(.cell(path))) {
                     Label("Latency and loss chart", systemImage: "chart.xyaxis.line").frame(minHeight: Spacing.minimumTarget)
                 }
             }
@@ -207,7 +207,7 @@ struct IncidentDetailScreen: View {
                     Label("Last check results", systemImage: "checklist").frame(minHeight: Spacing.minimumTarget)
                 }
             }
-            if !incident.nodeID.isEmpty, pathKey == nil {
+            if !incident.nodeID.isEmpty, path == nil {
                 NavigationLink(value: AppRoute.fleet(.node(id: incident.nodeID))) {
                     Label(incident.kind == "agent.stalled" ? "Agent loop health" : "Node, last seen and history", systemImage: "server.rack")
                         .frame(minHeight: Spacing.minimumTarget)

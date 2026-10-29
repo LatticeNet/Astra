@@ -145,7 +145,7 @@ struct DefinitionDetailScreen: View {
                         )
                     }
                     ForEach(skipped) { item in
-                        NavigationLink(value: AppRoute.monitoring(.path(key: item.key))) {
+                        NavigationLink(value: AppRoute.monitoring(.cell(item))) {
                             MonitoringPathListRow(item: item)
                         }
                     }
