@@ -252,6 +252,15 @@ struct TerminalTranscriptScreen: View {
                     proxy.scrollTo(Self.bottomID, anchor: .bottom)
                 }
             }
+            .onChange(of: isStale) { _, stale in
+                // A failed poll bumps no revision, and the stale row is taller
+                // than the stamp it replaces, so bring it into view.
+                guard stale, followTail, record.isLive, model.hasLines, find.isEmpty else { return }
+                Task {
+                    await Task.yield()
+                    withAnimation { proxy.scrollTo(Self.bottomID, anchor: .bottom) }
+                }
+            }
             .onChange(of: highlighted) { _, line in
                 guard let line else { return }
                 Task {
@@ -378,34 +387,32 @@ struct TerminalTranscriptScreen: View {
 
     /// A line-number gutter marks where each logical line starts, so a line
     /// wrapped across rows reads as one line and table columns stay legible.
-    @ViewBuilder
     private func lineRow(_ line: TranscriptCleaner.Line, gutter: String) -> some View {
-        Group {
+        HStack(alignment: .firstTextBaseline, spacing: Spacing.s) {
+            ZStack(alignment: .trailing) {
+                Text(verbatim: gutter).hidden()
+                Text(verbatim: String(line.id))
+            }
+            .font(.caption2.monospacedDigit())
+            // A found line is marked by weight as well as by tint.
+            .fontWeight(highlighted == line.id ? .bold : .regular)
+            .foregroundStyle(highlighted == line.id ? AnyShapeStyle(Color.accentText) : AnyShapeStyle(.tertiary))
+            .lineLimit(1)
+            // Capped so the gutter never crowds out the text it numbers.
+            .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
+            .accessibilityHidden(true)
             switch line.kind {
             case .text:
-                HStack(alignment: .firstTextBaseline, spacing: Spacing.s) {
-                    ZStack(alignment: .trailing) {
-                        Text(verbatim: gutter).hidden()
-                        Text(verbatim: String(line.id))
-                    }
-                    .font(.caption2.monospacedDigit())
-                    // A found line is marked by weight as well as by tint.
-                    .fontWeight(highlighted == line.id ? .bold : .regular)
-                    .foregroundStyle(highlighted == line.id ? AnyShapeStyle(Color.accentText) : AnyShapeStyle(.tertiary))
-                    .lineLimit(1)
-                    // Capped so the gutter never crowds out the text it numbers.
-                    .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
-                    .accessibilityHidden(true)
-                    Text(line.text.isEmpty ? " " : line.text)
-                        .textRole(.code)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .textSelection(.enabled)
-                        .accessibilityHidden(line.text.isEmpty)
-                }
+                Text(line.text.isEmpty ? " " : line.text)
+                    .textRole(.code)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .textSelection(.enabled)
+                    .accessibilityHidden(line.text.isEmpty)
             case .fullScreen:
                 Label("Full-screen program output not shown", systemImage: "macwindow")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.vertical, Spacing.xs)
             }
         }
