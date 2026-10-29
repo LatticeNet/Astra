@@ -114,3 +114,34 @@ enum IntentsGate {
         }
     }
 }
+
+/// Word matching for typed searches and spoken answers. Siri transcribes
+/// "relay fra 2" or "relay fra two" for a node named relay-fra-2, so both
+/// sides are cut into words and every word of the answer must appear.
+enum IntentsMatch {
+    private static let numerals = [
+        "zero": "0", "one": "1", "two": "2", "three": "3", "four": "4", "five": "5",
+        "six": "6", "seven": "7", "eight": "8", "nine": "9", "ten": "10",
+    ]
+
+    static func words(_ text: String) -> [String] {
+        let folded = text.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil)
+        return folded
+            .split { (character: Character) in !(character.isLetter || character.isNumber) }
+            .map(String.init)
+    }
+
+    /// True when every word of `query` appears among the haystack's words:
+    /// a word as part of one ("tyo", "frank"), a number as a whole word, so
+    /// "fra 1" does not also find fra-10. A spoken numeral counts as its digit.
+    static func matches(_ query: [String], in haystack: [String]) -> Bool {
+        let hay = haystack.flatMap(words)
+        return query.allSatisfy { word in
+            let number = numerals[word] ?? (word.allSatisfy(\.isNumber) ? word : nil)
+            return hay.contains { candidate in
+                if let number, candidate == number { return true }
+                return word.contains(where: \.isLetter) && candidate.contains(word)
+            }
+        }
+    }
+}

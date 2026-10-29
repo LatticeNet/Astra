@@ -147,14 +147,20 @@ struct IntentsNodeQuery: EntityStringQuery {
         }
     }
 
-    /// Name, id or tag containment, so "tyo" finds every Tokyo edge by name.
+    /// Every word must appear in the name, id, tags, role or the place the
+    /// row shows, so "fra 2", "relay fra two" and "Frankfurt" all work. Only
+    /// when no node matches there does the search widen to the rest of what
+    /// Fleet's bare search reads (addresses, host facts), so a digit inside an
+    /// IP address does not crowd a spoken name.
     private static func matching(_ text: String, in nodes: [LatticeNode]) -> [LatticeNode] {
-        let needle = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !needle.isEmpty else { return ordered(nodes) }
-        return ordered(nodes.filter { node in
-            node.displayName.localizedStandardContains(needle)
-                || node.id.localizedStandardContains(needle)
-                || node.tags.contains { $0.localizedStandardContains(needle) }
-        })
+        let query = IntentsMatch.words(text)
+        guard !query.isEmpty else { return ordered(nodes) }
+        let named = nodes.filter { node in
+            let haystack = [node.displayName, node.id, node.role, node.geo?.city, node.geo?.region, node.geo?.country]
+                .compactMap { $0 } + node.tags
+            return IntentsMatch.matches(query, in: haystack)
+        }
+        if !named.isEmpty { return ordered(named) }
+        return ordered(nodes.filter { IntentsMatch.matches(query, in: FleetNodeQuery.text(FleetNodeRecord(node: $0))) })
     }
 }

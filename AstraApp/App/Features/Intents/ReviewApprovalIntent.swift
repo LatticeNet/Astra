@@ -99,13 +99,11 @@ struct IntentsApprovalQuery: EntityStringQuery {
     }
 
     func entities(matching string: String) async throws -> [IntentsApprovalEntity] {
-        let needle = string.trimmingCharacters(in: .whitespacesAndNewlines)
+        let query = IntentsMatch.words(string)
         let all = try await Self.pending()
-        guard !needle.isEmpty else { return all }
+        guard !query.isEmpty else { return all }
         return all.filter { entity in
-            entity.title.localizedStandardContains(needle)
-                || (entity.detail?.localizedStandardContains(needle) ?? false)
-                || entity.id.localizedStandardContains(needle)
+            IntentsMatch.matches(query, in: [entity.title, entity.detail, entity.id].compactMap { $0 })
         }
     }
 
