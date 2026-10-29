@@ -200,8 +200,12 @@ public struct NetworkingDNSDeployment: Decodable, Identifiable, Hashable, Sendab
     /// `canPlanDeployment`.
     public var canPlan: Bool { !isExternal }
 
-    /// `canPublishDeployment`, plus the server's refusal of a disabled deployment.
-    public var canPublish: Bool { !isExternal && !hostname.isEmpty && !disabled }
+    /// `canPublishDeployment`: the deployment is one Lattice publishes at all.
+    public var publishes: Bool { !isExternal && !hostname.trimmingCharacters(in: .whitespaces).isEmpty }
+
+    /// `publishes`, plus the server's refusals of a disabled deployment and of
+    /// one with no stored credential (`dnsPublishProfile`).
+    public var canPublish: Bool { publishes && !disabled && hasCredential }
 
     /// `listenSummary`: "tcp+udp 53, mesh" or the observed sockets.
     public var listenSummary: String {
@@ -342,7 +346,10 @@ public enum NetworkingDNSHealth: Hashable, Sendable {
 }
 
 /// What Publish IPs would send, computed on the phone from the node's
-/// reported addresses: the server has no preview.
+/// reported addresses: the server has no preview. It mirrors the server's
+/// `dnsPublishProfile` and `publishableDNSIPs`: neither family set means
+/// IPv4, and an enabled family without a valid address refuses the whole
+/// publish rather than skipping that family.
 public struct NetworkingPublishPreview: Hashable, Sendable {
     public struct Line: Hashable, Sendable {
         /// "A" or "AAAA".
@@ -354,35 +361,82 @@ public struct NetworkingPublishPreview: Hashable, Sendable {
         public var changes: Bool { value != previous }
     }
 
+    /// Why the server would refuse the publish, with the row label it shows under.
+    public struct Refusal: Hashable, Sendable {
+        public var label: String
+        public var text: String
+    }
+
     public var hostname: String
+    /// What would be written; meaningful only when `refusals` is empty.
     public var lines: [Line]
-    /// Families the deployment publishes but the node reports no address for.
-    public var missing: [String]
+    public var refusals: [Refusal]
+
+    public var blocking: Bool { !refusals.isEmpty || lines.isEmpty }
 
     public init(deployment: NetworkingDNSDeployment, publicIPv4: String?, publicIPv6: String?) {
         hostname = deployment.hostname
         var lines: [Line] = []
-        var missing: [String] = []
+        var refusals: [Refusal] = []
+        if deployment.hostname.trimmingCharacters(in: .whitespaces).isEmpty {
+            refusals.append(Refusal(label: "Hostname", text: "The deployment has no hostname to publish."))
+        }
+        if deployment.disabled {
+            refusals.append(Refusal(label: "Deployment", text: "The deployment is disabled."))
+        }
+        if !deployment.hasCredential {
+            refusals.append(Refusal(label: "Credential", text: "No provider credential is stored, so the server refuses to publish."))
+        }
+        let publishV4 = deployment.publishIPv4 || !deployment.publishIPv6
         let v4 = (publicIPv4 ?? "").trimmingCharacters(in: .whitespaces)
         let v6 = (publicIPv6 ?? "").trimmingCharacters(in: .whitespaces)
-        if deployment.publishIPv4 {
-            if v4.isEmpty { missing.append("IPv4") } else { lines.append(Line(type: "A", value: v4, previous: deployment.lastIPv4)) }
+        if publishV4 {
+            if v4.isEmpty {
+                refusals.append(Refusal(label: "IPv4", text: "The node has no public IPv4, and the server refuses the whole publish when a family it publishes has no address."))
+            } else if !NetworkingIP.isPublishableV4(v4) {
+                refusals.append(Refusal(label: "IPv4", text: "The node's public IPv4 \(v4) is not a valid address, so the server refuses the publish."))
+            } else {
+                lines.append(Line(type: "A", value: v4, previous: deployment.lastIPv4))
+            }
         }
         if deployment.publishIPv6 {
-            if v6.isEmpty { missing.append("IPv6") } else { lines.append(Line(type: "AAAA", value: v6, previous: deployment.lastIPv6)) }
+            if v6.isEmpty {
+                refusals.append(Refusal(label: "IPv6", text: "The node has no public IPv6, and the server refuses the whole publish when a family it publishes has no address."))
+            } else if !NetworkingIP.isPublishableV6(v6) {
+                refusals.append(Refusal(label: "IPv6", text: "The node's public IPv6 \(v6) is not a valid address, so the server refuses the publish."))
+            } else {
+                lines.append(Line(type: "AAAA", value: v6, previous: deployment.lastIPv6))
+            }
         }
         self.lines = lines
-        self.missing = missing
+        self.refusals = refusals
     }
 
-    /// "Will publish the node's current address 203.0.113.15; the provider has 203.0.113.15."
+    /// "A: will publish the node's current address 203.0.113.15; the provider has 203.0.113.15."
+    /// When the server would refuse, only the reasons, since nothing is written.
     public var sentences: [String] {
-        var out = lines.map { line in
+        if !refusals.isEmpty { return ["Nothing can be published."] + refusals.map(\.text) }
+        return lines.map { line in
             let has = line.previous.isEmpty ? "the provider has no \(line.type) record from Lattice yet" : "the provider has \(line.previous)"
             return "\(line.type): will publish the node's current address \(line.value); \(has)."
         }
-        out += missing.map { "\($0): the node reports no address, so nothing is published for it." }
-        return out
+    }
+}
+
+/// The address checks of the server's `publishableDNSIPs` (netip.ParseAddr,
+/// the right family, not unspecified).
+enum NetworkingIP {
+    static func isPublishableV4(_ value: String) -> Bool {
+        var address = in_addr()
+        guard inet_pton(AF_INET, value, &address) == 1 else { return false }
+        return address.s_addr != 0
+    }
+
+    static func isPublishableV6(_ value: String) -> Bool {
+        let host = value.split(separator: "%", maxSplits: 1, omittingEmptySubsequences: false).first.map(String.init) ?? value
+        var address = in6_addr()
+        guard inet_pton(AF_INET6, host, &address) == 1 else { return false }
+        return withUnsafeBytes(of: &address) { bytes in bytes.contains { $0 != 0 } }
     }
 }
 

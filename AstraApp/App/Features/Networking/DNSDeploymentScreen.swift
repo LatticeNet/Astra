@@ -202,9 +202,8 @@ struct DNSDeploymentScreen: View {
                 if !deployment.lastPublishError.isEmpty {
                     DetailRow(label: "Last publish error", value: NetworkingDDNSPreview.errorText(deployment.lastPublishError), copyable: true)
                 }
-                if deployment.canPublish {
-                    let node = nodes.nodes[deployment.nodeID]
-                    let preview = NetworkingPublishPreview(deployment: deployment, publicIPv4: node?.publicIP, publicIPv6: node?.publicIPv6)
+                if deployment.publishes {
+                    let preview = publishPreview(deployment)
                     VStack(alignment: .leading, spacing: Spacing.xs) {
                         Label("Computed on this iPhone", systemImage: "iphone").textRole(.footnote)
                         ForEach(preview.sentences, id: \.self) { Text($0) }
@@ -258,10 +257,19 @@ struct DNSDeploymentScreen: View {
 
     private var planBlocked: String? { store.blocked(NetworkingIntents.dnsPlanScopes) }
 
+    private func publishPreview(_ deployment: NetworkingDNSDeployment) -> NetworkingPublishPreview {
+        let node = nodes.nodes[deployment.nodeID]
+        return NetworkingPublishPreview(deployment: deployment, publicIPv4: node?.publicIP, publicIPv6: node?.publicIPv6)
+    }
+
     private func publishBlocked(_ deployment: NetworkingDNSDeployment) -> String? {
         if let blocked = store.blocked([NetworkingIntents.dnsAdmin]) { return blocked }
         if deployment.disabled { return "The deployment is disabled" }
         if deployment.hostname.isEmpty { return "The deployment has no hostname to publish" }
+        if !deployment.hasCredential { return "No provider credential is stored" }
+        // The node directory may not have loaded; the sheet's dry run reads the node itself.
+        guard nodes.nodes[deployment.nodeID] != nil else { return nil }
+        if let refusal = publishPreview(deployment).refusals.first { return refusal.text.trimmingCharacters(in: CharacterSet(charactersIn: ".")) }
         return nil
     }
 

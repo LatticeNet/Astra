@@ -509,7 +509,9 @@ public enum NetworkingFixtures {
                 if dep.engine == "external" {
                     return .error(status: 400, code: "bad_request", message: "an external DNS engine is observed only: Lattice never plans or publishes it")
                 }
+                if dep.hostname.isEmpty { return .error(status: 400, code: "bad_request", message: "dns deployment has no hostname to publish") }
                 if dep.disabled { return .error(status: 400, code: "bad_request", message: "dns deployment is disabled") }
+                if !dep.publish { return .error(status: 400, code: "bad_request", message: "hostname publishing requires cf_api_token or ddns_profile_id") }
                 await state.insert(dep.id, into: "networking.dns.published")
                 let node = DemoWorld.node(dep.node)
                 return .json(DemoJSON.object([

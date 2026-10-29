@@ -480,14 +480,27 @@ private func checkNetworkingWrites() async throws {
 
 private func checkNetworkingPreviews() throws {
     let deployment = try JSONDecoder().decode(NetworkingDNSDeployment.self, from: json(#"""
-    {"id":"d","name":"x","node_id":"n","engine":"coredns","hostname":"x.example.org","publish_ipv4":true,"publish_ipv6":true,"last_ipv4":"203.0.113.1","status":"running"}
+    {"id":"d","name":"x","node_id":"n","engine":"coredns","hostname":"x.example.org","publish_ipv4":true,"publish_ipv6":true,"has_credential":true,"last_ipv4":"203.0.113.1","status":"running"}
     """#))
-    let preview = NetworkingPublishPreview(deployment: deployment, publicIPv4: "203.0.113.2", publicIPv6: "")
-    try expectEqual(preview.lines.map(\.type), ["A"], "no IPv6 address, no AAAA line")
-    try expectEqual(preview.missing, ["IPv6"], "the missing family is named")
-    try expectEqual(preview.sentences.first, "A: will publish the node's current address 203.0.113.2; the provider has 203.0.113.1.", "spec sentence")
-    let blocked = NetworkingIntents.publishReport(deployment, publicIPv4: nil, publicIPv6: nil)
-    try expect(blocked.blocking, "nothing to publish disables the button")
+    let both = NetworkingPublishPreview(deployment: deployment, publicIPv4: "203.0.113.2", publicIPv6: "2001:db8::2")
+    try expect(!both.blocking && both.lines.map(\.type) == ["A", "AAAA"], "both families with addresses publish both")
+    try expectEqual(both.sentences.first, "A: will publish the node's current address 203.0.113.2; the provider has 203.0.113.1.", "spec sentence")
+    // publishableDNSIPs refuses the whole publish when an enabled family has no address.
+    let noV6 = NetworkingIntents.publishReport(deployment, publicIPv4: "203.0.113.2", publicIPv6: "")
+    try expect(noV6.blocking, "an enabled family without an address blocks the publish")
+    try expect(noV6.lines.contains { $0.label == "IPv6" && $0.value.hasPrefix("The server refuses") }, "the refusal names the family")
+    try expect(!noV6.lines.contains { $0.label == "A" }, "no partial A-only publish is promised")
+    try expect(NetworkingPublishPreview(deployment: deployment, publicIPv4: "0.0.0.0", publicIPv6: "2001:db8::2").blocking, "an unspecified address is refused")
+    let neither = try JSONDecoder().decode(NetworkingDNSDeployment.self, from: json(#"""
+    {"id":"d","name":"x","node_id":"n","engine":"coredns","hostname":"x.example.org","has_credential":true,"status":"running"}
+    """#))
+    let neitherPreview = NetworkingPublishPreview(deployment: neither, publicIPv4: "203.0.113.2", publicIPv6: nil)
+    try expect(!neitherPreview.blocking && neitherPreview.lines.map(\.type) == ["A"], "neither family set publishes IPv4, as dnsPublishProfile does")
+    let noCredential = try JSONDecoder().decode(NetworkingDNSDeployment.self, from: json(#"""
+    {"id":"d","name":"x","node_id":"n","engine":"coredns","hostname":"x.example.org","publish_ipv4":true,"status":"running"}
+    """#))
+    try expect(!noCredential.canPublish && noCredential.publishes, "no stored credential cannot publish")
+    try expect(NetworkingIntents.publishReport(noCredential, publicIPv4: "203.0.113.2", publicIPv6: nil).blocking, "no stored credential blocks the preview")
 
     let profile = try JSONDecoder().decode(DDNSProfile.self, from: json(#"""
     {"id":"p","name":"p","node_id":"n","provider":"cloudflare","domains":["a.example.org","b.example.org"],"enable_ipv4":true,"enable_ipv6":true,"last_ipv4":"192.0.2.1"}

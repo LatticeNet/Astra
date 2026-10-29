@@ -187,9 +187,12 @@ public enum NetworkingIntents {
         var lines = preview.lines.map { line in
             DetailLine(label: line.type, value: line.previous.isEmpty ? "\(line.value), new" : (line.changes ? "\(line.value), provider has \(line.previous)" : "\(line.value), unchanged"), group: group)
         }
-        lines += preview.missing.map { DetailLine(label: $0, value: "Node reports no address; skipped", group: group) }
-        let fingerprint = preview.lines.map { "\($0.type)=\($0.value)" }.joined(separator: ",")
-        return DryRunReport(lines: [DetailLine(label: "Hostname", value: preview.hostname, group: group)] + lines, blocking: preview.lines.isEmpty, fingerprint: fingerprint)
+        if !preview.refusals.isEmpty {
+            lines = preview.refusals.map { DetailLine(label: $0.label, value: "The server refuses: \($0.text)", group: group) }
+        }
+        let fingerprint = (preview.lines.map { "\($0.type)=\($0.value)" } + preview.refusals.map(\.label)).joined(separator: ",")
+        let hostname = preview.hostname.isEmpty ? [] : [DetailLine(label: "Hostname", value: preview.hostname, group: group)]
+        return DryRunReport(lines: hostname + lines, blocking: preview.blocking, fingerprint: fingerprint)
     }
 
     /// Creates a tls check on each DoT or DoH port of an external engine and
