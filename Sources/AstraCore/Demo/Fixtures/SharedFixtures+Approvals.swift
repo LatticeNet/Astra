@@ -215,7 +215,7 @@ extension SharedFixtures {
 
     static func approvalsAnswer(_ request: DemoRequest, state: DemoState) async -> DemoResponse {
         var rows: [DemoApproval] = []
-        for approval in approvals {
+        for approval in await filedApprovals(state) + approvals {
             rows.append(await current(approval, state: state, scenario: request.scenario))
         }
         if request.scenario == .quiet {
@@ -353,6 +353,29 @@ extension SharedFixtures {
 
     // MARK: Plan filing
 
+    /// Plans filed this session, newest first, kept so Review, BatchReview
+    /// and the pending list can read them back by id as the server would.
+    static let filedApprovalsSet = "approval.filed"
+    private static let recordSeparator: Character = "\u{1F}"
+
+    static func recordFiled(_ approval: DemoApproval, state: DemoState) async {
+        await state.insert(approval.id, into: filedApprovalsSet)
+        let record = [approval.plugin, approval.action, approval.node, approval.plan].joined(separator: String(recordSeparator))
+        await state.setValue(record, for: "approval.record.\(approval.id)")
+    }
+
+    static func filedApprovals(_ state: DemoState) async -> [DemoApproval] {
+        var filed: [DemoApproval] = []
+        for id in await state.members(of: filedApprovalsSet) {
+            guard let record = await state.value(for: "approval.record.\(id)") else { continue }
+            let parts = record.split(separator: recordSeparator, maxSplits: 3, omittingEmptySubsequences: false).map(String.init)
+            guard parts.count == 4 else { continue }
+            filed.append(DemoApproval(id: id, plugin: parts[0], action: parts[1], node: parts[2], status: "pending",
+                                      plan: parts[3], planSHA256: PlanHasher.sha256Hex(parts[3]), createdAt: "", updatedAt: ""))
+        }
+        return filed.sorted { (Int($0.id.drop { !$0.isNumber }) ?? 0) > (Int($1.id.drop { !$0.isNumber }) ?? 0) }
+    }
+
     static func planBeacon(_ request: DemoRequest, state: DemoState) async -> DemoResponse {
         let body = request.bodyStrings
         guard let nodeID = body["node_id"], let node = DemoWorld.node(id: nodeID) else {
@@ -361,11 +384,11 @@ extension SharedFixtures {
         let action = body["action"] ?? "change"
         let plan = DemoPlans.beacon(node: node.name, action: action, port: body["port"] ?? "7443")
         let id = "approval_filed\(await state.recordHit("filed.approval"))"
-        await state.insert(id, into: "approval.filed")
         let approval = DemoApproval(
             id: id, plugin: "beacon", action: "node.beacon", node: node.name, status: "pending",
             plan: plan, planSHA256: PlanHasher.sha256Hex(plan), createdAt: "", updatedAt: ""
         )
+        await recordFiled(approval, state: state)
         return .json(DemoJSON.object([
             ("approval", approvalJSON(approval, includePlan: true)),
             ("plan", .object(["node_id": .string(node.id), "action": .string(action)])),
@@ -382,11 +405,11 @@ extension SharedFixtures {
         }
         let plan = DemoPlans.agentUpdate(node: node.name, arch: node.arch, current: node.agentVersion.isEmpty ? "unknown" : node.agentVersion)
         let id = "approval_filed\(await state.recordHit("filed.approval"))"
-        await state.insert(id, into: "approval.filed")
         let approval = DemoApproval(
             id: id, plugin: "agentupdate", action: "update-agent", node: node.name, status: "pending",
             plan: plan, planSHA256: PlanHasher.sha256Hex(plan), createdAt: "", updatedAt: ""
         )
+        await recordFiled(approval, state: state)
         return .json(approvalJSON(approval, includePlan: true).text)
     }
 }

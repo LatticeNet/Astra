@@ -309,6 +309,10 @@ private func checkSessionWrites() async throws {
 
     let filed = try await client.planAgentUpdate(nodeID: DemoWorld.node("lab-pi-1").id, force: true)
     try expect((try? filed.reviewedPlanSHA256()) != nil, "a filed plan carries the hash of its body")
+    let readBack = try await client.fetchApproval(id: filed.id)
+    try expectEqual(readBack.planSHA256, filed.planSHA256, "a filed plan reads back by id with the same hash")
+    let pending = try await client.listHumanPendingApprovals()
+    try expect(pending.contains { $0.id == filed.id }, "a filed plan is listed as pending")
 
     let session = demoClient(.session)
     do {
