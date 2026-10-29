@@ -198,7 +198,9 @@ struct PlatformGatedButton: View {
 }
 
 /// An action row inside a list: a full-width button with a second line
-/// saying why it is off, at least 44 pt tall.
+/// saying why it is off, at least 44 pt tall. Icon and title share one
+/// colour, as FleetActionRow does: secondary when off, the fail text colour
+/// when destructive, the accent otherwise.
 struct PlatformActionRow: View {
     let title: String
     let systemImage: String
@@ -207,21 +209,32 @@ struct PlatformActionRow: View {
     var role: ButtonRole?
     let action: () -> Void
 
+    private var reason: String? {
+        missing.map { $0.hasPrefix("Needs") || $0.hasPrefix("No ") ? $0 : "Needs \($0)" }
+    }
+
+    private var tint: Color {
+        if missing != nil { return .secondary }
+        return role == .destructive ? .statusFailText : .accentText
+    }
+
     var body: some View {
         Button(role: role, action: action) {
             Label {
                 VStack(alignment: .leading, spacing: Spacing.xxs) {
-                    Text(title)
-                    if let line = missing.map({ $0.hasPrefix("Needs") || $0.hasPrefix("No ") ? $0 : "Needs \($0)" }) ?? note {
+                    Text(title).foregroundStyle(tint)
+                    if let line = reason ?? note {
                         Text(line).textRole(.footnote)
                     }
                 }
             } icon: {
-                Image(systemName: systemImage)
+                Image(systemName: systemImage).foregroundStyle(tint)
             }
             .frame(maxWidth: .infinity, minHeight: Spacing.minimumTarget, alignment: .leading)
+            .contentShape(Rectangle())
         }
         .disabled(missing != nil)
+        .accessibilityHint(reason.map { "Unavailable. \($0)." } ?? "")
     }
 }
 
