@@ -52,9 +52,33 @@ final class AccessStore {
     /// this store read, else the one the session loaded at sign-in.
     var sessionIdentity: LatticeIdentity? { identity.value ?? session.sessionIdentity }
 
-    /// Whether `token` is the one this iPhone's primary client carries.
+    /// Whether `token` is known to be the one this iPhone's primary client carries.
     func isOwn(_ token: LatticeToken) -> Bool {
-        session.credentialKind == .token && AccessTokens.isOwn(token, identity: session.primaryIdentity)
+        ownership(of: token) == .own
+    }
+
+    func ownership(of token: LatticeToken) -> AccessTokenOwnership {
+        AccessTokens.ownership(token, credentialIsToken: session.credentialKind == .token, identity: session.primaryIdentity)
+    }
+
+    /// Ownership for a write: an unread `/api/me` is read once more first,
+    /// and if it still fails the token counts as possibly this iPhone's.
+    func ownershipForWrite(of token: LatticeToken) async -> AccessTokenOwnership {
+        if ownership(of: token) == .unknown { await session.refreshIdentity() }
+        return ownership(of: token)
+    }
+
+    /// After a revoke the server confirmed, whether this iPhone's token is
+    /// gone: known to be its own, or unknown and `/api/me` now answers 401.
+    func revokedOwnToken(_ ownership: AccessTokenOwnership) async -> Bool {
+        switch ownership {
+        case .own: return true
+        case .other: return false
+        case .unknown:
+            await session.refreshIdentity()
+            if case .unauthorized = session.identityError { return true }
+            return false
+        }
     }
 
     /// The account the credentials on this iPhone belong to.

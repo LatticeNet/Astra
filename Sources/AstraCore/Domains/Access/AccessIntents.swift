@@ -6,6 +6,14 @@ import Foundation
 /// none is ever sent from a deep link, a launch or a poll. Users, SSO
 /// providers, token creation, password, TOTP and passkey enrollment are
 /// web-only and have no intent.
+/// Whether a token is the one this iPhone's primary client carries.
+public enum AccessTokenOwnership: Sendable, Hashable {
+    case own, other
+    /// A token credential whose `/api/me` could not be read: treated as
+    /// possibly this iPhone's, so the confirmation warns and asks for the name.
+    case unknown
+}
+
 public enum AccessIntents {
     public static let tokenScope = "token:admin"
     public static let userScope = "user:admin"
@@ -22,10 +30,18 @@ public enum AccessIntents {
     /// The sentence the confirmation adds when the token is this iPhone's.
     public static let ownTokenWarning = "This is the token this iPhone uses. You will be signed out."
 
+    /// The sentence when `/api/me` could not be read, so this iPhone cannot
+    /// rule out that the token is its own.
+    public static let maybeOwnTokenWarning = "This iPhone could not confirm which token it uses. If it is this one, you will be signed out."
+
     /// The sign-out warning leads, so it is the first line the confirmation
     /// shows even at the largest text size.
-    private static func lead(_ isOwn: Bool, _ consequence: String) -> String {
-        isOwn ? ownTokenWarning + " " + consequence : consequence
+    private static func lead(_ ownership: AccessTokenOwnership, _ consequence: String) -> String {
+        switch ownership {
+        case .own: ownTokenWarning + " " + consequence
+        case .unknown: maybeOwnTokenWarning + " " + consequence
+        case .other: consequence
+        }
     }
 
     // MARK: Tokens
@@ -33,13 +49,13 @@ public enum AccessIntents {
     /// T4, the leak response. Revoking is one-way. Revoking the token this
     /// iPhone uses asks for its name to be typed and signs the phone out
     /// after the server confirms (the screen does that on `.done`).
-    public static func revokeToken(_ token: LatticeToken, isOwn: Bool) -> WriteIntent {
+    public static func revokeToken(_ token: LatticeToken, ownership: AccessTokenOwnership) -> WriteIntent {
         let object = object(token)
-        let consequence = lead(isOwn, "Anything calling the API with \(object.name) gets 401 from now on. This is one-way: nothing brings a revoked token back.")
+        let consequence = lead(ownership, "Anything calling the API with \(object.name) gets 401 from now on. This is one-way: nothing brings a revoked token back.")
         return WriteIntent(
             tier: .t4, verb: "Revoke token", object: object, scopes: [tokenScope],
             consequence: consequence,
-            confirmPhrase: isOwn ? object.name : nil,
+            confirmPhrase: ownership == .other ? nil : object.name,
             verify: { client in
                 guard let fresh = try await client.listTokens().first(where: { $0.id == token.id }) else { return "\(object.name) is no longer listed." }
                 return fresh.isRevoked ? "\(object.name) is revoked." : "\(object.name) is still active."
@@ -52,15 +68,15 @@ public enum AccessIntents {
                     let message = "The server answered, but \(object.name) is not revoked. Check it on the web."
                     return .unknown(message)
                 }
-                return .done(isOwn ? "Revoked \(object.name). Signing out." : "Revoked \(object.name)")
+                return .done(ownership == .own ? "Revoked \(object.name). Signing out." : "Revoked \(object.name)")
             }
         )
     }
 
     /// T4. Removes a revoked token from the list; the audit trail keeps it.
-    public static func deleteToken(_ token: LatticeToken, isOwn: Bool) -> WriteIntent {
+    public static func deleteToken(_ token: LatticeToken, ownership: AccessTokenOwnership) -> WriteIntent {
         let object = object(token)
-        let consequence = lead(isOwn, "Removes \(object.name) from the token list. This cannot be undone. Audit history is kept.")
+        let consequence = lead(ownership, "Removes \(object.name) from the token list. This cannot be undone. Audit history is kept.")
         return WriteIntent(
             tier: .t4, verb: "Delete token", object: object, scopes: [tokenScope],
             consequence: consequence,

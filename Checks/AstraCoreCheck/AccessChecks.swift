@@ -290,13 +290,17 @@ private func checkAccessPasskeys() throws {
 
 private func checkAccessIntents() async throws {
     let mine = accessToken("tok_mine")
-    let own = AccessIntents.revokeToken(mine, isOwn: true)
+    let own = AccessIntents.revokeToken(mine, ownership: .own)
     try expect(own.tier == .t4 && own.client == .primary && own.scopes == ["token:admin"], "revoke is T4 on the token client")
     try expect(own.consequence.hasPrefix(AccessIntents.ownTokenWarning), "own token revoke leads with the sign-out warning")
     try expectEqual(own.confirmPhrase, mine.displayName, "own token revoke asks for the name")
-    let other = AccessIntents.revokeToken(mine, isOwn: false)
+    let other = AccessIntents.revokeToken(mine, ownership: .other)
     try expect(other.confirmPhrase == nil && !other.consequence.contains("signed out"), "another token's revoke has no sign-out warning")
-    try expect(AccessIntents.deleteToken(mine, isOwn: false).tier == .t4, "delete is T4")
+    try expect(AccessIntents.deleteToken(mine, ownership: .other).tier == .t4, "delete is T4")
+    let maybe = AccessIntents.revokeToken(mine, ownership: .unknown)
+    try expect(maybe.consequence.hasPrefix(AccessIntents.maybeOwnTokenWarning) && maybe.confirmPhrase == mine.displayName, "an unknown owner warns and asks for the name")
+    try expectEqual(AccessTokens.ownership(mine, credentialIsToken: true, identity: nil), .unknown, "a token credential without /api/me is unknown")
+    try expectEqual(AccessTokens.ownership(mine, credentialIsToken: false, identity: nil), .other, "a session carries no token")
     let passkey = AccessPasskey(id: "pk_demo_key", name: "Security key")
     let rename = AccessIntents.renamePasskey(passkey, to: "Desk key")
     try expect(rename.tier == .t2 && rename.client == .session && rename.scopes.isEmpty, "rename is T2 on the session")
@@ -313,27 +317,27 @@ private func checkAccessIntents() async throws {
     // Tokens against the demo server, as a full administrator.
     let state = DemoState()
     let admin = accessDemo(state: state)
-    let deleteActive = try await accessCommit(AccessIntents.deleteToken(accessToken("tok_demo0002ci"), isOwn: false), admin)
+    let deleteActive = try await accessCommit(AccessIntents.deleteToken(accessToken("tok_demo0002ci"), ownership: .other), admin)
     guard case .refused(_, let refusal) = deleteActive, refusal.contains("revoked before deletion") else {
         throw CheckFailure.failed("deleting an active token is refused with the server's reason, got \(deleteActive)")
     }
     let ci = try await expectUnwrapped(admin.listTokens().first { $0.id == "tok_demo0002ci" }, "CI token listed")
-    guard case .done(let revokedText, _) = try await accessCommit(AccessIntents.revokeToken(ci, isOwn: false), admin) else {
+    guard case .done(let revokedText, _) = try await accessCommit(AccessIntents.revokeToken(ci, ownership: .other), admin) else {
         throw CheckFailure.failed("revoke lands")
     }
     try expectEqual(revokedText, "Revoked CI deploy", "revoke banner")
     let afterRevoke = try await admin.listTokens()
     try expect(afterRevoke.first { $0.id == ci.id }?.isRevoked == true, "the listing shows the revocation")
-    guard case .done(let againText, _) = try await accessCommit(AccessIntents.revokeToken(ci, isOwn: false), admin), againText == "Revoked CI deploy" else {
+    guard case .done(let againText, _) = try await accessCommit(AccessIntents.revokeToken(ci, ownership: .other), admin), againText == "Revoked CI deploy" else {
         throw CheckFailure.failed("revoking twice is idempotent")
     }
-    guard case .done = try await accessCommit(AccessIntents.deleteToken(ci, isOwn: false), admin) else {
+    guard case .done = try await accessCommit(AccessIntents.deleteToken(ci, ownership: .other), admin) else {
         throw CheckFailure.failed("deleting a revoked token lands")
     }
     let afterDelete = try await admin.listTokens()
     try expect(!afterDelete.contains { $0.id == ci.id }, "the deleted token is gone")
     let phone = try await expectUnwrapped(admin.listTokens().first { $0.id == AccessFixtures.phoneTokenID }, "phone token listed")
-    guard case .done(let ownText, _) = try await accessCommit(AccessIntents.revokeToken(phone, isOwn: true), admin), ownText.hasSuffix("Signing out.") else {
+    guard case .done(let ownText, _) = try await accessCommit(AccessIntents.revokeToken(phone, ownership: .own), admin), ownText.hasSuffix("Signing out.") else {
         throw CheckFailure.failed("own token revoke says it signs out")
     }
 

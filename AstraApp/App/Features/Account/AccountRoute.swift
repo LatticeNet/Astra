@@ -32,10 +32,10 @@ extension AccountRoute: DemoHooks {
               let fixture = AccessFixtures.tokens.first(where: { $0.id == parts[2] }) else { return nil }
         let token = LatticeToken(id: fixture.id, name: fixture.name, actorID: fixture.actorID, scopes: fixture.scopes,
                                  serverAllowlist: fixture.allowlist, revokedAt: fixture.revoked == nil ? nil : Date())
-        let isOwn = session.credentialKind == .token && AccessTokens.isOwn(token, identity: session.primaryIdentity)
+        let ownership = AccessTokens.ownership(token, credentialIsToken: session.credentialKind == .token, identity: session.primaryIdentity)
         switch parts[1] {
-        case "revokeToken": return AccessIntents.revokeToken(token, isOwn: isOwn)
-        case "deleteToken": return AccessIntents.deleteToken(token, isOwn: isOwn)
+        case "revokeToken": return AccessIntents.revokeToken(token, ownership: ownership)
+        case "deleteToken": return AccessIntents.deleteToken(token, ownership: ownership)
         default: return nil
         }
     }

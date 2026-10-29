@@ -125,6 +125,14 @@ public enum AccessTokens {
         return identity.tokenID == token.id
     }
 
+    /// Own, another's, or unknown when the credential is a token whose
+    /// `/api/me` has not been read: a session carries no token at all.
+    public static func ownership(_ token: LatticeToken, credentialIsToken: Bool, identity: LatticeIdentity?) -> AccessTokenOwnership {
+        guard credentialIsToken else { return .other }
+        guard let identity else { return .unknown }
+        return isOwn(token, identity: identity) ? .own : .other
+    }
+
     /// "7 tokens, 5 active" (the console's proof line).
     public static func summary(_ tokens: [LatticeToken]) -> String {
         let active = tokens.filter { !$0.isRevoked }.count

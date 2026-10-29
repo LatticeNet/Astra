@@ -204,15 +204,21 @@ struct AccessScreen: View {
     }
 
     private func revoke(_ token: LatticeToken) {
-        let isOwn = store.isOwn(token)
+        guard !runner.isBusy else { return }
         Task {
-            let outcome = await runner.run(AccessIntents.revokeToken(token, isOwn: isOwn))
-            if case .done = outcome, isOwn { await AccountSignOut.afterOwnTokenRevoked(session: session, stepUp: stepUp, nodes: nodes) }
+            let ownership = await store.ownershipForWrite(of: token)
+            let outcome = await runner.run(AccessIntents.revokeToken(token, ownership: ownership))
+            if case .done = outcome, await store.revokedOwnToken(ownership) {
+                await AccountSignOut.afterOwnTokenRevoked(session: session, stepUp: stepUp, nodes: nodes)
+            }
         }
     }
 
     private func delete(_ token: LatticeToken) {
-        Task { await runner.run(AccessIntents.deleteToken(token, isOwn: store.isOwn(token))) }
+        Task {
+            let ownership = await store.ownershipForWrite(of: token)
+            await runner.run(AccessIntents.deleteToken(token, ownership: ownership))
+        }
     }
 
     private func refreshTokens() {
