@@ -14,6 +14,7 @@ struct PathMatrixScreen: View {
     @Environment(NodeDirectory.self) private var nodes
     @Environment(\.dynamicTypeSize) private var typeSize
     @Environment(\.accessibilityVoiceOverEnabled) private var voiceOver
+    @Environment(Router.self) private var router
 
     @SceneStorage(PathMatrixScreen.fitKey) private var fitToWidth = false
     @SceneStorage(PathMatrixScreen.listKey) private var asList = false
@@ -36,6 +37,26 @@ struct PathMatrixScreen: View {
         .navigationBarTitleDisplayMode(.inline)
         .navigationSubtitle(appState.monitorWindow.rawValue)
         .toolbar {
+            if !showsList, let matrix = currentMatrix, !matrix.rows.isEmpty {
+                // Full-size targets for what the headers do: a header at the
+                // cell pitch is narrower than 44 pt (4.4).
+                ToolbarItem(placement: .topBarTrailing) {
+                    Menu {
+                        Menu("Paths from") {
+                            ForEach(matrix.rows) { row in
+                                Button(row.name) { router.push(.monitoring(.paths(query: MonitoringMatrix.sourceQuery(row)))) }
+                            }
+                        }
+                        Menu("Paths to") {
+                            ForEach(matrix.columns) { column in
+                                Button(column.name) { router.push(.monitoring(.paths(query: MonitoringMatrix.targetQuery(column)))) }
+                            }
+                        }
+                    } label: {
+                        Label("Open paths", systemImage: "line.3.horizontal.decrease.circle")
+                    }
+                }
+            }
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
                     Toggle("Fit to width", systemImage: "arrow.left.and.right.square", isOn: $fitToWidth)
@@ -51,6 +72,11 @@ struct PathMatrixScreen: View {
             await nodes.refreshIfOlder(than: 60)
             return await store.refreshPaths(window: appState.monitorWindow)
         }
+    }
+
+    private var currentMatrix: MonitoringMatrix? {
+        guard store.paths.value != nil else { return nil }
+        return MonitoringMatrix(items: MonitoringPaths.visible(store.pathItems { nodes.nodes[$0]?.displayName }, showUnmeasured: false))
     }
 
     private var forcedList: Bool { typeSize.isAccessibilitySize || voiceOver }
@@ -134,7 +160,7 @@ struct MonitoringMatrixGrid: View {
         VStack(alignment: .leading, spacing: 0) {
             VStack(alignment: .leading, spacing: Spacing.xs) {
                 MonitoringMatrixLegend()
-                Text("\(matrix.rows.count) sources, \(matrix.columns.count) targets. Tap a name for its paths.")
+                Text("\(matrix.rows.count) sources, \(matrix.columns.count) targets. Open a source's or target's paths from the filter menu.")
                     .textRole(.chartAxis)
                     .foregroundStyle(.secondary)
             }
@@ -216,7 +242,8 @@ struct MonitoringMatrixGrid: View {
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .foregroundStyle(Color.accentText)
+                .foregroundStyle(pitch >= Spacing.minimumTarget ? Color.accentText : Color.secondary)
+                .allowsHitTesting(pitch >= Spacing.minimumTarget)
                 .accessibilityLabel("Paths to \(column.name)")
             }
         }
@@ -246,7 +273,8 @@ struct MonitoringMatrixGrid: View {
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .foregroundStyle(Color.accentText)
+                .foregroundStyle(pitch >= Spacing.minimumTarget ? Color.accentText : Color.secondary)
+                .allowsHitTesting(pitch >= Spacing.minimumTarget)
                 .accessibilityLabel("Paths from \(row.summary)")
             }
         }
