@@ -95,7 +95,7 @@ struct RenewSheet: View {
                         Text(machine.renewalDay?.formatted(locale: locale) ?? "No date")
                         if machine.renewalDay != nil {
                             Text(state.word.inventoryCapitalized)
-                                .textRole(.footnote)
+                                .font(TextRole.footnote.font)
                                 .foregroundStyle(state.inventoryTone.isProblem ? state.inventoryTone.word : Color.secondary)
                         }
                     }
