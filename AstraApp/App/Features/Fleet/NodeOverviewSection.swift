@@ -70,7 +70,8 @@ struct NodeOverviewSection: View {
             if let created = record.node.createdAt {
                 DetailRow(label: "Enrolled", value: "\(FleetAge.short(created) ?? "") ago", secondary: TimeDisplay.dateTime(created, mode: mode, locale: locale), copyable: false)
             }
-            if let since = record.node.statusSince {
+            // The server dates a never-reported node from its creation, so the row only adds anything when they differ.
+            if let since = record.node.statusSince, abs(since.timeIntervalSince(record.node.createdAt ?? since)) > 60 {
                 DetailRow(label: "Waiting since", value: "\(FleetAge.short(since) ?? "") ago", copyable: false)
             }
             if let used = record.node.tokenLastUsedAt {

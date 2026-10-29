@@ -66,9 +66,14 @@ struct CapabilityGatesScreen: View {
     private func row(_ gate: FleetCapabilityImpact) -> some View {
         NavigationLink(value: AppRoute.fleet(.gate(id: gate.capability))) {
             StatusRow(style: Self.style(gate), title: gate.capability, detail: gate.kindSentence,
-                      reason: gate.enforced && gate.refuseCount > 0 ? "Refuses \(gate.refuseCount) of \(gate.allowCount + gate.refuseCount) nodes" : nil,
-                      trailing: gate.enforced ? nil : "Would refuse \(gate.refuseCount)")
+                      reason: reason(gate))
         }
+    }
+
+    private func reason(_ gate: FleetCapabilityImpact) -> String? {
+        let total = gate.allowCount + gate.refuseCount
+        if gate.enforced { return gate.refuseCount > 0 ? "Refuses \(gate.refuseCount) of \(total) nodes" : nil }
+        return gate.refuseCount > 0 ? "Turning it on would refuse \(gate.refuseCount) of \(total) nodes" : "Turning it on would refuse no node"
     }
 
     static func style(_ gate: FleetCapabilityImpact) -> StatusStyle {

@@ -147,6 +147,8 @@ struct NodeSettingsSection: View {
             }
             .disabled(admin != nil)
             .frame(minHeight: Spacing.minimumTarget)
+            // The written value shows until the next read; from then on the server's state wins.
+            .onChange(of: model.record.loadedAt) { debugOverride = nil }
         } header: {
             Text("Diagnostics")
         }

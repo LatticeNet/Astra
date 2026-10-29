@@ -22,6 +22,7 @@ struct NodeIdentitySheet: View {
     @State private var loadError: String?
     @FocusState private var tagFieldFocused: Bool
     @State private var detent: PresentationDetent = .large
+    @State private var confirmingDiscard = false
 
     var body: some View {
         NavigationStack {
@@ -38,8 +39,14 @@ struct NodeIdentitySheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button(role: .close) { dismiss() }
-                        .disabled(saving)
+                    Button(role: .close) {
+                        if changes.isEmpty { dismiss() } else { confirmingDiscard = true }
+                    }
+                    .disabled(saving)
+                    .confirmationDialog("Discard your changes to this node?", isPresented: $confirmingDiscard, titleVisibility: .visible) {
+                        Button("Discard changes", role: .destructive) { dismiss() }
+                        Button("Keep editing", role: .cancel) {}
+                    }
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button(role: .confirm) {
@@ -95,7 +102,8 @@ struct NodeIdentitySheet: View {
                         .accessibilityHint("Removes the tag")
                     }
                 }
-                HStack {
+                // At accessibility sizes the field and Add stack, so they never read as one phrase.
+                (typeSize.isAccessibilitySize ? AnyLayout(VStackLayout(alignment: .leading, spacing: Spacing.s)) : AnyLayout(HStackLayout())) {
                     TextField("Add a tag", text: $newTag)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
@@ -103,6 +111,7 @@ struct NodeIdentitySheet: View {
                         .onSubmit(addTag)
                         .submitLabel(.done)
                     Button("Add", action: addTag)
+                        .buttonStyle(.bordered)
                         .disabled(newTag.trimmingCharacters(in: .whitespaces).isEmpty)
                 }
                 .frame(minHeight: Spacing.minimumTarget)
