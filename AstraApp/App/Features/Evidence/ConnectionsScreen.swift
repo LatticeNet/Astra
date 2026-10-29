@@ -45,7 +45,7 @@ struct ConnectionsScreen: View {
                     filterMenu
                     Menu {
                         Button("Open on web", systemImage: "safari") { router.openOnWeb(EvidenceCopy.explore(nodeID: query.nodeID)) }
-                        Button("Evidence", systemImage: "doc.text.magnifyingglass") { router.push(.evidence(.overview)) }
+                        Button("Evidence", systemImage: "doc.text.magnifyingglass") { router.show(.evidence(.overview)) }
                     } label: {
                         Label("More", systemImage: "ellipsis")
                     }
@@ -344,7 +344,7 @@ struct ConnectionsScreen: View {
             } description: {
                 Text("Connection records exist only where collection is on. Start a capture from Evidence; it stops by itself.")
             } actions: {
-                Button("Open Evidence") { router.push(.evidence(.overview)) }
+                Button("Open Evidence") { router.show(.evidence(.overview)) }
             }
         } else {
             ContentUnavailableView {

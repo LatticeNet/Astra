@@ -185,7 +185,7 @@ struct TerminalTranscriptScreen: View {
                 } description: {
                     Text("Only the operator who opened a session can read its transcript or close it. The server refused this one.")
                 } actions: {
-                    Button("Your sessions") { router.push(.terminal(.sessions(nodeID: nil))) }
+                    Button("Your sessions") { router.replaceTop(.terminal(.sessions(nodeID: nil))) }
                         .buttonStyle(.bordered)
                 }
             }
@@ -196,7 +196,7 @@ struct TerminalTranscriptScreen: View {
                 } description: {
                     Text("The server forgets an ended session after \(TerminalLimits.closedRetentionMinutes) minutes, and this link may name one it never held.")
                 } actions: {
-                    Button("Your sessions") { router.push(.terminal(.sessions(nodeID: nil))) }
+                    Button("Your sessions") { router.replaceTop(.terminal(.sessions(nodeID: nil))) }
                         .buttonStyle(.bordered)
                     Button("Open on web") { router.openOnWeb(.terminalSession(id: sessionID)) }
                 }

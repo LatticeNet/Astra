@@ -152,7 +152,7 @@ struct LogExplorerScreen: View {
                     .disabled(model.lines.isEmpty && !finding)
                     Menu {
                         Button("Open on web", systemImage: "safari") { router.openOnWeb(EvidenceCopy.rawLog(sourceID: source?.id)) }
-                        Button("Evidence", systemImage: "doc.text.magnifyingglass") { router.push(.evidence(.overview)) }
+                        Button("Evidence", systemImage: "doc.text.magnifyingglass") { router.show(.evidence(.overview)) }
                     } label: {
                         Label("More", systemImage: "ellipsis")
                     }
