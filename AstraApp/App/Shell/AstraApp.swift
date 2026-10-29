@@ -59,11 +59,11 @@ final class AppServices {
         if launch.demo, let auth = launch.auth {
             runner.authenticator = IntentAuth(mode: .stub(auth))
         }
-        runner.openFiled = { [router] ids, _ in
-            if ids.count == 1 {
+        runner.openFiled = { [router] ids, refused in
+            if ids.count == 1, refused.isEmpty {
                 router.present(.review(.single(ids[0])))
             } else {
-                router.present(.review(.batch(groupKey: "filed", ids: ids)))
+                router.present(.review(.batch(groupKey: "filed", ids: ids, refused: refused)))
             }
         }
         session.restore(launch: launch)

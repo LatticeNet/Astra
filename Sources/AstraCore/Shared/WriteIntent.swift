@@ -13,7 +13,7 @@ public enum ClientKind: Sendable, Hashable {
 }
 
 /// The object a write names, shown before the request and in the outcome.
-public struct ObjectRef: Sendable, Hashable, Identifiable {
+public struct ObjectRef: Sendable, Hashable, Codable, Identifiable {
     /// "node", "incident", "check", "approval" and so on.
     public var kind: String
     public var id: String

@@ -1,9 +1,11 @@
 import SwiftUI
 
 /// What the Review sheet opens: one approval, or one console event group.
+/// A batch a filing opened also carries the nodes the server refused, so
+/// BatchReview can list them beside what was filed.
 enum ReviewTarget: Hashable, Codable, Sendable {
     case single(String)
-    case batch(groupKey: String, ids: [String])
+    case batch(groupKey: String, ids: [String], refused: [ObjectFailure] = [])
 }
 
 /// The sheets other modules may open, through `Router.present` (section 2.4).
@@ -18,7 +20,7 @@ enum GlobalSheet: Identifiable, Hashable {
     var id: String {
         switch self {
         case .review(.single(let id)): "review:\(id)"
-        case .review(.batch(let key, _)): "batch:\(key)"
+        case .review(.batch(let key, _, _)): "batch:\(key)"
         case .maintenanceStart(let nodeID): "maintenanceStart:\(nodeID ?? "")"
         case .renew(let machineID): "renew:\(machineID)"
         case .demoModule(let name, let argument): "\(name):\(argument ?? "")"
@@ -34,8 +36,8 @@ struct GlobalSheetView: View {
         switch sheet {
         case .review(.single(let id)):
             ApprovalReviewSheet(approvalID: id)
-        case .review(.batch(let key, let ids)):
-            BatchReviewSheet(groupKey: key, approvalIDs: ids)
+        case .review(.batch(let key, let ids, let refused)):
+            BatchReviewSheet(groupKey: key, approvalIDs: ids, refused: refused)
         case .maintenanceStart(let nodeID):
             MaintenanceStartSheet(nodeID: nodeID)
         case .renew(let machineID):

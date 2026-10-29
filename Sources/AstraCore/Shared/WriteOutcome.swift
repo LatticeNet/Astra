@@ -22,7 +22,7 @@ public enum RefusalCode: Sendable, Hashable {
 }
 
 /// One object a bulk or plan write could not change, and why.
-public struct ObjectFailure: Sendable, Hashable {
+public struct ObjectFailure: Sendable, Hashable, Codable {
     public var object: ObjectRef
     public var reason: String
 

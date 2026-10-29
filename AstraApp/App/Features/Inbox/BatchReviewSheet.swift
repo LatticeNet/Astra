@@ -6,6 +6,8 @@ import SwiftUI
 struct BatchReviewSheet: View {
     let groupKey: String
     let approvalIDs: [String]
+    /// Nodes the filing that opened this sheet could not file for.
+    let refused: [ObjectFailure]
 
     @State private var model: InboxBatchModel
     @Environment(SessionStore.self) private var session
@@ -21,9 +23,10 @@ struct BatchReviewSheet: View {
     @Environment(\.timeZoneMode) private var mode
     @Environment(\.locale) private var locale
 
-    init(groupKey: String, approvalIDs: [String]) {
+    init(groupKey: String, approvalIDs: [String], refused: [ObjectFailure] = []) {
         self.groupKey = groupKey
         self.approvalIDs = approvalIDs
+        self.refused = refused
         _model = State(initialValue: InboxBatchModel(groupKey: groupKey, ids: approvalIDs))
     }
 
@@ -123,6 +126,22 @@ struct BatchReviewSheet: View {
                     .foregroundStyle(.secondary)
                 if let writer = model.writer {
                     Text("Filed by \(writer == ApprovalEvents.systemWriter ? "Lattice" : writer)").textRole(.footnote)
+                }
+            }
+        }
+        if !refused.isEmpty {
+            InboxCard(title: refused.count == 1 ? "1 node not filed" : "\(refused.count) nodes not filed") {
+                VStack(alignment: .leading, spacing: Spacing.s) {
+                    ForEach(refused, id: \.object.id) { failure in
+                        Label {
+                            Text("\(failure.object.name): \(failure.reason)")
+                                .fixedSize(horizontal: false, vertical: true)
+                        } icon: {
+                            Image(systemName: "xmark.octagon.fill").foregroundStyle(Color.statusFailFill)
+                        }
+                        .accessibilityElement(children: .ignore)
+                        .accessibilityLabel("Not filed for \(failure.object.name). \(failure.reason)")
+                    }
                 }
             }
         }
