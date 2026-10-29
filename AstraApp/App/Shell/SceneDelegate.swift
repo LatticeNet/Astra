@@ -27,6 +27,9 @@ final class SceneDelegate: NSObject, UIWindowSceneDelegate {
 
     func sceneWillResignActive(_ scene: UIScene) {
         shield?.sceneWillResignActive()
+        // A held step-up grant must not outlive leaving the app or the lock,
+        // or a reveal could skip the code step after it.
+        AppServices.shared.stepUp.invalidate()
     }
 
     func sceneDidBecomeActive(_ scene: UIScene) {

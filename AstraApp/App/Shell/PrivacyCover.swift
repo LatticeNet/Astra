@@ -27,12 +27,12 @@ final class ShieldController {
         // A cold launch with the lock on starts locked.
         if DeviceLockSettings.requireFaceID {
             model.locked = true
-            window.isHidden = false
+            show()
         }
     }
 
     func sceneWillResignActive() {
-        window.isHidden = false
+        show()
         // The Face ID prompt itself resigns the app; that is not leaving it.
         if !unlocking, resignedAt == nil { resignedAt = Date() }
     }
@@ -44,7 +44,7 @@ final class ShieldController {
         let intervalPassed = away.map { $0 >= DeviceLockSettings.lockAfter } ?? false
         if model.locked || (DeviceLockSettings.requireFaceID && intervalPassed) {
             model.locked = true
-            window.isHidden = false
+            show()
             // The keyboard sits above every app window, so a field focused
             // under the lock (the reveal code) would stay on screen and keep
             // taking input. End editing in the windows below first.
@@ -53,8 +53,38 @@ final class ShieldController {
             }
             unlock()
         } else {
-            window.isHidden = true
+            hide()
         }
+    }
+
+    /// Shows the cover. While locked it also takes VoiceOver and the keyboard:
+    /// covering a window does not remove its accessibility elements, so the
+    /// shield is made key and modal and VoiceOver is told the screen changed.
+    /// The cover alone, shown while the app is inactive, leaves the app window
+    /// key so a focused field keeps its keyboard on return.
+    private func show() {
+        window.isHidden = false
+        guard model.locked, !window.isKeyWindow else { return }
+        window.accessibilityViewIsModal = true
+        window.makeKey()
+        UIAccessibility.post(notification: .screenChanged, argument: window)
+    }
+
+    /// Lifts the cover and gives the keyboard and VoiceOver back to the app.
+    private func hide() {
+        guard !window.isHidden else { return }
+        let wasKey = window.isKeyWindow
+        window.isHidden = true
+        window.accessibilityViewIsModal = false
+        guard wasKey else { return }
+        appWindow?.makeKey()
+        UIAccessibility.post(notification: .screenChanged, argument: nil)
+    }
+
+    /// SwiftUI's window: the scene's normal-level window that is neither the
+    /// shield nor the banner.
+    private var appWindow: UIWindow? {
+        window.windowScene?.windows.first { $0 !== window && $0.windowLevel == .normal && !($0 is BannerWindow) }
     }
 
     private func unlock() {
@@ -67,7 +97,7 @@ final class ShieldController {
             case .confirmed:
                 model.locked = false
                 model.message = nil
-                window.isHidden = true
+                hide()
             case .cancelled:
                 model.message = nil
             case .failed(let message):
