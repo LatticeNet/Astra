@@ -1,65 +1,52 @@
 # Lattice iOS client (Astra)
 
-The Xcode project and target stay `Astra`. The installed display name is `Lattice`. This is the phone approval device for the same Lattice control plane as the Vue console. Plugin authoring, Terminal, Store, Publishing, DNS, and host mutation stay on the web.
+The Xcode project and target stay `Astra`. The installed display name is `Lattice`. It is the iPhone client for the same Lattice control plane as the web console: triage, decide, investigate and make targeted changes away from a desk. Long-form authoring, credentials shown once and plugin UIs too rich for a phone open the exact console route instead ("Open on web").
+
+Status: the v3 foundation (shell, design system, write and reveal gates, sessions, onboarding and Settings) is in place, and the module screens arrive module by module in the order of section 9.3. Until a module lands, its screens show "Not built yet".
+
+The v3 design specification is [docs/design/astra-v3-design.md](docs/design/astra-v3-design.md). How the code is organized: [docs/architecture.md](docs/architecture.md) and [docs/project-structure.md](docs/project-structure.md).
 
 ## Information architecture
 
-Three tabs:
+Five tabs:
 
-- **Inbox.** Plans that still need a person (not auto-approved linemeta) and Attention (node honesty, waiting apply, monitor down, inventory due). Empty Inbox is last refresh, last notify, quiet since.
-- **Fleet.** Searchable nodes with honesty words (`never_reported` / `online` / `degraded` / `offline` / `disabled`), a compact map, and node glance (facts, SSH Guard posture read, capability admission, waiting tasks, Open on web).
-- **More.** Audit, tasks, inventory, monitors, logs, network read views, notify channels, account, settings, About, Open console.
+- **Inbox.** The verdict line, active incidents, approvals that need a person, attention rows and renewals due soon.
+- **Fleet.** Nodes, groups, the map and machines.
+- **Monitor.** Overview, paths, checks and incidents, with one time window for all of them.
+- **Activity.** Tasks, audit, approvals history and the notify Sent log.
+- **Browse.** Every other console page in a directory that mirrors the console sidebar, and search across pages and objects.
 
-Review is a sheet. It loads `GET /api/network/approvals?id=`, hashes the plan body on screen, and sends that `plan_sha256`. Face ID or the device passcode gates approve and reject. Cancelled authentication does not POST. Reject and dismiss are first-class. Stale rows are inspect-only.
-
-Deep links use the custom URL scheme `lattice://approvals/{id}`, `lattice://nodes/{id}`, and `lattice://monitors/{id}`. Universal Links wait for a signed build.
+Settings opens from the button on every tab root. Deep links use `lattice://` for every object (for example `lattice://approvals/{id}`, `lattice://nodes/{id}`, `lattice://incidents/{id}`); console links to the configured server open natively too. Universal Links wait for a signed build.
 
 ## Approval contract
 
-Listing omits `plan` unless `include=plan`. Every row still has `plan_sha256`. Review must load by id and hash that body. Never hash an empty list-row plan. After approve, reload by id to read `waiting`.
+Review loads the approval by id (`GET /api/network/approvals?id=`), hashes the plan body that is on screen, and sends that `plan_sha256`. Listing rows omit the body, so a listing row's plan is never hashed. Face ID or the device passcode gates approve, reject and dismiss; cancelled authentication sends nothing. Stale rows are inspect-only. An approval the app cannot decode turns Approve off ("this app is behind the server"). After a decision the sheet reloads by id and checks that the transition really happened, because the server answers 200 with the unchanged view when someone else already decided.
 
-Inbox is human-pending only. Auto-approved `singbox-linemeta` rows with actor `lattice-server` or `system` do not badge.
+## Writes
 
-## Auth
+Every write states its object, scope and consequence before it runs. Consequential writes ask in a dialog; privileged ones open a confirmation sheet and need Face ID; irreversible ones show the server's dry run where it has one and ask for the object's name. Plan filings need no Face ID because the approval is the gate. Secrets (knock sequences, share URLs, provider console links) need a signed-in session and your authenticator code, are shown once, and are never stored.
 
-Prefer a dedicated PAT in Keychain. Minimum scopes: `network:apply`, `node:read`, `audit:read`, `task:read`. Do not mint `notify:send`. Session plus TOTP remains a fallback.
+## Credentials
+
+Prefer a dedicated API token, kept in the Keychain on this device only. Settings > Connection > Token scopes shows what the token can and cannot do and offers three presets (Triage, Operator, Operator plus root) to paste into the console's token form. Never give a phone token `secrets:reveal`, `notify:send` or `token:admin`. A signed-in session (password plus authenticator code) is optional and is used only for reveals and session-only account pages; it is held in memory unless you choose to keep it behind Face ID.
 
 ## Alerting
 
-The Lattice server notify channel (including Bark on the server) is the alerter. This app does not send Bark and does not run `MonitorEngine` as a client-side dispatcher. `BGAppRefresh` may refresh the Inbox badge only. The system decides if it runs.
-
-## Directory
-
-- `Astra.xcodeproj/` — iOS app. Target and scheme stay `Astra`.
-- `AstraApp/App/` — SwiftUI shell (Inbox / Fleet / More, Review sheet).
-- `Sources/AstraCore/` — testable core, no SwiftUI. New files are auto-included by SwiftPM and must also be added to the Xcode target.
-- `Checks/AstraCoreCheck/` — golden fixtures for the live approval API, nodes, SSH Guard, capabilities, deep links.
-- `scripts/` — local checks, iOS doctor, device build, development archive.
-
-Details: [docs/project-structure.md](docs/project-structure.md).
+The Lattice server's notify channels are the alerter. This app does not send notifications. If you turn on badge refresh, iOS refreshes the app badge in the background when it chooses, which may be hours apart, and Inbox shows when the badge data came from.
 
 ## First run
 
-1. Open `Astra.xcodeproj`.
-2. Choose your Apple Team under Signing & Capabilities.
-3. If `org.roobli.cdcd.Astra` is taken, change the bundle identifier and keep it stable.
-4. Connect an iPhone (iOS 16+) or use the simulator.
-5. Run. Open **Lattice**, then **More → Settings**.
-6. Enter the Lattice server URL and a PAT with the minimum scopes above, or log in with username, password, and TOTP.
-7. Test the connection. Open Inbox.
+1. Open `Astra.xcodeproj` and choose your Apple team under Signing & Capabilities. Keep the bundle identifier stable once installed.
+2. Run on an iPhone with iOS 26 or the simulator.
+3. Connect to a server: enter its address, then paste an API token (or sign in with password and code). Or choose "Explore with demo data", where every name, address and token is invented.
 
 ## Verify (no device required)
 
 ```sh
 swift run --scratch-path .build AstraCoreCheck
-
-xcodebuild -project Astra.xcodeproj -scheme Astra \
-  -sdk iphonesimulator -configuration Debug \
-  -destination 'generic/platform=iOS Simulator' \
-  -derivedDataPath DerivedData/ci \
-  CODE_SIGNING_ALLOWED=NO build
+scripts/sim.sh build
+scripts/sim.sh demo 'lattice://monitor?segment=incidents'
+scripts/sim.sh shot incidents --dark --text ax5
 ```
 
-Full local checks: `./scripts/check-local.sh`. Device install, Face ID, and a server-sent Bark tap are manual. Do not claim background alerting works from this app.
-
-Device build: [docs/ios-build-deploy.md](docs/ios-build-deploy.md), [docs/install-on-iphone.md](docs/install-on-iphone.md).
+Face ID, VoiceOver, Voice Control and touch are checked on a device with [docs/design/operator-checklist.md](docs/design/operator-checklist.md). Device build: [docs/ios-build-deploy.md](docs/ios-build-deploy.md), [docs/install-on-iphone.md](docs/install-on-iphone.md).
