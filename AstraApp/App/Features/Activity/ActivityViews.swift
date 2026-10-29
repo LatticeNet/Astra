@@ -319,3 +319,20 @@ enum ActivityPollKey {
         return hasher.finalize()
     }
 }
+
+/// The range menu for a list that filters on `since` only: the presets,
+/// without Custom, whose upper bound the server could not apply.
+struct ActivityPresetRangeMenu: View {
+    @Binding var selection: TimeRangeSelection
+
+    var body: some View {
+        Menu {
+            Picker("Range", selection: $selection) {
+                ForEach(TimeRangeSelection.presets, id: \.self) { Text($0.title).tag($0) }
+            }
+            .pickerStyle(.inline)
+        } label: {
+            Label("Range: \(selection.title)", systemImage: "calendar.badge.clock")
+        }
+    }
+}

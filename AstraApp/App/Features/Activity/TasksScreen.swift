@@ -18,7 +18,6 @@ struct TasksScreen: View {
 
     @SceneStorage(TasksScreen.queryKey) private var query = ""
     @SceneStorage(TasksScreen.rangeKey) private var rangeTitle = TimeRangeSelection.all.title
-    @State private var customRange: TimeRangeSelection?
     @State private var stable = ActivityStableList<LatticeTask>()
 
     var body: some View {
@@ -33,7 +32,7 @@ struct TasksScreen: View {
                     .accessibilityHint("Opens the console in the browser")
             }
             ToolbarItem(placement: .topBarTrailing) {
-                RangeMenu(selection: rangeBinding)
+                ActivityPresetRangeMenu(selection: rangeBinding)
             }
         }
         .onAppear(perform: consumeQuery)
@@ -50,14 +49,15 @@ struct TasksScreen: View {
 
     // MARK: Question
 
+    /// Presets only: the list has no upper bound, so a custom window could not be sent.
     private var range: TimeRangeSelection {
-        customRange ?? TimeRangeSelection.presets.first { $0.title == rangeTitle } ?? .all
+        TimeRangeSelection.presets.first { $0.title == rangeTitle } ?? .all
     }
 
     private var rangeBinding: Binding<TimeRangeSelection> {
         Binding(get: { range }, set: { value in
             windowAnchor = Date()
-            if case .custom = value { customRange = value } else { customRange = nil; rangeTitle = value.title }
+            rangeTitle = value.title
         })
     }
 
@@ -74,7 +74,7 @@ struct TasksScreen: View {
 
     private var filter: TasksListFilter {
         // The window is measured when it is chosen; a poll does not slide it.
-        TasksModel.filter(tokens, since: range.since(now: windowAnchor), until: range.until)
+        TasksModel.filter(tokens, since: range.since(now: windowAnchor))
     }
 
     @State private var windowAnchor = Date()
@@ -101,7 +101,6 @@ struct TasksScreen: View {
             if !subtitle.isEmpty {
                 FilterStateRow(text: "Showing runs matching \(subtitle)") {
                     query = ""
-                    customRange = nil
                     rangeTitle = TimeRangeSelection.all.title
                 }
             }

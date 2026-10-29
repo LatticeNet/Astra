@@ -256,21 +256,20 @@ private func checkTasksTokens() throws {
 }
 
 private func checkTasksFilter() throws {
-    let tokens = TasksTokens.parse("status:failed origin:approval node:n1", grammar: TasksModel.grammar)
-    let filter = TasksModel.filter(tokens, since: Date(timeIntervalSince1970: 1_000), until: Date(timeIntervalSince1970: 5_000))
+    let filter = TasksModel.filter(TasksTokens.parse("status:failed origin:approval,rerun node:n1 approval:ap", grammar: TasksModel.grammar), since: Date(timeIntervalSince1970: 1_000))
     let items = Dictionary(uniqueKeysWithValues: filter.query(limit: 50, offset: 50).queryItems.map { ($0.name, $0.value ?? "") })
     try expectEqual(items["status"], "failed", "status sent")
     try expectEqual(items["node_id"], "n1", "node sent")
     try expectEqual(items["limit"], "50", "limit always sent")
     try expect(items["since"] != nil, "since sent")
-    try expect(items["origin"] == nil, "origin is filtered on device")
+    try expectEqual(items["origin"], "approval,rerun", "origin sent as a comma list")
+    try expectEqual(items["approval_id"], "ap", "approval sent")
+    try expectEqual(items["offset"], "50", "offset sent")
 
     let match = try tasksTask(#"{"id":"a","targets":["n1"],"status":"failed","approval_id":"ap","origin":"approval","created_at":"1970-01-01T00:30:00Z"}"#)
     try expect(filter.matches(match), "a matching row")
     let direct = try tasksTask(#"{"id":"b","targets":["n1"],"status":"failed","origin":"direct","created_at":"1970-01-01T00:30:00Z"}"#)
-    try expect(!filter.matches(direct), "origin filtered on device")
-    let late = try tasksTask(#"{"id":"c","targets":["n1"],"status":"failed","approval_id":"ap","created_at":"1970-01-01T02:00:00Z"}"#)
-    try expect(!filter.matches(late), "custom upper bound filtered on device")
+    try expect(!filter.matches(direct), "origin guarded on device for an older server")
 
     let sorted = TasksModel.sorted([
         try tasksTask(#"{"id":"old","status":"finished","created_at":"2026-10-28T10:00:00Z"}"#),

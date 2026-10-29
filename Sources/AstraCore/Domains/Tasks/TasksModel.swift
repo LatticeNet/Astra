@@ -212,14 +212,15 @@ public enum TasksModel {
     /// What the Runs field asks for, as server filters plus the parts the
     /// Shared task query cannot send (origin, approval, an upper bound),
     /// which are applied on device.
-    public static func filter(_ tokens: TasksParsedTokens, since: Date?, until: Date?) -> TasksListFilter {
+    /// The list filters on `since` only and has no upper bound
+    /// (`TASK_RANGES`), so a range here is a start, never a window.
+    public static func filter(_ tokens: TasksParsedTokens, since: Date?) -> TasksListFilter {
         TasksListFilter(
             statuses: tokens.enums["status"] ?? [],
             nodeID: tokens.values["node"],
             origins: tokens.enums["origin"] ?? [],
             approvalID: tokens.values["approval"],
-            since: since,
-            until: until
+            since: since
         )
     }
 
@@ -290,35 +291,34 @@ public enum TasksOrigin: Sendable, Hashable {
     }
 }
 
-/// The Runs question: server filters and the parts filtered on device.
+/// The Runs question. Every part is a server filter (`parseTaskListFilter`),
+/// so the server's total counts what the question matches.
 public struct TasksListFilter: Sendable, Hashable {
     public var statuses: [String]
     public var nodeID: String?
     public var origins: [String]
     public var approvalID: String?
     public var since: Date?
-    public var until: Date?
 
-    public init(statuses: [String] = [], nodeID: String? = nil, origins: [String] = [], approvalID: String? = nil, since: Date? = nil, until: Date? = nil) {
+    public init(statuses: [String] = [], nodeID: String? = nil, origins: [String] = [], approvalID: String? = nil, since: Date? = nil) {
         self.statuses = statuses
         self.nodeID = nodeID
         self.origins = origins
         self.approvalID = approvalID
         self.since = since
-        self.until = until
     }
 
     public var isEmpty: Bool {
-        statuses.isEmpty && nodeID == nil && origins.isEmpty && approvalID == nil && since == nil && until == nil
+        statuses.isEmpty && nodeID == nil && origins.isEmpty && approvalID == nil && since == nil
     }
 
-    /// The server half. `limit` is always sent so the server pages.
-    public func query(limit: Int, offset: Int) -> TaskQuery {
-        TaskQuery(statuses: statuses, nodeID: nodeID, since: since, limit: limit, offset: offset)
+    /// The request (`taskListRequest`). `limit` is always sent so the server pages.
+    public func query(limit: Int, offset: Int) -> TasksListQuery {
+        TasksListQuery(statuses: statuses, nodeID: nodeID, origins: origins, approvalID: approvalID, since: since, limit: limit, offset: offset)
     }
 
-    /// Whether a row answers the question (`taskMatches`); the device half,
-    /// and a guard for a server that ignored a filter.
+    /// Whether a row answers the question (`taskMatches`): a guard for an
+    /// older server that ignored a filter.
     public func matches(_ task: LatticeTask) -> Bool {
         if !statuses.isEmpty, !statuses.contains(task.status == "running" ? "leased" : task.status) { return false }
         if !origins.isEmpty, !origins.contains(TasksModel.origin(of: task).word) { return false }
@@ -326,7 +326,6 @@ public struct TasksListFilter: Sendable, Hashable {
         if let approvalID, task.approvalID != approvalID { return false }
         let changed = [task.createdAt, task.startedAt, task.finishedAt].compactMap { $0 }.max()
         if let since, (changed ?? .distantPast) < since { return false }
-        if let until, (task.createdAt ?? .distantFuture) > until { return false }
         return true
     }
 }

@@ -158,6 +158,37 @@ public struct TasksResultsQuery: Sendable, Hashable {
     }
 }
 
+/// `GET /api/tasks` with every filter the server takes, `origin` and
+/// `approval_id` included.
+/// yagni: the Shared `TaskQuery` lacks origin and approval_id; this folds
+/// into it at the next integration window.
+public struct TasksListQuery: Sendable, Hashable {
+    public var statuses: [String]
+    public var nodeID: String?
+    public var origins: [String]
+    public var approvalID: String?
+    public var since: Date?
+    public var limit: Int
+    public var offset: Int
+
+    public init(statuses: [String] = [], nodeID: String? = nil, origins: [String] = [], approvalID: String? = nil, since: Date? = nil, limit: Int, offset: Int = 0) {
+        self.statuses = statuses
+        self.nodeID = nodeID
+        self.origins = origins
+        self.approvalID = approvalID
+        self.since = since
+        self.limit = limit
+        self.offset = offset
+    }
+
+    public var queryItems: [URLQueryItem] {
+        var items = TaskQuery(statuses: statuses, nodeID: nodeID, since: since, limit: limit, offset: offset).queryItems
+        if !origins.isEmpty { items.append(URLQueryItem(name: "origin", value: origins.joined(separator: ","))) }
+        if let approvalID, !approvalID.isEmpty { items.append(URLQueryItem(name: "approval_id", value: approvalID)) }
+        return items
+    }
+}
+
 /// One page of `GET /api/task-results`; a bare array from an older server is the whole answer.
 public struct TasksResultsPage: Sendable, Hashable {
     public var results: [TasksResultRow]
@@ -249,6 +280,11 @@ public extension LatticeClient {
             if page.results.isEmpty || offset >= page.total { return (rows, false) }
         }
         return (rows, true)
+    }
+
+    /// One page of the Runs list, always in the envelope form.
+    func tasksList(_ query: TasksListQuery) async throws -> TaskListResponse {
+        try await perform(TaskListResponse.self, path: "/api/tasks", query: query.queryItems)
     }
 
     /// One task by id. The list has no id filter, so this reads the newest
