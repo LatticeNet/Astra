@@ -22,6 +22,28 @@ final class Router {
         appState.paths[appState.selectedTab, default: []].append(route)
     }
 
+    /// Returns to `route` when it is already on the selected tab's stack, so
+    /// a link back to a screen below does not stack a second copy; pushes it
+    /// otherwise.
+    func show(_ route: AppRoute) {
+        let tab = appState.selectedTab
+        var path = appState.paths[tab, default: []]
+        if let index = path.lastIndex(of: route) {
+            path.removeSubrange(path.index(after: index)...)
+        } else {
+            path.append(route)
+        }
+        appState.paths[tab] = path
+    }
+
+    /// Leaves the top screen for `route`, for a dead end (a session that is
+    /// gone) whose way out should not stay under the next screen.
+    func replaceTop(_ route: AppRoute) {
+        let tab = appState.selectedTab
+        if appState.paths[tab]?.isEmpty == false { appState.paths[tab]?.removeLast() }
+        show(route)
+    }
+
     /// Selects a tab and, for a scoped tab, its segment. A query is handed to
     /// the scope root's search field once.
     func select(tab: AppTab, scope: String? = nil, query: String? = nil) {
