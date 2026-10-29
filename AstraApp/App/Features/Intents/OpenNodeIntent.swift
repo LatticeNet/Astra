@@ -35,7 +35,7 @@ struct OpenNodeIntent: OpenIntent {
 
     @MainActor
     func perform() async throws -> some IntentResult {
-        AppServices.shared.deepLinks.handle(Self.link(for: target))
+        await IntentsGate.open(Self.link(for: target))
         return .result()
     }
 }
