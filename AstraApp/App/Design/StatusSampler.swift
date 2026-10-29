@@ -25,6 +25,7 @@ struct StatusSampler: View {
                 }
             } else {
                 samples
+                shippedRows
             }
         }
         .background(Color(uiColor: .systemBackground))
@@ -70,6 +71,31 @@ struct StatusSampler: View {
                 }
             }
             .padding(Spacing.l)
+    }
+
+    /// The rows screens actually ship, so the gate checks the drawn word and
+    /// not only the vocabulary. Kept out of `samples` because IncidentRow
+    /// reads the ActionRunner, which the deuteranopia renderer cannot supply.
+    private var shippedRows: some View {
+        VStack(alignment: .leading, spacing: Spacing.s) {
+            Text("Shipped rows").font(.headline)
+            ForEach(Self.sampleNodes) { NodeRow(node: $0) }
+            ForEach(Self.samplePaths) { PathRow(path: $0, sourceName: "edge-tyo-1", targetName: "relay-fra-2") }
+            IncidentRow(incident: Incident(id: "i-crit", severity: "critical", state: "open"))
+            IncidentRow(incident: Incident(id: "i-ack", severity: "warning", state: "acknowledged"))
+        }
+        .padding(.horizontal, Spacing.l)
+        .padding(.bottom, Spacing.l)
+    }
+
+    private static let sampleNodes: [LatticeNode] = ["online", "degraded", "offline", "never_reported", "disabled"].compactMap { status in
+        let json = #"{"id":"n-\#(status)","name":"edge-\#(status)","status":"\#(status)","status_reason":"sing-box has been down","last_seen":"2026-10-29T00:00:00Z","metrics":{"cpu_percent":12},"host_facts":{}}"#
+        return try? JSONDecoder().decode(LatticeNode.self, from: Data(json.utf8))
+    }
+
+    private static let samplePaths: [PathView] = ["up", "down"].compactMap { state in
+        let json = #"{"source":"n1","target_node":"n2","target":"192.0.2.2:443","monitor_id":"m-\#(state)","method":"tcp","state":"\#(state)","loss":0}"#
+        return try? JSONDecoder().decode(PathView.self, from: Data(json.utf8))
     }
 
     /// Renders the samples and applies the severity 1.0 deuteranopia matrix of

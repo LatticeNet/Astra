@@ -25,7 +25,6 @@ struct IncidentRow: View {
             style: style,
             title: incident.displayTitle,
             detail: detail(now: now),
-            trailing: style.word,
             accessibilityPhrase: "\(incident.displayTitle), \(style.word)"
         )
         .swipeActions(edge: .leading, allowsFullSwipe: true) {
@@ -44,7 +43,7 @@ struct IncidentRow: View {
         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
             if actions.snooze, let onSnooze {
                 Button("Snooze", systemImage: "moon.zzz") { onSnooze(incident) }
-                    .tint(.indigo)
+                    .tint(.statusQuiet)
             }
         }
     }
@@ -183,7 +182,6 @@ struct TaskRow: View {
             style: style,
             title: task.id,
             detail: [progress, task.createdAt.map { RelativeDateFormatter.string(from: $0) }].compactMap { $0 }.joined(separator: ", "),
-            trailing: style.word,
             titleIsIdentifier: true,
             accessibilityPhrase: "Task \(task.id), \(style.word)"
         )

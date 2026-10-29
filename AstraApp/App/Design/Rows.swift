@@ -3,7 +3,9 @@ import UIKit
 
 /// The one row for objects with a state (section 4.5). The layout follows the
 /// Dynamic Type category, never the content width, so a whole list switches
-/// together.
+/// together. Every state shows its symbol and its word (4.2): the word leads
+/// the detail line, colored for problems and secondary for healthy and quiet
+/// states (4.1). `trailing` is for a metric, never the state word.
 struct StatusRow: View {
     let style: StatusStyle
     let title: String
@@ -30,8 +32,8 @@ struct StatusRow: View {
             }
             VStack(alignment: .leading, spacing: Spacing.xxs) {
                 titleLine(accessible: accessible)
-                if let detail {
-                    Text(detail)
+                if let statusLine {
+                    statusLine
                         .textRole(.rowDetail)
                         .lineLimit(accessible ? nil : 2)
                 }
@@ -65,6 +67,18 @@ struct StatusRow: View {
                 .textRole(.rowTitle)
                 .lineLimit(2)
                 .truncationMode(titleIsIdentifier ? .middle : .tail)
+        }
+    }
+
+    /// The state word followed by the detail, or whichever of the two exists.
+    private var statusLine: Text? {
+        let word = style.word.isEmpty ? nil : Text(style.word).foregroundStyle(style.tone.word)
+        let detail = detail?.isEmpty == false ? detail : nil
+        switch (word, detail) {
+        case let (word?, detail?): return Text("\(word) · \(detail)")
+        case let (word?, nil): return word
+        case let (nil, detail?): return Text(detail)
+        case (nil, nil): return nil
         }
     }
 
