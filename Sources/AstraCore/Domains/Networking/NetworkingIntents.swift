@@ -11,6 +11,9 @@ public enum NetworkingIntents {
     public static let dnsAdmin = "dns:admin"
     public static let measureScopes = ["dns:admin", "monitor:admin"]
     public static let ddnsAdmin = "ddns:admin"
+    /// Publish IPs and Run now read GET /api/nodes (node:read) for their dry run.
+    public static let publishScopes = ["dns:admin", "node:read"]
+    public static let ddnsRunScopes = ["ddns:admin", "node:read"]
     public static let geoAdmin = "geo:admin"
     public static let tunnelAdmin = "tunnel:admin"
     public static let acceptLockoutID = "accept_lockout_risk"
@@ -154,7 +157,7 @@ public enum NetworkingIntents {
             tier: .t3,
             verb: "Publish the addresses of",
             object: ObjectRef(kind: "DNS deployment", id: id, name: name),
-            scopes: [dnsAdmin],
+            scopes: publishScopes,
             consequence: "Writes the node's current address to the DNS provider for \(host). Resolvers see the new record within its TTL. This changes a record outside Lattice.",
             affected: [ObjectRef(kind: "node", id: nodeID, name: deployment.nodeDisplayName)],
             dryRun: { client in
@@ -234,7 +237,7 @@ public enum NetworkingIntents {
             tier: .t3,
             verb: "Run DDNS profile",
             object: ObjectRef(kind: "DDNS profile", id: id, name: name),
-            scopes: [ddnsAdmin],
+            scopes: ddnsRunScopes,
             consequence: "Writes \(domains.isEmpty ? "its records" : domains) at the DNS provider now instead of waiting for the next sweep. This changes records outside Lattice.",
             dryRun: { client in
                 async let nodes = client.fetchNodes()

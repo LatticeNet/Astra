@@ -417,6 +417,8 @@ private func checkNetworkingWrites() async throws {
     // Publish: the preview is computed on the phone and labelled as such.
     let publish = NetworkingIntents.publishDNS(publicDNS)
     try expectEqual(publish.tier, .t3, "publish is T3")
+    try expectEqual(publish.scopes, ["dns:admin", "node:read"], "publish declares the node:read its dry run needs")
+    try expect(NetworkingIntents.ddnsRunScopes.contains("node:read"), "Run now declares the node:read its dry run needs")
     let flow = WriteFlow(intent: publish, client: client, authenticator: NetworkingAuthStub(outcome: .confirmed))
     let report = try expectUnwrapped(try await flow.dryRun(), "publish preview")
     try expect(report.lines.allSatisfy { $0.group?.hasPrefix("Computed on this iPhone") ?? false }, "every preview line is labelled as computed on this iPhone")

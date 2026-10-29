@@ -31,7 +31,7 @@ struct DDNSProfileScreen: View {
             ToolbarItem(placement: .topBarTrailing) {
                 NetworkingMoreMenu(link: NetworkingCopy.link(.ddnsProfile(id: id), fallback: "lattice://ddns/\(id)"), web: .ddnsProfile(id: id)) {
                     if let profile {
-                        NetworkingGatedButton(title: "Run now", systemImage: "play.circle", blocked: adminBlocked) { run(profile) }
+                        NetworkingGatedButton(title: "Run now", systemImage: "play.circle", blocked: runBlocked) { run(profile) }
                         Button("Edit on web", systemImage: "square.and.pencil") { router.openOnWeb(.ddnsProfile(id: id)) }
                         Section {
                             NetworkingGatedButton(title: "Delete profile", systemImage: "trash", blocked: adminBlocked, role: .destructive) { delete(profile) }
@@ -53,6 +53,7 @@ struct DDNSProfileScreen: View {
     private var profile: DDNSProfile? { store.ddns.value?.first { $0.id == id } }
     private var row: NetworkingDDNSRow? { profile.map { NetworkingDDNSRow(profile: $0, node: nodes.nodes[$0.nodeID], now: Date()) } }
     private var adminBlocked: String? { store.blocked([NetworkingIntents.ddnsAdmin]) }
+    private var runBlocked: String? { store.blocked(NetworkingIntents.ddnsRunScopes) }
 
     @ViewBuilder
     private func detail(_ profile: DDNSProfile) -> some View {
@@ -104,7 +105,7 @@ struct DDNSProfileScreen: View {
                     DetailRow(label: "\(record.domain) \(record.type)", value: record.previous.isEmpty ? "\(record.value), new" : (record.previous == record.value ? "\(record.value), unchanged" : "\(record.value), was \(record.previous)"), copyable: false)
                 }
                 NetworkingActionRow(title: "Run now", systemImage: "play.circle",
-                                    detail: "Writes these records at the provider now", blocked: adminBlocked) { run(profile) }
+                                    detail: "Writes these records at the provider now", blocked: runBlocked) { run(profile) }
             } header: {
                 Label("Run now writes, computed on this iPhone", systemImage: "iphone")
             } footer: {

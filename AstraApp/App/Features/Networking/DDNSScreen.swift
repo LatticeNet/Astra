@@ -108,7 +108,7 @@ struct DDNSScreen: View {
     }
 
     private func rowView(_ row: NetworkingDDNSRow) -> some View {
-        let blocked = store.blocked([NetworkingIntents.ddnsAdmin])
+        let blocked = store.blocked(NetworkingIntents.ddnsRunScopes)
         return NavigationLink(value: AppRoute.networking(.ddnsProfile(id: row.id))) {
             NetworkingDDNSRowView(row: row)
         }

@@ -263,7 +263,7 @@ struct DNSDeploymentScreen: View {
     }
 
     private func publishBlocked(_ deployment: NetworkingDNSDeployment) -> String? {
-        if let blocked = store.blocked([NetworkingIntents.dnsAdmin]) { return blocked }
+        if let blocked = store.blocked(NetworkingIntents.publishScopes) { return blocked }
         if deployment.disabled { return "The deployment is disabled" }
         if deployment.hostname.isEmpty { return "The deployment has no hostname to publish" }
         if !deployment.hasCredential { return "No provider credential is stored" }
