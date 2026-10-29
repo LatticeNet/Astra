@@ -9,15 +9,33 @@ struct StubScreen: View {
     var showsTitle = true
 
     var body: some View {
-        let content = ContentUnavailableView {
-            Label("Not built yet", systemImage: "hammer")
-        } description: {
-            Text("\(title) (\(screenID)) arrives with its module.")
+        let content = WholeScreenState {
+            ContentUnavailableView {
+                Label("Not built yet", systemImage: "hammer")
+            } description: {
+                Text("\(title) (\(screenID)) arrives with its module.")
+            }
         }
         if showsTitle {
             content.navigationTitle(title)
         } else {
             content
+        }
+    }
+}
+
+/// Hosts a whole-screen state. When it fits it sits centered as before; when
+/// it does not (a short screen at accessibility sizes) it scrolls, so its
+/// actions stay reachable and the large title collapses as it does over a
+/// list instead of rendering under the top bar's edge effect.
+struct WholeScreenState<Content: View>: View {
+    @ViewBuilder let content: Content
+
+    var body: some View {
+        ViewThatFits(in: .vertical) {
+            content
+            ScrollView { content }
+                .scrollBounceBehavior(.basedOnSize)
         }
     }
 }
@@ -50,14 +68,16 @@ struct ScopeDeniedScreen: View {
     @Environment(Router.self) private var router
 
     var body: some View {
-        ContentUnavailableView {
-            Label(AccessState.denied(scope: scope).text, systemImage: "lock")
-        } description: {
-            Text("Ask for a token that includes \(scope), or check what this one covers.")
-        } actions: {
-            Button("Token scopes") { router.openSettings([.page(.scopes)]) }
-                .buttonStyle(.bordered)
-            Button("Manage tokens on web") { router.openOnWeb(.tokens) }
+        WholeScreenState {
+            ContentUnavailableView {
+                Label(AccessState.denied(scope: scope).text, systemImage: "lock")
+            } description: {
+                Text("Ask for a token that includes \(scope), or check what this one covers.")
+            } actions: {
+                Button("Token scopes") { router.openSettings([.page(.scopes)]) }
+                    .buttonStyle(.bordered)
+                Button("Manage tokens on web") { router.openOnWeb(.tokens) }
+            }
         }
     }
 }
@@ -92,20 +112,24 @@ struct ResourceView<Value: Sendable, Content: View>: View {
         case .denied(let scope):
             ScopeDeniedScreen(scope: scope.isEmpty ? "the scope this screen needs" : scope)
         case .companionBehind(let surface):
-            ContentUnavailableView {
-                Label("This app is behind the server", systemImage: "exclamationmark.triangle")
-            } description: {
-                Text("\(surface) could not be read.")
-            } actions: {
-                Button("Reload", action: retry)
+            WholeScreenState {
+                ContentUnavailableView {
+                    Label("This app is behind the server", systemImage: "exclamationmark.triangle")
+                } description: {
+                    Text("\(surface) could not be read.")
+                } actions: {
+                    Button("Reload", action: retry)
+                }
             }
         case .failed(let error, nil, _):
-            ContentUnavailableView {
-                Label("Could not load \(noun)", systemImage: "exclamationmark.triangle")
-            } description: {
-                Text(error.localizedDescription)
-            } actions: {
-                Button("Retry", action: retry).buttonStyle(.bordered)
+            WholeScreenState {
+                ContentUnavailableView {
+                    Label("Could not load \(noun)", systemImage: "exclamationmark.triangle")
+                } description: {
+                    Text(error.localizedDescription)
+                } actions: {
+                    Button("Retry", action: retry).buttonStyle(.bordered)
+                }
             }
         default:
             if let value = state.value {
