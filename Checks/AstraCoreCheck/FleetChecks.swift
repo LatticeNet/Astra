@@ -166,6 +166,7 @@ private func checkFleetDemoReads() async throws {
     let network = try await client.fleetNodeNetwork(nodeID: tokyo)
     try expectEqual(network.inbound?.firewallTitle, "NetGuard", "Tokyo edge is under NetGuard")
     try expect(!network.outboundRules.isEmpty, "rules=1 returns the ruleset")
+    try expect(!network.outboundRules.contains { $0.hasPrefix("type ") }, "the chain hook line is not a rule")
     try expectEqual(network.outbound?.applying.count, 2, "baseline and group policy apply")
     let home = try await client.fleetNodeNetwork(nodeID: DemoWorld.node("home-nas").id)
     try expectEqual(home.outbound?.effectiveTitle, "No outbound policy", "home node has no outbound policy")

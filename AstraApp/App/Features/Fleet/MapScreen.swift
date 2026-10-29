@@ -13,6 +13,7 @@ struct MapScreen: View {
     @Environment(FleetStore.self) private var store
     @Environment(ChangeLog.self) private var changes
     @Environment(Router.self) private var router
+    @Environment(AppState.self) private var appState
     @Environment(\.verticalSizeClass) private var verticalSizeClass
     @Environment(\.accessibilityVoiceOverEnabled) private var voiceOver
     @SceneStorage(MapScreen.modeKey) private var mode = "map"
@@ -20,6 +21,7 @@ struct MapScreen: View {
     @SceneStorage(MapScreen.allPathsKey) private var allPaths = false
     @State private var selected: FleetMapCluster?
     @State private var position: MapCameraPosition = .automatic
+    @State private var framed = false
 
     var body: some View {
         FleetListState(state: store.geo, noun: "the map", retry: { Task { await refresh() } }) { nodes in
@@ -32,6 +34,19 @@ struct MapScreen: View {
         .polling(.paths, version: changes.version([.nodes, .paths])) { await refresh() }
         .onChange(of: latency) { Task { await refresh() } }
         .toolbar { toolbar }
+        .onAppear { consumeQuery() }
+        .onChange(of: appState.pendingQuery[FleetScope.map.rawValue]) { consumeQuery() }
+    }
+
+    /// `lattice://fleet?scope=map&q=layer:latency` turns the arcs on, as the
+    /// console's `layer=latency` does; `list` and `all` pick the view and paths.
+    private func consumeQuery() {
+        guard let query = appState.consumeQuery(FleetScope.map.rawValue)?.lowercased() else { return }
+        let words = Set(query.split(whereSeparator: { $0 == " " || $0 == "," }).map(String.init))
+        if words.contains("layer:latency") || words.contains("latency") { latency = true }
+        if words.contains("list") { mode = "list" }
+        if words.contains("map") { mode = "map" }
+        if words.contains("all") { allPaths = true }
     }
 
     private func refresh() async -> Bool {
@@ -97,6 +112,15 @@ struct MapScreen: View {
             }
         }
         .mapStyle(.standard(elevation: .flat, pointsOfInterest: .excludingAll))
+        .task(id: clusters.count) {
+            // Frame every located node once; after that the operator's pan and zoom stay.
+            guard !framed, let fit = FleetMapRegion.fitting(latitudes: clusters.map(\.latitude), longitudes: clusters.map(\.longitude)) else { return }
+            framed = true
+            position = .region(MKCoordinateRegion(
+                center: CLLocationCoordinate2D(latitude: fit.centerLatitude, longitude: fit.centerLongitude),
+                span: MKCoordinateSpan(latitudeDelta: fit.latitudeDelta, longitudeDelta: fit.longitudeDelta)
+            ))
+        }
         .mapControls { MapCompass() }
         .overlay(alignment: .top) {
             if latency { FleetArcLegend(denied: deniedPaths).padding(.top, Spacing.s) }

@@ -341,10 +341,10 @@ public struct FleetNetworkRuleset: Decodable, Equatable, Sendable {
         reason = try c.decodeIfPresent(String.self, forKey: .reason) ?? ""
     }
 
-    /// The ruleset's statements, one per line, without blank lines and braces.
+    /// The ruleset's rules, one per line, without blank lines, braces and the chain's hook line.
     public var ruleLines: [String] {
         ruleset.split(separator: "\n").map { $0.trimmingCharacters(in: .whitespaces) }
-            .filter { !$0.isEmpty && $0 != "}" && !$0.hasSuffix("{") }
+            .filter { !$0.isEmpty && $0 != "}" && !$0.hasSuffix("{") && !$0.hasPrefix("type ") }
     }
 }
 

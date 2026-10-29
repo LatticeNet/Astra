@@ -270,25 +270,33 @@ struct FleetNodeHeader: View {
         let node = record.node
         let honesty = node.honesty
         let style = StatusStyle.node(honesty)
+        let behind = FleetAgentVersion.newer(than: node.agentVersion, in: fleetVersions)
         Section {
             FleetHonestyRow(
                 style: style,
                 headline: headline(node),
-                reason: honesty == .degraded || honesty == .offline ? (node.statusReason.isEmpty ? nil : node.statusReason) : nil
+                detail: detail(node),
+                reason: honesty == .degraded || honesty == .offline ? (node.statusReason.isEmpty ? nil : node.statusReason) : nil,
+                behind: behind
             )
-            if let seen = node.lastSeen {
-                DetailRow(label: "Last seen", value: "\(FleetAge.short(seen) ?? "") ago",
-                          secondary: TimeDisplay.clock(seen, mode: mode, locale: locale), copyable: false)
-            }
-            if let agent = node.agentVersion, !agent.isEmpty {
-                let behind = FleetAgentVersion.newer(than: agent, in: fleetVersions)
-                agentRow(agent, behind: behind)
-            }
-            let place = [node.geo?.city, node.geo?.country, record.facts.provider.isEmpty ? nil : record.facts.provider]
-                .compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: ", ")
-            if !place.isEmpty { DetailRow(label: "Place", value: place, copyable: false) }
             if let ip = node.publicIP, !ip.isEmpty { DetailRow(label: "Public IP", value: ip, monospaced: true) }
         }
+    }
+
+    /// "seen 15s ago at 02:40, agent 0.3.10, Tokyo, JP, Northwind Cloud"
+    private func detail(_ node: LatticeNode) -> String {
+        var parts: [String] = []
+        if let seen = node.lastSeen {
+            let when = Date().timeIntervalSince(seen) > 20 * 3_600
+                ? TimeDisplay.dateTime(seen, mode: mode, locale: locale)
+                : TimeDisplay.clock(seen, mode: mode, locale: locale)
+            parts.append("seen \(FleetAge.short(seen) ?? "") ago at \(when)")
+        }
+        if let agent = node.agentVersion, !agent.isEmpty { parts.append("agent \(agent)") }
+        let place = [node.geo?.city, node.geo?.country, record.facts.provider.isEmpty ? nil : record.facts.provider]
+            .compactMap { $0 }.filter { !$0.isEmpty }
+        parts += place
+        return parts.joined(separator: ", ")
     }
 
     private func headline(_ node: LatticeNode) -> String {
@@ -302,46 +310,6 @@ struct FleetNodeHeader: View {
         }
     }
 
-    @ViewBuilder
-    private func agentRow(_ agent: String, behind: Int) -> some View {
-        if behind > 0 {
-            FleetBehindRow(agent: agent, behind: behind)
-        } else {
-            DetailRow(label: "Agent", value: agent, copyable: false)
-        }
-    }
-}
-
-/// The agent row when newer agents run elsewhere in the fleet: the version
-/// and "2 behind" in the warning style, with its own symbol.
-struct FleetBehindRow: View {
-    let agent: String
-    let behind: Int
-
-    @Environment(\.dynamicTypeSize) private var typeSize
-
-    var body: some View {
-        let accessible = typeSize.isAccessibilitySize
-        let layout = accessible
-            ? AnyLayout(VStackLayout(alignment: .leading, spacing: Spacing.xxs))
-            : AnyLayout(HStackLayout(alignment: .firstTextBaseline, spacing: Spacing.m))
-        layout {
-            Text("Agent").foregroundStyle(accessible ? .secondary : .primary)
-            if !accessible { Spacer(minLength: Spacing.s) }
-            VStack(alignment: accessible ? .leading : .trailing, spacing: Spacing.xxs) {
-                Text(agent).foregroundStyle(accessible ? .primary : .secondary)
-                Label {
-                    Text("\(behind) behind").foregroundStyle(Color.statusWarnText)
-                } icon: {
-                    Image(systemName: "arrow.down.circle").foregroundStyle(Color.statusWarnFill)
-                }
-                .font(.footnote)
-            }
-        }
-        .frame(minHeight: Spacing.minimumTarget)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Agent \(agent), \(behind) behind the newest in this fleet")
-    }
 }
 
 /// The node's state as the header's first row: glyph, the word with its
@@ -349,7 +317,9 @@ struct FleetBehindRow: View {
 struct FleetHonestyRow: View {
     let style: StatusStyle
     let headline: String
+    var detail: String?
     let reason: String?
+    var behind = 0
 
     @Environment(\.dynamicTypeSize) private var typeSize
     @ScaledMetric(relativeTo: .title3) private var glyphWidth: CGFloat = 28
@@ -372,12 +342,25 @@ struct FleetHonestyRow: View {
                 if let reason {
                     Text(reason).textRole(.rowReason(style.tone.word))
                 }
+                if let detail, !detail.isEmpty {
+                    Text(detail).textRole(.rowDetail)
+                }
+                if behind > 0 {
+                    Label {
+                        Text(behind == 1 ? "1 behind the newest agent in this fleet" : "\(behind) behind the newest agent in this fleet")
+                            .foregroundStyle(Color.statusWarnText)
+                    } icon: {
+                        Image(systemName: "arrow.down.circle").foregroundStyle(Color.statusWarnFill)
+                    }
+                    .font(.subheadline)
+                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .padding(.vertical, Spacing.xs)
         .frame(minHeight: Spacing.minimumTarget)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel([headline, reason].compactMap { $0 }.joined(separator: ", "))
+        .accessibilityLabel([headline, reason, detail, behind > 0 ? "\(behind) behind the newest agent" : nil].compactMap { $0 }.joined(separator: ", "))
         .accessibilityAddTraits(.isHeader)
     }
 }

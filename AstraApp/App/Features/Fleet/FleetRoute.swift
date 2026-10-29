@@ -20,7 +20,7 @@ enum FleetRoute: Hashable, Codable, Sendable {
 /// identity, debug, geoClear, geoResolve, agentUpdate, beaconPlan,
 /// beaconRotate, enroll, groupDelete, gateOn or gateOff; `confirm:fleet.bulkDisable`,
 /// `confirm:fleet.bulkEnable`, `confirm:fleet.locateAll`; and the sheets
-/// `nodeIdentity:<nodeID>` and `addMembers:<groupID>`.
+/// `nodeIdentity:<nodeID>`, `addMembers:<groupID>` and `fleetPush:<screen>`.
 extension FleetRoute: DemoHooks {
     static func demoIntent(_ id: String, session: SessionStore) -> WriteIntent? {
         guard session.isDemo, id.hasPrefix("fleet.") else { return nil }
@@ -78,8 +78,42 @@ extension FleetRoute: DemoHooks {
         case "addMembers":
             guard let argument else { return nil }
             return AnyView(FleetDemoAddMembers(groupID: argument))
+        case "fleetPush":
+            guard let route = argument.flatMap(demoRoute) else { return nil }
+            return AnyView(FleetDemoPusher(route: route))
         default:
             return nil
+        }
+    }
+}
+
+/// `fleetPush:<screen>[:<id>]` for screens no link reaches, so a demo launch
+/// can capture them as pushed screens: history, network, capabilities,
+/// beacon, duplicates, unlocated, gates and gate.
+private func demoRoute(_ argument: String) -> FleetRoute? {
+    let parts = argument.split(separator: ":", maxSplits: 1).map(String.init)
+    let id = parts.count > 1 ? parts[1] : ""
+    switch parts[0] {
+    case "history": return .nodeHistory(id: id)
+    case "network": return .nodeNetwork(id: id)
+    case "capabilities": return .nodeCapabilities(id: id)
+    case "beacon": return .nodeBeacon(id: id)
+    case "duplicates": return .duplicates
+    case "unlocated": return .unlocated
+    case "gates": return .capabilityGates
+    case "gate": return .gate(id: id)
+    default: return nil
+    }
+}
+
+/// Closes the demo sheet it was presented in and pushes its route instead.
+private struct FleetDemoPusher: View {
+    let route: FleetRoute
+    @Environment(Router.self) private var router
+
+    var body: some View {
+        Color.clear.task {
+            router.dismissPresented { router.push(.fleet(route)) }
         }
     }
 }
