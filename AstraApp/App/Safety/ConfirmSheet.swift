@@ -73,6 +73,11 @@ final class ConfirmFlowModel {
         intent.confirmPhrase != nil || intent.dryRun != nil || !intent.toggles.isEmpty || intent.affected.count > 1
     }
 
+    var isShowingFindings: Bool {
+        if case .findings = step { return true }
+        return false
+    }
+
     var visibleToggles: [ConfirmToggle] {
         if case .findings = step { return intent.toggles }
         return intent.toggles.filter { !$0.revealedByConflict }
@@ -215,72 +220,83 @@ private struct ConfirmStepView: View {
 
     var body: some View {
         let intent = model.intent
-        List {
-            Section {
-                Text(intent.consequence)
-                    .fixedSize(horizontal: false, vertical: true)
-                Label("\(intent.scopes.count == 1 ? "Uses scope" : "Uses scopes") \(intent.scopes.joined(separator: ", "))", systemImage: "key")
-                    .foregroundStyle(.secondary)
-                if intent.affected.count == 1, intent.tier != .plan {
-                    Label("Affects 1 \(intent.affected[0].kind): \(intent.affected[0].name)", systemImage: "scope")
-                        .foregroundStyle(.secondary)
-                }
-                if WriteFlow.requiresAuthentication(intent.tier) {
-                    Label("Face ID or your passcode confirms it", systemImage: "faceid")
-                        .foregroundStyle(.secondary)
-                }
-            }
-            if case .findings(let findings) = model.step {
+        ScrollViewReader { proxy in
+            List {
                 Section {
-                    ForEach(findings, id: \.self) { finding in
+                    Text(intent.consequence)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Label("\(intent.scopes.count == 1 ? "Uses scope" : "Uses scopes") \(intent.scopes.joined(separator: ", "))", systemImage: "key")
+                        .foregroundStyle(.secondary)
+                    if intent.affected.count == 1, intent.tier != .plan {
+                        Label("Affects 1 \(intent.affected[0].kind): \(intent.affected[0].name)", systemImage: "scope")
+                            .foregroundStyle(.secondary)
+                    }
+                    if WriteFlow.requiresAuthentication(intent.tier) {
+                        Label("Face ID or your passcode confirms it", systemImage: "faceid")
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                if case .findings(let findings) = model.step {
+                    Section {
+                        ForEach(findings, id: \.self) { finding in
+                            Label {
+                                Text(finding).foregroundStyle(Color.statusWarnText)
+                            } icon: {
+                                Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(Color.statusWarnFill)
+                            }
+                        }
+                    } header: {
+                        Text("The server found problems")
+                    } footer: {
+                        Text("Nothing was filed. Accept the findings below to file the plan anyway.")
+                    }
+                }
+                blastRadius(intent)
+                dryRunSection
+                if !model.visibleToggles.isEmpty {
+                    Section {
+                        ForEach(model.visibleToggles, id: \.id) { toggle in
+                            Toggle(isOn: binding(for: toggle.id)) {
+                                VStack(alignment: .leading, spacing: Spacing.xxs) {
+                                    Text(toggle.label)
+                                    Text(toggle.consequence).textRole(.footnote)
+                                }
+                            }
+                        }
+                    }
+                    .id(Self.togglesID)
+                }
+                if let phrase = intent.confirmPhrase {
+                    Section {
+                        TextField("Type \(phrase)", text: $model.typedPhrase)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                            .font(TextRole.identifierInDetail.font)
+                    } header: {
+                        Text("Type \(phrase) to confirm")
+                    }
+                }
+                if let notice = model.notice {
+                    Section {
                         Label {
-                            Text(finding).foregroundStyle(Color.statusWarnText)
+                            Text(notice).foregroundStyle(Color.statusWarnText)
                         } icon: {
                             Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(Color.statusWarnFill)
                         }
                     }
-                } header: {
-                    Text("The server found problems")
-                } footer: {
-                    Text("Nothing was filed. Accept the findings below to file the plan anyway.")
                 }
             }
-            blastRadius(intent)
-            dryRunSection
-            if !model.visibleToggles.isEmpty {
-                Section {
-                    ForEach(model.visibleToggles, id: \.id) { toggle in
-                        Toggle(isOn: binding(for: toggle.id)) {
-                            VStack(alignment: .leading, spacing: Spacing.xxs) {
-                                Text(toggle.label)
-                                Text(toggle.consequence).textRole(.footnote)
-                            }
-                        }
-                    }
-                }
-            }
-            if let phrase = intent.confirmPhrase {
-                Section {
-                    TextField("Type \(phrase)", text: $model.typedPhrase)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                        .font(TextRole.identifierInDetail.font)
-                } header: {
-                    Text("Type \(phrase) to confirm")
-                }
-            }
-            if let notice = model.notice {
-                Section {
-                    Label {
-                        Text(notice).foregroundStyle(Color.statusWarnText)
-                    } icon: {
-                        Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(Color.statusWarnFill)
-                    }
-                }
+            .safeAreaInset(edge: .bottom) { primaryAction }
+            // The findings push the acceptance toggle below the pinned button;
+            // bring it into view, since it is the only way forward.
+            .onChange(of: model.isShowingFindings) { _, showing in
+                guard showing else { return }
+                withAnimation { proxy.scrollTo(Self.togglesID, anchor: .bottom) }
             }
         }
-        .safeAreaInset(edge: .bottom) { primaryAction }
     }
+
+    private static let togglesID = "confirm.toggles"
 
     @ViewBuilder
     private func blastRadius(_ intent: WriteIntent) -> some View {
