@@ -34,7 +34,11 @@ final class MonitoringStore {
     @discardableResult
     func refreshPaths(window: MonitorWindow) async -> Bool {
         resetIfCredentialChanged()
-        if pathsWindow != window { pathsWindow = window }
+        if pathsWindow != window {
+            // Another window's figures must not stay on screen under the new window's label.
+            if pathsWindow != nil { paths = .loading(previous: nil, previousAt: nil) }
+            pathsWindow = window
+        }
         return await load(\.paths, surface: "Paths", requirement: Self.readRequirement) { try await $0.fetchPaths(window: window) }
     }
 
