@@ -3,18 +3,26 @@ import SwiftUI
 /// M3's contribution to Browse search (section 8.5): incidents and checks,
 /// each list fetched once per search session (60 s) and filtered on device.
 enum MonitoringSearch: SearchProvider {
-    @MainActor private static var cache: (at: Date, incidents: [Incident], monitors: [Monitor])?
+    /// One list per credential: a sign-out or switch drops it, and a side
+    /// whose read failed is asked again next time instead of reading as empty.
+    @MainActor private static var cache: (generation: Int, at: Date, incidents: [Incident]?, monitors: [Monitor]?)?
 
     static func results(for query: LatticeQuery, context: SearchContext) async -> [SearchResult] {
         guard !query.source.trimmingCharacters(in: .whitespaces).isEmpty, let client = context.session.client else { return [] }
         if let missing = context.session.missing(MonitoringStore.readRequirement), !missing.isEmpty { return [] }
         let now = Date()
-        if cache == nil || now.timeIntervalSince(cache?.at ?? .distantPast) > 60 {
-            async let incidents = try? client.listIncidents()
-            async let monitors = try? client.listMonitors()
-            cache = (now, await incidents?.incidents ?? [], await monitors ?? [])
+        let generation = context.session.generation
+        var held = cache?.generation == generation && now.timeIntervalSince(cache?.at ?? .distantPast) <= 60 ? cache : nil
+        if held?.incidents == nil || held?.monitors == nil {
+            let heldIncidents = held?.incidents
+            let heldMonitors = held?.monitors
+            async let incidents = heldIncidents == nil ? (try? client.listIncidents())?.incidents : heldIncidents
+            async let monitors = heldMonitors == nil ? try? client.listMonitors() : heldMonitors
+            held = (generation, held?.at ?? now, await incidents, await monitors)
+            cache = held
         }
-        guard let cache else { return [] }
+        guard let held else { return [] }
+        let cache = (incidents: held.incidents ?? [], monitors: held.monitors ?? [])
         let incidentRows = cache.incidents.map { MonitoringIncidentItem(incident: $0, now: now) }
         let incidents = MonitoringQuery.filter(incidentRows, query: query.source, provider: MonitoringIncidentQueryFields.self, now: now)
         let checkRows = cache.monitors.map { monitor in
