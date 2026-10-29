@@ -8,3 +8,4 @@ DerivedData/
 xcuserdata/
 *.xcresult
 Astra.xcodeproj/project.xcworkspace/
+.swiftpm/
