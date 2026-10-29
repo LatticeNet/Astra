@@ -97,6 +97,8 @@ final class AuditStore {
     /// `GET /api/audit/verify`. Non-mutating, so no confirmation.
     @discardableResult
     func runVerify() async -> Bool {
+        // Claim the credential first, so the next list refresh keeps this result.
+        resetIfCredentialChanged()
         if let missing = session.missing(Self.readRequirement), !missing.isEmpty {
             verify = .denied(scope: missing.joined(separator: " and "))
             return true
@@ -121,6 +123,7 @@ final class AuditStore {
     /// Builds a file of every event the question matches, paging to the end
     /// of the range, or the audit head record. Nothing is written to disk.
     func startExport(_ format: AuditExportFormat, query: AuditQuery) async {
+        resetIfCredentialChanged()
         guard !export.isRunning, let client = session.client else { return }
         if format == .head {
             if lastVerify == nil { await runVerify() }

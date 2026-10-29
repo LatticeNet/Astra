@@ -24,7 +24,7 @@ struct AuditVerifySheet: View {
                     Button {
                         Task { await store.runVerify() }
                     } label: {
-                        Text(store.verify.isLoading ? "Verifying" : "Verify again")
+                        Text(store.verify.isLoading ? "Verifying" : (store.verify.value == nil ? "Verify" : "Verify again"))
                             .frame(maxWidth: .infinity, minHeight: Spacing.minimumTarget)
                     }
                     .buttonStyle(.bordered)
@@ -57,6 +57,14 @@ struct AuditVerifySheet: View {
                     Button("Retry") { Task { await store.runVerify() } }.buttonStyle(.bordered)
                 }
             }
+        case .idle:
+            List {
+                Section {
+                    Text("Not verified on this iPhone yet. Verify walks the audit log and checks every link of its hash chain.")
+                        .frame(minHeight: Spacing.minimumTarget, alignment: .leading)
+                }
+            }
+            .listStyle(.insetGrouped)
         default:
             if let status = store.verify.value, !store.verify.isLoading || store.verify.loadedAt != nil {
                 result(status)
