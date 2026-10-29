@@ -14,6 +14,9 @@ public struct DemoRequest: Sendable {
     public var segments: [String]
     public var query: [String: String]
     public var body: Data?
+    /// The scenario the transport serves, so a route can answer its Quiet
+    /// or Limited token variant without a second route.
+    public var scenario: DemoScenario = .normal
 
     public init(identity: DemoIdentity, method: String, path: String, query: [String: String] = [:], body: Data? = nil) {
         self.identity = identity
@@ -51,10 +54,18 @@ public struct DemoResponse: Sendable {
     public var status: Int
     /// JSON text; time tokens such as `{{now-12s}}` are substituted at serve time.
     public var body: String
+    /// Extra response headers, such as the session cookie of a sign-in.
+    public var headers: [String: String] = [:]
 
     public init(status: Int = 200, body: String) {
         self.status = status
         self.body = body
+    }
+
+    public init(status: Int = 200, body: String, headers: [String: String]) {
+        self.status = status
+        self.body = body
+        self.headers = headers
     }
 
     public static func json(_ body: String) -> DemoResponse {
@@ -83,6 +94,9 @@ public struct DemoRoute: Sendable {
     public var emptyBody: String?
     /// For routes that depend on session state (writes, reads after a write).
     public var respond: (@Sendable (DemoRequest, DemoState) async -> DemoResponse)?
+    /// The scope the server's route wrapper requires; a demo identity
+    /// without it is answered 403, as the server would.
+    public var requiredScope: String?
 
     public init(
         method: String = "GET",
@@ -102,6 +116,13 @@ public struct DemoRoute: Sendable {
         self.body = body
         self.emptyBody = emptyBody
         self.respond = respond
+    }
+
+    /// This route, answered 403 for an identity that lacks `scope`.
+    public func requiring(_ scope: String) -> DemoRoute {
+        var route = self
+        route.requiredScope = scope
+        return route
     }
 
     /// The uniqueness key `DemoChecks` asserts has no duplicates.
