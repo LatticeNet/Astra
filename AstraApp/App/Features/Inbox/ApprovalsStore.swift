@@ -50,7 +50,9 @@ final class ApprovalsStore {
             guard let client = await session?.client else { throw LatticeAPIError.unauthorized(message: "") }
             let query = ApprovalQuery(
                 status: request.statuses.joined(separator: ","), plugin: request.plugin, nodeID: request.nodeID,
-                since: since, includeDismissed: request.statuses.contains("dismissed"), limit: limit, offset: offset
+                // Section 5.2 M1-04: History always sends include_dismissed=1;
+                // the status list still decides which rows come back.
+                since: since, includeDismissed: true, limit: limit, offset: offset
             )
             return try await client.listApprovals(query: query).approvals
         }
@@ -122,6 +124,8 @@ final class ApprovalsStore {
         resetIfNeeded()
         guard !denied else { return true }
         if !force, historyLoadedAt != nil { return history.error == nil }
+        // A poll that lands while the first page is loading does not start it again.
+        if !force, history.isLoading { return true }
         restartHistory()
         await history.reload()
         if history.error == nil { historyLoadedAt = Date() }
