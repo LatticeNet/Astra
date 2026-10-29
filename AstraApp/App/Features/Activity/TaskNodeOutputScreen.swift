@@ -16,6 +16,7 @@ struct TaskNodeOutputScreen: View {
     @Environment(Router.self) private var router
     @Environment(AppState.self) private var appState
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.dynamicTypeSize) private var typeSize
 
     @State private var model = ActivityNodeOutputModel()
     @State private var text = ActivityTextController()
@@ -41,7 +42,7 @@ struct TaskNodeOutputScreen: View {
     @ViewBuilder
     private func content(_ output: ActivityNodeOutput) -> some View {
         if let row = output.result {
-            ActivityOutputText(document: ActivityOutputDocument(row: row, state: output.state, task: output.task), controller: text)
+            ActivityOutputText(document: ActivityOutputDocument(row: row, state: output.state, task: output.task, nodeName: nodes.name(for: nodeID)), controller: text)
                 .ignoresSafeArea(.container, edges: .bottom)
         } else {
             let style = StatusStyle.task(output.state)
@@ -59,7 +60,7 @@ struct TaskNodeOutputScreen: View {
 
     private func noResultSentence(_ output: ActivityNodeOutput) -> String {
         switch output.state {
-        case .expired: "Expired: the node never picked it up."
+        case .expired: "The node never picked it up before the queue deadline."
         case .cancelled: "Cancelled before any agent ran it."
         case .stalled: TasksModel.stalledText(output.task?.leaseProgress(nodeID: nodeID)) + "."
         case .leased: "The node is running it. Output arrives when it finishes."
@@ -74,8 +75,11 @@ struct TaskNodeOutputScreen: View {
     private var toolbar: some ToolbarContent {
         ToolbarItemGroup(placement: .topBarTrailing) {
             let row = model.output.value?.result
-            if row != nil {
+            // At accessibility sizes Find moves into the menu so the node's name keeps room.
+            if row != nil, !typeSize.isAccessibilitySize {
                 Button("Find", systemImage: "magnifyingglass") { text.find() }
+            }
+            if row != nil {
                 Button("Jump to end", systemImage: "arrow.down.to.line") { text.jumpToEnd() }
             }
             menu(row.map(ActivityOutputDocument.plainText))
@@ -85,6 +89,9 @@ struct TaskNodeOutputScreen: View {
     private func menu(_ all: String?) -> some View {
         Menu {
             if let all {
+                if typeSize.isAccessibilitySize {
+                    Button("Find", systemImage: "magnifyingglass") { text.find() }
+                }
                 Button("Copy output", systemImage: "doc.on.doc") { UIPasteboard.general.string = all }
                     .disabled(all.isEmpty)
                 ShareLink(item: all, subject: Text("Output of \(taskID) on \(nodes.name(for: nodeID))")) {
@@ -165,6 +172,9 @@ struct ActivityOutputDocument: Equatable {
     let row: TasksResultRow
     let state: TaskRunState
     let task: LatticeTask?
+    /// Named in the content too: at large sizes the title truncates, and
+    /// edge-hkg-1 and edge-hkg-2 would read alike.
+    let nodeName: String
 
     static func plainText(_ row: TasksResultRow) -> String {
         var parts: [String] = []
@@ -273,6 +283,7 @@ struct ActivityOutputText: UIViewRepresentable {
             out.append(NSAttributedString(attachment: NSTextAttachment(image: symbol)))
             add(" ", headline)
         }
+        add("\(document.nodeName): ", headline)
         add(style.word.activityCapitalized, headline, word)
         add(", exit code \(document.row.result.exitCode)\n", headline, word)
         var timing: [String] = []

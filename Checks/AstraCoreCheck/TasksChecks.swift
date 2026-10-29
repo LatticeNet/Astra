@@ -196,7 +196,7 @@ private func checkTasksNodeRows() throws {
     let expired = try tasksTask(#"{"id":"task_e","targets":["n9"],"status":"expired","created_at":"2026-10-26T12:00:00Z"}"#)
     let expiredRow = try expectUnwrapped(TasksModel.nodeRows(for: expired, results: [], now: now).first, "expired row")
     try expectEqual(expiredRow.state, .expired, "an expired node never reads failed")
-    try expectEqual(expiredRow.reason, "Expired: the node never picked it up", "expired copy")
+    try expectEqual(expiredRow.reason, "The node never picked it up", "expired copy")
 
     let cancelled = try tasksTask(#"{"id":"task_c","targets":["n9"],"status":"cancelled"}"#)
     try expectEqual(TasksModel.nodeRows(for: cancelled, results: [], now: now).first?.reason, "Cancelled before any agent ran it", "cancelled copy")
@@ -395,7 +395,9 @@ private func checkTasksDemo() async throws {
     do {
         _ = try await client.tasksRevealScript(id: "task_d02", grant: StepUpGrant(grant: "g", expiresAt: Date().addingTimeInterval(60)))
         throw CheckFailure.failed("a token must not reveal a script")
-    } catch LatticeAPIError.forbidden {}
+    } catch LatticeAPIError.forbidden(let code, _) {
+        try expectEqual(code, "secret_reveal_scope_required", "a token is refused with the server's reveal scope code")
+    }
     let session = tasksDemo(.session)
     let script = try await session.tasksRevealScript(id: "task_d02", grant: StepUpGrant(grant: "grant_demo_notasecret", expiresAt: Date().addingTimeInterval(60)))
     try expect(script.script.contains("systemctl restart sing-box"), "demo script")

@@ -144,7 +144,7 @@ public enum TasksModel {
             reason = stalledText(progress)
             reasonIsProblem = true
         case .expired:
-            reason = "Expired: the node never picked it up"
+            reason = "The node never picked it up"
             reasonIsProblem = true
         case .leased:
             if let age = progress?.leaseAgeSeconds, isOldLease(age, timeout: task.timeoutSec) {

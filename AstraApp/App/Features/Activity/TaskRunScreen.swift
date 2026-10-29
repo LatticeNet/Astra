@@ -65,6 +65,7 @@ struct TaskRunScreen: View {
             ActivityRefreshError(state: model.task, noun: "the run", retry: reload)
             Section {
                 ActivityStateHeader(style: StatusStyle.task(state), reason: headerReason(task, state: state, summary: summary))
+                originLine(task)
             }
             nodesSection(task, rows: rows)
             Section {
@@ -85,7 +86,7 @@ struct TaskRunScreen: View {
             } header: {
                 Text("Run").accessibilityAddTraits(.isHeader)
             } footer: {
-                Text("The script itself is never sent with the run. Reveal it from the menu with your authenticator code.")
+                Text("Scripts can hold credentials, so the run leaves the script out. Reveal it from More with your authenticator code.")
             }
             Section {
                 WebLinkRow(path: .task(id: task.id))
@@ -108,7 +109,7 @@ struct TaskRunScreen: View {
         case .stalled: TasksModel.stalledText(task.leaseProgress())
         case .expired: "No node picked it up before its queue deadline"
         case .pending: "Not yet sent to nodes"
-        case .cancelled: "It is not handed to any agent"
+        case .cancelled: "Cancelled before it finished"
         default: nil
         }
     }
@@ -117,7 +118,33 @@ struct TaskRunScreen: View {
         guard let start = task.startedAt else { return nil }
         let end = task.finishedAt ?? (TasksModel.isLive(task.status) ? now : nil)
         guard let end, end >= start else { return nil }
-        return TaskLeaseProgress.formatLeaseAge(end.timeIntervalSince(start))
+        let seconds = end.timeIntervalSince(start)
+        // The node rows say "<1 s" for the same span; "0 s" would read as no run at all.
+        return seconds < 1 ? "<1 s" : TaskLeaseProgress.formatLeaseAge(seconds)
+    }
+
+    /// What filed the run, in the header, so a twelve-node run answers it
+    /// before its node list; the full rows stay in the Run section.
+    private func originLine(_ task: LatticeTask) -> some View {
+        let text: String = switch TasksModel.origin(of: task) {
+        case .approval(let approvalID):
+            model.approval.map { "Filed by approval: \(ApprovalEvents.title(for: $0))" } ?? (approvalID.isEmpty ? "Filed by an approval" : "Filed by approval \(approvalID)")
+        case .rerun(let source, _):
+            source.isEmpty ? "Rerun" : "Rerun of \(source)"
+        case .direct(let actor):
+            actor.isEmpty ? "Direct" : "Direct, by \(actor)"
+        }
+        return ViewThatFits(in: .horizontal) {
+            HStack(alignment: .firstTextBaseline, spacing: Spacing.s) {
+                Text(text.activityUnbroken).textRole(.rowDetail)
+                if let seal = model.approval?.planSHA256, !seal.isEmpty { SealLabel(sha256: seal, state: .unverified) }
+            }
+            VStack(alignment: .leading, spacing: Spacing.xxs) {
+                Text(text.activityUnbroken).textRole(.rowDetail)
+                if let seal = model.approval?.planSHA256, !seal.isEmpty { SealLabel(sha256: seal, state: .unverified) }
+            }
+        }
+        .accessibilityElement(children: .combine)
     }
 
     @ViewBuilder
@@ -181,7 +208,8 @@ struct TaskRunScreen: View {
         if row.oldLease { style.tone = .warn }
         var details: [String] = []
         if let result = row.result {
-            details.append("exit \(result.result.exitCode)")
+            // A failure reason already starts with the exit code.
+            if row.reason?.hasPrefix("exit ") != true { details.append("exit \(result.result.exitCode)") }
             if result.stdoutBytes + result.stderrBytes > 0 {
                 details.append(ByteCountFormatter.string(fromByteCount: Int64(result.stdoutBytes + result.stderrBytes), countStyle: .file) + " of output")
             }
