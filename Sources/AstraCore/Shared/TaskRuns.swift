@@ -281,13 +281,18 @@ public struct TaskQuery: Sendable, Hashable {
     /// Comma-joined on the wire: `failed,stalled`.
     public var statuses: [String]
     public var nodeID: String?
+    /// Comma-joined on the wire: `approval,rerun`.
+    public var origins: [String]
+    public var approvalID: String?
     public var since: Date?
     public var limit: Int?
     public var offset: Int?
 
-    public init(statuses: [String] = [], nodeID: String? = nil, since: Date? = nil, limit: Int? = nil, offset: Int? = nil) {
+    public init(statuses: [String] = [], nodeID: String? = nil, origins: [String] = [], approvalID: String? = nil, since: Date? = nil, limit: Int? = nil, offset: Int? = nil) {
         self.statuses = statuses
         self.nodeID = nodeID
+        self.origins = origins
+        self.approvalID = approvalID
         self.since = since
         self.limit = limit
         self.offset = offset
@@ -300,6 +305,8 @@ public struct TaskQuery: Sendable, Hashable {
         if let since { items.append(URLQueryItem(name: "since", value: AstraDateParser.string(from: since))) }
         if let limit { items.append(URLQueryItem(name: "limit", value: String(limit))) }
         if let offset { items.append(URLQueryItem(name: "offset", value: String(offset))) }
+        if !origins.isEmpty { items.append(URLQueryItem(name: "origin", value: origins.joined(separator: ","))) }
+        if let approvalID, !approvalID.isEmpty { items.append(URLQueryItem(name: "approval_id", value: approvalID)) }
         return items
     }
 }

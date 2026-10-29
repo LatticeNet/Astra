@@ -306,8 +306,8 @@ public struct TasksListFilter: Sendable, Hashable {
     }
 
     /// The request (`taskListRequest`). `limit` is always sent so the server pages.
-    public func query(limit: Int, offset: Int) -> TasksListQuery {
-        TasksListQuery(statuses: statuses, nodeID: nodeID, origins: origins, approvalID: approvalID, since: since, limit: limit, offset: offset)
+    public func query(limit: Int, offset: Int) -> TaskQuery {
+        TaskQuery(statuses: statuses, nodeID: nodeID, origins: origins, approvalID: approvalID, since: since, limit: limit, offset: offset)
     }
 
     /// Whether a row answers the question (`taskMatches`): a guard for an

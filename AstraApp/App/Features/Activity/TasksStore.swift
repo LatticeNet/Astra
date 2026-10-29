@@ -62,7 +62,7 @@ final class TasksStore {
         isLoadingMore = true
         defer { isLoadingMore = false }
         do {
-            let page = try await client.tasksList(filter.query(limit: TasksModel.pageSize, offset: serverOffset))
+            let page = try await client.listTasks(query: filter.query(limit: TasksModel.pageSize, offset: serverOffset))
             serverOffset += page.tasks.count
             let known = Set(rows.map(\.id))
             let added = page.tasks.filter { filter.matches($0) && !known.contains($0.id) }
@@ -90,7 +90,7 @@ final class TasksStore {
         runs = before.reloading
         let filter = self.filter
         do {
-            let page = try await client.tasksList(filter.query(limit: limit, offset: 0))
+            let page = try await client.listTasks(query: filter.query(limit: limit, offset: 0))
             serverOffset = page.tasks.count
             total = page.total
             runs = .loaded(page.tasks.filter(filter.matches), at: Date())
