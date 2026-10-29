@@ -64,7 +64,7 @@ enum BrowseDirectory {
         ]),
         DirectorySection(title: "Platform", entries: [
             DirectoryEntry(id: "plugins", title: "Plugins", symbol: "puzzlepiece.extension", target: .push(.platform(.plugins)), requirement: ScopeRequirement("audit:read")),
-            DirectoryEntry(id: "extensions", title: "Extensions", symbol: "square.on.square", target: .push(.platform(.extensions)), requirement: ScopeRequirement("audit:read")),
+            DirectoryEntry(id: "extensions", title: "Extensions", symbol: "square.on.square", target: .push(.platform(.extensions))),
             DirectoryEntry(id: "publishing", title: "Publishing", symbol: "paperplane", target: .push(.platform(.publishing(view: nil))), requirement: .anyOf("kv:read", "static:read", "proxy:admin")),
             DirectoryEntry(id: "store", title: "Store", symbol: "cylinder.split.1x2", target: .push(.platform(.store)), requirement: .anyOf("kv:read", "static:read")),
             DirectoryEntry(id: "evidence", title: "Evidence", symbol: "doc.text.magnifyingglass", target: .push(.evidence(.overview)), requirement: ScopeRequirement("log:read")),
