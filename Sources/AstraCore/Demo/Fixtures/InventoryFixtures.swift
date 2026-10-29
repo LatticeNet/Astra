@@ -88,6 +88,12 @@ public enum InventoryFixtures {
         machines.first { $0.id == id || $0.world.id == id }
     }
 
+    /// The write routes look up profile ids only, as the server does, so a
+    /// node id leaking into a write fails here too.
+    static func profile(id: String) -> Machine? {
+        machines.first { $0.id == id }
+    }
+
     static let renewedKey = "inventory.renewed."
     static let deletedSet = "inventory.deleted"
     static let firedSet = "inventory.fired"
@@ -104,7 +110,10 @@ public enum InventoryFixtures {
         }.requiring("inventory:admin"),
         DemoRoute(method: "POST", pathPattern: "/api/machines/delete") { request, state in
             let id = request.bodyStrings["id"] ?? ""
-            if machine(id: id) != nil { await state.insert(id, into: deletedSet) }
+            guard profile(id: id) != nil, await !state.contains(id, in: deletedSet) else {
+                return .error(status: 404, code: "not_found", message: "machine profile not found")
+            }
+            await state.insert(id, into: deletedSet)
             return .json(#"{"ok":true}"#)
         }.requiring("inventory:admin"),
         DemoRoute(method: "POST", pathPattern: "/api/machines/reminders/run") { request, state in
@@ -220,7 +229,7 @@ public enum InventoryFixtures {
 
     static func renewAnswer(_ request: DemoRequest, _ state: DemoState) async -> DemoResponse {
         let id = request.bodyStrings["id"] ?? ""
-        guard let fixture = machine(id: id), await !state.contains(fixture.id, in: deletedSet) else {
+        guard let fixture = profile(id: id), await !state.contains(fixture.id, in: deletedSet) else {
             return .error(status: 404, code: "not_found", message: "machine profile not found")
         }
         let raw = request.bodyStrings["next_renewal"] ?? ""
@@ -279,7 +288,7 @@ public enum InventoryFixtures {
             return .error(status: 403, code: "step_up_required", message: "step-up required")
         }
         let id = request.bodyStrings["id"] ?? ""
-        guard let fixture = machine(id: id), await !state.contains(fixture.id, in: deletedSet) else {
+        guard let fixture = profile(id: id), await !state.contains(fixture.id, in: deletedSet) else {
             return .error(status: 404, code: "not_found", message: "machine profile not found")
         }
         let kind = request.bodyStrings["kind"] ?? ""
