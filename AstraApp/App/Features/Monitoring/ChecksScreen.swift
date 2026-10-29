@@ -32,20 +32,22 @@ struct ChecksScreen: View {
         .onAppear(perform: consumeQuery)
         .onChange(of: appState.pendingQuery) { consumeQuery() }
         .onChange(of: store.monitors.loadedAt) { offer(force: false) }
+        .onChange(of: store.paths.loadedAt) { offer(force: false) }
         .onChange(of: query) { offer(force: true) }
         .onAppear { offer(force: true) }
-        .polling(.monitoring, version: changes.version([.checks, .definitions])) {
+        .polling(.monitoring, version: changes.version([.checks, .definitions, .paths]) &* 8 &+ (MonitorWindow.allCases.firstIndex(of: appState.monitorWindow) ?? 0)) {
             await nodes.refreshIfOlder(than: 60)
-            return await store.refreshChecks()
+            // The paths read carries the verdict each check's health folds in.
+            let paths = Task { await store.refreshPaths(window: appState.monitorWindow) }
+            let checks = await store.refreshChecks()
+            return await paths.value && checks
         }
     }
 
     private var items: [MonitoringCheckItem] {
         let now = Date()
-        let paths = store.paths.value
         let all = (store.monitors.value ?? []).map { monitor in
-            var health = MonitoringHealth.of(monitor, results: monitor.latest, now: now)
-            if let paths { health = health.withPathVerdict(paths.paths, monitorID: monitor.id, judgesDegraded: paths.judgesDegraded) }
+            let health = store.health(of: monitor, now: now)
             let names = (monitor.nodeIDs + monitor.latest.map(\.nodeID)).filter { !$0.isEmpty }.map { nodes.name(for: $0) }
             return MonitoringCheckItem(monitor: monitor, health: health, nodeNames: Array(Set(names)).sorted())
         }
@@ -66,7 +68,8 @@ struct ChecksScreen: View {
 
     private var list: some View {
         let shown = stable.shown
-        let failing = shown.filter { $0.health.rank <= 2 }
+        let failing = shown.filter(\.health.isFailing)
+        let attention = shown.filter { !$0.health.isFailing && $0.health.rank <= 2 }
         let rest = shown.filter { $0.health.rank > 2 }
         let operatorChecks = rest.filter { !$0.monitor.isGenerated }
         let generated = rest.filter { $0.monitor.isGenerated }
@@ -98,6 +101,13 @@ struct ChecksScreen: View {
                     ForEach(failing) { row($0) }
                 } header: {
                     Text("Failing (\(failing.count))").accessibilityAddTraits(.isHeader)
+                }
+            }
+            if !attention.isEmpty {
+                Section {
+                    ForEach(attention) { row($0) }
+                } header: {
+                    Text("Degraded or stale (\(attention.count))").accessibilityAddTraits(.isHeader)
                 }
             }
             ForEach(types, id: \.self) { type in
@@ -140,7 +150,9 @@ struct ChecksScreen: View {
             if phase != .idle { stable.noteActivity() }
         }
         .refreshable {
+            async let paths = store.refreshPaths(window: appState.monitorWindow)
             await store.refreshChecks()
+            _ = await paths
             offer(force: true)
         }
     }

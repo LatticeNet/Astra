@@ -25,11 +25,13 @@ struct CheckDetailScreen: View {
             .navigationBarTitleDisplayMode(.inline)
             .navigationSubtitle(store.monitor(id: id).map { MonitoringStyle.check(health($0)).word } ?? "")
             .toolbar { ToolbarItem(placement: .topBarTrailing) { menu } }
-            .polling(.monitoring, version: changes.version([.checks, .incidents]) &* 8 &+ (MonitorWindow.allCases.firstIndex(of: appState.monitorWindow) ?? 0)) {
+            .polling(.monitoring, version: changes.version([.checks, .incidents, .paths]) &* 8 &+ (MonitorWindow.allCases.firstIndex(of: appState.monitorWindow) ?? 0)) {
                 await nodes.refreshIfOlder(than: 60)
                 let incidents = Task { await store.refreshIncidents() }
+                let paths = Task { await store.refreshPaths(window: appState.monitorWindow) }
                 let ok = await store.refreshChecks()
                 _ = await incidents.value
+                _ = await paths.value
                 return await loadSeries() && ok
             }
             .onChange(of: source) { Task { await loadSeries() } }
@@ -58,7 +60,7 @@ struct CheckDetailScreen: View {
     }
 
     private func health(_ monitor: Monitor) -> MonitoringHealth {
-        MonitoringHealth.of(monitor, results: monitor.latest, now: Date())
+        store.health(of: monitor)
     }
 
     private func sources(_ monitor: Monitor) -> [String] {

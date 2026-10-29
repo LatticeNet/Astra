@@ -97,12 +97,12 @@ struct MonitorOverviewScreen: View {
             CompanionBehindRow(surface: surface)
         default:
             if let monitors = store.monitors.value {
-                let operatorChecks = monitors.filter { $0.managedBy.isEmpty }
-                let failing = operatorChecks.filter { MonitoringHealth.of($0, results: $0.latest, now: Date()).isFailing }.count
+                // The same checks and the same health the Checks list's Failing section counts.
+                let failing = store.failingChecks().count
                 let style = failing > 0
                     ? StatusStyle(word: "\(failing) failing", symbol: "xmark.circle.fill", tone: .fail)
                     : StatusStyle(word: "none failing", symbol: "checkmark.circle.fill", tone: .ok)
-                verdictButton(title: "\(operatorChecks.count) checks", style: style, detail: nil, segment: .checks, query: failing > 0 ? "state:failing" : nil)
+                verdictButton(title: monitors.count == 1 ? "1 check" : "\(monitors.count) checks", style: style, detail: nil, segment: .checks, query: failing > 0 ? "state:failing" : nil)
             } else {
                 LoadingRows(label: "Loading checks", count: 1)
             }

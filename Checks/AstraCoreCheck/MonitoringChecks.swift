@@ -12,6 +12,7 @@ public func checkMonitoring() async throws {
     try await checkSeriesSubjects()
     try await checkMaintenanceBodies()
     try checkMonitorHealth()
+    try checkPathVerdict()
     try checkSeriesGaps()
     try checkStrip()
     try checkPathItems()
@@ -283,6 +284,56 @@ private func checkMonitorHealth() throws {
     monitor.enabled = false
     try expectEqual(MonitoringHealth.of(monitor, results: [latest("a", 10, success: false)], now: now), .disabled, "a paused check is disabled")
     try expect(MonitoringHealth.failing(failing: 1, total: 1, lastAt: now).rank < MonitoringHealth.up(total: 1, latencyMs: nil, lastAt: now).rank, "failing ranks first")
+}
+
+private func verdictPath(_ state: String, _ reason: String = "", source: String = "") throws -> PathView {
+    var fields = [#""state":"\#(state)""#, #""monitor_id":"m""#, #""target_node":"t""#]
+    if !reason.isEmpty { fields.append(#""reason":"\#(reason)""#) }
+    if !source.isEmpty { fields.append(#""source":"\#(source)""#) }
+    return try decode(PathView.self, "{" + fields.joined(separator: ",") + "}")
+}
+
+/// Goldens from the console's checksModel tests for `withPathVerdict`.
+private func checkPathVerdict() throws {
+    let at = now
+    let failing = MonitoringHealth.failing(failing: 1, total: 2, lastAt: at)
+    func verdict(_ health: MonitoringHealth, _ paths: [PathView], _ latest: [MonitoringLatest] = []) -> MonitoringHealth {
+        health.withPathVerdict(paths, latest: latest, judgesDegraded: true)
+    }
+    try expectEqual(verdict(failing, [try verdictPath("unknown", "icmp_filtered"), try verdictPath("up")]), .unmeasured(total: 2, reason: "icmp_filtered", lastAt: at), "a failing check whose path is filtered reads unmeasured, not failing")
+    try expectEqual(verdict(failing, [try verdictPath("down"), try verdictPath("unknown", "icmp_filtered")]), failing, "a down path keeps it failing")
+    try expectEqual(verdict(failing, [try verdictPath("unknown", "source_paused"), try verdictPath("up")]), failing, "a pause is not the reason")
+    try expectEqual(verdict(failing, []), failing, "no paths read: the results decide")
+    let upOne = MonitoringHealth.up(total: 1, latencyMs: nil, lastAt: at)
+    try expectEqual(verdict(upOne, [try verdictPath("unknown", "icmp_filtered")]), upOne, "an unknown path does not change a passing check")
+
+    let up = MonitoringHealth.up(total: 3, latencyMs: 356, lastAt: at)
+    try expectEqual(verdict(up, [try verdictPath("degraded"), try verdictPath("degraded"), try verdictPath("up"), try verdictPath("unknown", "results_stopped")]),
+                    .degraded(degraded: 2, total: 3, lastAt: at), "degraded on N of the judged paths")
+    try expectEqual(verdict(up, [try verdictPath("degraded")]), .degraded(degraded: 1, total: 1, lastAt: at), "one degraded path")
+    try expectEqual(verdict(up, [try verdictPath("up"), try verdictPath("up")]), up, "no degraded path, still up")
+    try expectEqual(verdict(up, [try verdictPath("degraded"), try verdictPath("down")]), up, "a down path left behind keeps the results' word")
+    try expectEqual(up.withPathVerdict([try verdictPath("degraded")], latest: [], judgesDegraded: false), up, "a server that does not judge degraded leaves it up")
+    try expectEqual(verdict(failing, [try verdictPath("degraded"), try verdictPath("up")]), failing, "no failing source named: a failing check keeps the results' word")
+
+    let single = MonitoringHealth.failing(failing: 1, total: 1, lastAt: at)
+    let twoReasons = [try verdictPath("unknown", "icmp_filtered", source: "sh"), try verdictPath("unknown", "agent_too_old", source: "volc")]
+    try expectEqual(verdict(single, twoReasons, [MonitoringLatest(nodeID: "sh", at: at, success: false)]), .unmeasured(total: 1, reason: "icmp_filtered", lastAt: at), "the failing source's own reason, not the first one")
+    try expectEqual(verdict(single, twoReasons), .unmeasured(total: 1, reason: "", lastAt: at), "two reasons and no failing source: unmeasured without one reason")
+
+    let lossFailing = MonitoringHealth.failing(failing: 1, total: 3, lastAt: at)
+    let lossy = [try verdictPath("degraded", "degraded_loss", source: "sh"), try verdictPath("degraded", "degraded_loss", source: "hk"), try verdictPath("unknown", "results_stopped", source: "volc")]
+    let lossLatest = [MonitoringLatest(nodeID: "sh", at: at, success: false), MonitoringLatest(nodeID: "hk", at: at, success: true, latencyMs: 343), MonitoringLatest(nodeID: "volc", at: at, success: true, latencyMs: 90)]
+    try expectEqual(verdict(lossFailing, lossy, lossLatest), .degraded(degraded: 2, total: 2, lastAt: at), "a loss-degraded source whose newest run failed reads degraded")
+    let mixed = [try verdictPath("degraded", "degraded_loss", source: "sh"), try verdictPath("unknown", "agent_too_old", source: "mk")]
+    let mixedHealth = verdict(lossFailing, mixed, [MonitoringLatest(nodeID: "sh", at: at, success: false), MonitoringLatest(nodeID: "mk", at: at, success: false)])
+    try expectEqual(mixedHealth.rank, MonitoringHealth.degraded(degraded: 1, total: 1, lastAt: at).rank, "one failing source degraded: the check is degraded, not unmeasured")
+
+    var monitor = Monitor(id: "m", intervalSec: 60)
+    monitor.latest = [MonitoringLatest(nodeID: "sh", at: at.addingTimeInterval(-10), success: false)]
+    let response = try decode(PathsResponse.self, #"{"degraded_at":null,"paths":[{"source":"sh","target_node":"t","monitor_id":"m","state":"unknown","reason":"icmp_filtered"},{"source":"sh","target_node":"u","monitor_id":"other","state":"down"}]}"#)
+    try expectEqual(MonitoringHealth.judged(monitor, paths: response, now: now), .unmeasured(total: 1, reason: "icmp_filtered", lastAt: at.addingTimeInterval(-10)), "judged reads only the check's own paths")
+    try expect(MonitoringHealth.judged(monitor, paths: nil, now: now).isFailing, "before the matrix is read, the results decide")
 }
 
 private func bucket(_ minute: Int, n: Int = 1, fail: Int = 0, p50: Double? = 10, loss: Double? = 0) -> MonitoringPathBucket {

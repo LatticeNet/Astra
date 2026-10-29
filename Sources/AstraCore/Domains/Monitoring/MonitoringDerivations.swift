@@ -77,13 +77,54 @@ public enum MonitoringHealth: Sendable, Hashable {
         return .up(total: latest.count, latencyMs: mean, lastAt: lastAt)
     }
 
-    /// `checksModel.withPathVerdict`: a passing check some of whose paths the
-    /// control plane judges degraded reads degraded, never up.
-    public func withPathVerdict(_ paths: [PathView], monitorID: String, judgesDegraded: Bool) -> MonitoringHealth {
-        guard case .up(_, _, let lastAt) = self, judgesDegraded else { return self }
-        let own = paths.filter { $0.monitorID == monitorID }
-        let degraded = own.filter { $0.state == "degraded" }.count
-        return degraded > 0 ? .degraded(degraded: degraded, total: own.count, lastAt: lastAt) : self
+    /// `checksModel.withPathVerdict`: the health with the check's own paths'
+    /// verdict folded in. A down path keeps the results' word. A passing
+    /// check with a degraded path reads degraded on N of its judged paths. A
+    /// failing check whose failing sources' paths are degraded reads
+    /// degraded; one whose paths are unknown for a reason that is not a pause
+    /// (an ICMP target that never answers reads `icmp_filtered` and does not
+    /// page) reads unmeasured with that reason. Another path's reason speaks
+    /// only when a failing source has no path of its own or none is named.
+    /// `paths` are this check's; `latest` its newest results.
+    public func withPathVerdict(_ paths: [PathView], latest: [MonitoringLatest], judgesDegraded: Bool) -> MonitoringHealth {
+        func state(_ path: PathView) -> String {
+            path.state == "degraded" && !judgesDegraded ? "unknown" : path.state
+        }
+        func degradedOf(_ lastAt: Date) -> MonitoringHealth? {
+            let degraded = paths.filter { state($0) == "degraded" }.count
+            guard degraded > 0 else { return nil }
+            let judged = paths.filter { state($0) == "up" || state($0) == "degraded" }.count
+            return .degraded(degraded: degraded, total: max(degraded, judged), lastAt: lastAt)
+        }
+        if paths.contains(where: { state($0) == "down" }) { return self }
+        switch self {
+        case .up(_, _, let lastAt):
+            return degradedOf(lastAt) ?? self
+        case .failing(_, let total, let lastAt):
+            guard !paths.isEmpty else { return self }
+            let unknown = paths.filter { state($0) == "unknown" && !$0.reason.isEmpty && !PathReason(rawValue: $0.reason).isChosen }
+            let failing = Set(latest.filter { !$0.success && $0.reason.isEmpty }.map(\.nodeID))
+            let own = paths.filter { failing.contains($0.source) }
+            if own.contains(where: { state($0) == "degraded" }) { return degradedOf(lastAt) ?? self }
+            let ownIDs = Set(own.map(\.id))
+            let ownUnknown = unknown.filter { ownIDs.contains($0.id) }
+            let pathless = failing.isEmpty || failing.contains { id in !own.contains { $0.source == id } }
+            let speaking = !ownUnknown.isEmpty ? ownUnknown : (pathless ? unknown : [])
+            guard !speaking.isEmpty else { return self }
+            let reasons = Set(speaking.map(\.reason))
+            return .unmeasured(total: total, reason: reasons.count == 1 ? (reasons.first ?? "") : "", lastAt: lastAt)
+        default:
+            return self
+        }
+    }
+
+    /// The health every screen shows for a check: its newest results with
+    /// its paths' verdict folded in once the matrix is read.
+    public static func judged(_ monitor: Monitor, paths: PathsResponse?, now: Date) -> MonitoringHealth {
+        let health = of(monitor, results: monitor.latest, now: now)
+        guard let paths else { return health }
+        let own = paths.paths.filter { $0.monitorID == monitor.id }
+        return health.withPathVerdict(own, latest: monitor.latest, judgesDegraded: paths.judgesDegraded)
     }
 }
 

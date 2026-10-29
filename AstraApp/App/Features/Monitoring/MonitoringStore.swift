@@ -90,6 +90,17 @@ final class MonitoringStore {
         monitors.value?.first { $0.id == id }
     }
 
+    /// The one health every screen shows for a check: its newest results
+    /// with its paths' verdict folded in once the matrix is read.
+    func health(of monitor: Monitor, now: Date = Date()) -> MonitoringHealth {
+        MonitoringHealth.judged(monitor, paths: paths.value, now: now)
+    }
+
+    /// Checks whose health reads failing, over every check the Checks list shows.
+    func failingChecks(now: Date = Date()) -> [Monitor] {
+        (monitors.value ?? []).filter { health(of: $0, now: now).isFailing }
+    }
+
     /// Active and upcoming windows: the listing's, plus any the incidents read carried.
     var maintenanceWindows: [MaintenanceWindow] {
         var seen: Set<String> = []
