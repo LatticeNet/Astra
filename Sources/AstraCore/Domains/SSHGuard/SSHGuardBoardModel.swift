@@ -17,20 +17,35 @@ public struct SSHGuardBoardRow: Identifiable, Sendable, Hashable {
 
     public var id: String { status.nodeID }
 
-    public init(status: SSHGuardNodeStatus, node: LatticeNode?, now: Date) {
+    /// `record` is the node's explicit sshguard capability state ("enrolled",
+    /// "excluded"), or nil when it has none or it could not be read.
+    public init(status: SSHGuardNodeStatus, node: LatticeNode?, now: Date, record: String? = nil) {
         self.status = status
         name = node?.displayName ?? (status.nodeName.isEmpty ? status.nodeID : status.nodeName)
         tags = node?.tags ?? []
         role = node?.role ?? ""
         region = node?.geo?.region ?? ""
         stage = SSHGuardBoard.boardStage(status, now: now)
-        // The status row says only whether the capability admits the node;
-        // a node it does not admit is refused an arm, so it reads as excluded.
-        scope = status.enrolled ? .enrolled : .excluded
+        scope = Self.scope(record: record)
         coverage = SSHGuardBoard.coverage(for: status, scope: scope, now: now)
         posture = status.postureState
         knock = status.knock?.knowledge.isEmpty == false ? status.knock!.knowledge : "unknown"
     }
+
+    /// `scopeOf` on the console: scope is an operator's explicit decision.
+    /// The status row's `enrolled` is the gate's answer (true for every
+    /// undecided node while the gate is off, false for an undecided node once
+    /// it is on), so it never stands in for one.
+    public static func scope(record: String?) -> SSHGuardScopeState {
+        switch record {
+        case "enrolled": .enrolled
+        case "excluded": .excluded
+        default: .undecided
+        }
+    }
+
+    /// Whether the capability gate lets SSH Guard plan for the node now.
+    public var admitted: Bool { status.enrolled }
 
     public var isReverting: Bool {
         if case .reverting = coverage { return true }
@@ -43,9 +58,10 @@ public struct SSHGuardBoardRow: Identifiable, Sendable, Hashable {
         return nil
     }
 
-    /// The board may offer Arm: nothing live on the box and the capability admits it.
+    /// The board may offer Arm: nothing live on the box and an explicit
+    /// enrolment, as on the console (`isArmable`).
     public var isArmable: Bool {
-        scope == .enrolled && [.idle, .armFailed, .reverted].contains(stage)
+        scope == .enrolled && admitted && [.idle, .armFailed, .reverted].contains(stage)
     }
 
     public var sshdPorts: [Int] { status.sshd?.ports ?? [] }

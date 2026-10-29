@@ -10,6 +10,9 @@ final class SSHGuardStore {
     @ObservationIgnored private var generation = -1
 
     private(set) var status: ResourceState<[SSHGuardNodeStatus]> = .idle
+    /// Explicit sshguard capability records by node id. Arm needs an
+    /// enrolment; without `node:read` none are known, so nothing arms here.
+    private(set) var records: [String: String] = [:]
 
     init(session: SessionStore, changes: ChangeLog) {
         self.session = session
@@ -38,6 +41,15 @@ final class SSHGuardStore {
         return "Needs \(missing.joined(separator: " and "))"
     }
 
+    private func loadRecords(_ client: LatticeClient) async {
+        guard session.missing(ScopeRequirement("node:read"))?.isEmpty ?? true else {
+            records = [:]
+            return
+        }
+        // A failed read keeps the last records: an enrolment does not lapse because one poll failed.
+        if let read = try? await client.sshGuardCapabilityRecords() { records = read }
+    }
+
     func status(for nodeID: String) -> SSHGuardNodeStatus? {
         status.value?.first { $0.nodeID == nodeID }
     }
@@ -47,6 +59,7 @@ final class SSHGuardStore {
         if generation != session.generation {
             generation = session.generation
             status = .idle
+            records = [:]
         }
         if let missing = missingRead {
             status = .denied(scope: missing.joined(separator: " and "))
@@ -55,7 +68,10 @@ final class SSHGuardStore {
         guard let client = session.client else { return false }
         status = status.reloading
         do {
-            status = .loaded(try await client.fetchSSHGuardStatus(), at: Date())
+            async let recordsRead = loadRecords(client)
+            let rows = try await client.fetchSSHGuardStatus()
+            await recordsRead
+            status = .loaded(rows, at: Date())
             return true
         } catch {
             let apiError = LatticeAPIError(error)

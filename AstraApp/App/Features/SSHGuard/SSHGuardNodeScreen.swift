@@ -138,7 +138,7 @@ struct SSHGuardNodeScreen: View {
     }
 
     private func row(now: Date) -> SSHGuardBoardRow? {
-        model.status.value.map { SSHGuardBoardRow(status: $0, node: nodes.nodes[nodeID], now: now) }
+        model.status.value.map { SSHGuardBoardRow(status: $0, node: nodes.nodes[nodeID], now: now, record: model.capability?.state) }
     }
 
     @ViewBuilder
@@ -172,7 +172,7 @@ struct SSHGuardNodeScreen: View {
     // MARK: List
 
     private func list(_ status: SSHGuardNodeStatus) -> some View {
-        let row = SSHGuardBoardRow(status: status, node: nodes.nodes[nodeID], now: .now)
+        let row = SSHGuardBoardRow(status: status, node: nodes.nodes[nodeID], now: .now, record: model.capability?.state)
         return ScrollViewReader { proxy in
             List {
                 if case .failed(let error, _, _) = model.status {
@@ -429,8 +429,7 @@ struct SSHGuardNodeScreen: View {
             Button {
                 excluding = true
             } label: {
-                SSHGuardActionLabel(title: "Exclude from SSH Guard", symbol: "minus.circle",
-                                    note: store.canExclude ? "Refuses new SSH Guard plans for this node." : "Needs node:admin")
+                SSHGuardActionLabel(title: "Exclude from SSH Guard", symbol: "minus.circle", note: excludeNote(row))
             }
             .disabled(!store.canExclude || row.scope == .excluded)
         } header: {
@@ -440,10 +439,25 @@ struct SSHGuardNodeScreen: View {
 
     private func armNote(_ row: SSHGuardBoardRow) -> String {
         if let reason = store.planBlockReason() { return reason }
-        if row.scope == .excluded { return "Not enrolled for SSH Guard: enroll it under node capabilities first." }
+        if row.scope == .excluded { return "Excluded from SSH Guard: enroll it under node capabilities first." }
+        if row.scope == .undecided {
+            if model.capability == nil, !(session.missing(ScopeRequirement("node:read"))?.isEmpty ?? true) {
+                return "Needs node:read to see whether this node is enrolled for SSH Guard."
+            }
+            return "Not enrolled for SSH Guard: enroll it under node capabilities first."
+        }
         if row.isReverting { return "A revert timer is running. Confirm it, or let it run out, before arming again." }
         if !row.isArmable { return "Already \(StatusStyle.coverage(row.coverage).word). Arm again once nothing is live on the node." }
         return "Hardens sshd and starts a revert timer once approved."
+    }
+
+    private func excludeNote(_ row: SSHGuardBoardRow) -> String {
+        if !store.canExclude { return "Needs node:admin" }
+        if row.scope == .excluded {
+            let reason = model.capability?.recordReason ?? ""
+            return reason.isEmpty ? "Already excluded." : "Already excluded: \(reason)"
+        }
+        return "Refuses new SSH Guard plans for this node. Asks for a reason."
     }
 
     private func confirm(_ row: SSHGuardBoardRow) {

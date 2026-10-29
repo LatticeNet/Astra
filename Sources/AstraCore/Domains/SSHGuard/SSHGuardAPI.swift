@@ -3,6 +3,33 @@ import Foundation
 // M7 owns POST sshguard/plan, sshguard/confirm, sshguard/knock and
 // sshguard/knock/reveal (section 8.4). Shared owns GET sshguard/status.
 
+/// `GET /api/nodes/capabilities` without `node_id`: every explicit record on
+/// a node the caller may read (`node:read`).
+struct SSHGuardCapabilityRecordList: Decodable, Sendable {
+    var capabilities: [FleetNodeCapabilityRecord]
+
+    enum CodingKeys: String, CodingKey { case capabilities }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        capabilities = try c.decodeIfPresent([FleetNodeCapabilityRecord].self, forKey: .capabilities) ?? []
+    }
+}
+
+public extension LatticeClient {
+    /// The explicit sshguard records by node id ("enrolled" or "excluded").
+    /// The board reads them because Arm needs an explicit enrolment and the
+    /// status row only says whether the gate admits the node.
+    func sshGuardCapabilityRecords() async throws -> [String: String] {
+        let list = try await perform(SSHGuardCapabilityRecordList.self, path: "/api/nodes/capabilities")
+        var records: [String: String] = [:]
+        for record in list.capabilities where record.capability == "sshguard" && !record.state.isEmpty {
+            records[record.nodeID] = record.state
+        }
+        return records
+    }
+}
+
 /// `POST /api/sshguard/plan` (`sshGuardPlanRequest`, server_sshguard.go). Every
 /// field but the node is omitted unless set, so the server's verified
 /// defaults stand; the arm form and the rotation build it.

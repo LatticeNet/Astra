@@ -103,7 +103,7 @@ struct SSHGuardBoardScreen: View {
 
     private var allRows: [SSHGuardBoardRow] {
         let now = Date()
-        return (store.status.value ?? []).map { SSHGuardBoardRow(status: $0, node: nodes.nodes[$0.nodeID], now: now) }
+        return (store.status.value ?? []).map { SSHGuardBoardRow(status: $0, node: nodes.nodes[$0.nodeID], now: now, record: store.records[$0.nodeID]) }
     }
 
     private var filtered: (rows: [SSHGuardBoardRow], error: String?) {
@@ -225,8 +225,8 @@ struct SSHGuardBoardScreen: View {
         case .none:
             if !row.status.actionableApprovalID.isEmpty {
                 Button("Open approval", systemImage: "hand.raised") { router.present(.review(.single(row.status.actionableApprovalID))) }
-            } else if row.scope == .excluded {
-                Button("Not enrolled for SSH Guard", systemImage: "minus.circle") {}
+            } else if row.scope != .enrolled, [.idle, .armFailed, .reverted].contains(row.stage) {
+                Button(row.scope == .excluded ? "Excluded from SSH Guard" : "Not enrolled for SSH Guard", systemImage: "minus.circle") {}
                     .disabled(true)
             }
         }

@@ -408,7 +408,24 @@ private func checkSSHGuardBoard() async throws {
     let statuses = try await sgDemo().fetchSSHGuardStatus()
     let nodes = try await sgDemo().fetchNodes()
     let byID = Dictionary(nodes.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
-    let rows = statuses.map { SSHGuardBoardRow(status: $0, node: byID[$0.nodeID], now: now) }
+    // Scope is the explicit record, as on the console; the demo's record list is empty, so the check supplies one.
+    let records = [DemoWorld.node("edge-sin-1").id: "enrolled", DemoWorld.node("edge-iad-1").id: "enrolled", DemoWorld.node("dns-iad-1").id: "excluded"]
+    let rows = statuses.map { SSHGuardBoardRow(status: $0, node: byID[$0.nodeID], now: now, record: records[$0.nodeID]) }
+    let undecided = statuses.compactMap { status -> SSHGuardBoardRow? in
+        guard records[status.nodeID] == nil, status.enrolled, status.stage == "idle" else { return nil }
+        return SSHGuardBoardRow(status: status, node: byID[status.nodeID], now: now)
+    }
+    try expect(!undecided.isEmpty, "the demo has admitted nodes nobody enrolled")
+    try expect(undecided.allSatisfy { $0.scope == .undecided && !$0.isArmable }, "admitted without an enrolment is undecided and cannot arm")
+    let gated = statuses.first { !$0.enrolled }.map { SSHGuardBoardRow(status: $0, node: byID[$0.nodeID], now: now) }
+    try expect(gated.map { $0.scope == .undecided && $0.coverage != .excluded } ?? false, "a node the gate refuses is not called excluded without a record")
+    let (recordClient, _) = sgMock(["\(sgBase)/api/nodes/capabilities": (200, json(#"""
+    {"capabilities":[{"node_id":"n-a","capability":"sshguard","state":"enrolled","updated_at":"2026-10-01T00:00:00Z","enforced":true},
+                     {"node_id":"n-b","capability":"sshguard","state":"excluded","reason":"NAT","updated_at":"2026-10-01T00:00:00Z","enforced":true},
+                     {"node_id":"n-a","capability":"netguard","state":"excluded","reason":"lab","updated_at":"2026-10-01T00:00:00Z","enforced":false}],
+     "known":[]}
+    """#))])
+    try expectEqual(try await recordClient.sshGuardCapabilityRecords(), ["n-a": "enrolled", "n-b": "excluded"], "only the sshguard records, by node")
     let sections = SSHGuardBoardLayout.sections(rows)
     try expectEqual(sections.first?.section, .confirmNeeded, "confirm needed leads")
     let confirmNeeded = sections.first?.rows.map(\.name) ?? []
