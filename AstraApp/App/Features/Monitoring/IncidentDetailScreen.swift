@@ -39,6 +39,7 @@ struct IncidentDetailScreen: View {
     @Environment(ActionRunner.self) private var runner
     @Environment(Router.self) private var router
     @Environment(\.verticalSizeClass) private var verticalSizeClass
+    @Environment(\.dynamicTypeSize) private var typeSize
     @Environment(\.timeZoneMode) private var mode
     @Environment(\.locale) private var locale
 
@@ -151,6 +152,7 @@ struct IncidentDetailScreen: View {
                     DetailRow(label: "Flaps", value: String(incident.flaps), copyable: false)
                 }
             }
+            if showsInlineActions { inlineActions(incident) }
             evidenceSection(incident, path: path)
             notificationSection(incident)
             deliveriesSection
@@ -352,7 +354,7 @@ struct IncidentDetailScreen: View {
     // MARK: Actions
 
     private var showsBottomBar: Bool {
-        guard verticalSizeClass != .compact, let incident = store.incident(id: id) else { return false }
+        guard verticalSizeClass != .compact, !typeSize.isAccessibilitySize, let incident = store.incident(id: id) else { return false }
         return IncidentFilter.isActive(incident) && !incident.isDerivedPending
     }
 
@@ -378,6 +380,24 @@ struct IncidentDetailScreen: View {
                 ackButton(incident, actions: actions)
                 snoozeButton(incident)
             }
+        }
+    }
+
+    /// At accessibility sizes a floating bar of large buttons would cover the
+    /// evidence, so the actions become rows in the list instead.
+    private var showsInlineActions: Bool {
+        guard verticalSizeClass != .compact, typeSize.isAccessibilitySize, let incident = store.incident(id: id) else { return false }
+        return IncidentFilter.isActive(incident) && !incident.isDerivedPending
+    }
+
+    private func inlineActions(_ incident: Incident) -> some View {
+        let actions = IncidentActions.of(incident, now: Date(), canAdmin: true)
+        return Section {
+            ackButton(incident, actions: actions)
+            snoozeButton(incident)
+            maintenanceButton(incident)
+        } header: {
+            Text("Actions").accessibilityAddTraits(.isHeader)
         }
     }
 
