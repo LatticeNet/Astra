@@ -162,6 +162,22 @@ public struct WriteIntent: Sendable {
     public var requirement: ScopeRequirement {
         ScopeRequirement(groups: scopes.map { [$0] })
     }
+
+    /// What authorizes the write, for the ConfirmSheet: its scopes, or the
+    /// signed-in session for a session write that needs no scope. Nil when
+    /// there is nothing to name.
+    public var authorityNote: String? {
+        if scopes.isEmpty { return client == .session ? "Uses your signed-in session" : nil }
+        return "\(scopes.count == 1 ? "Uses scope" : "Uses scopes") \(scopes.joined(separator: ", "))"
+    }
+
+    /// The T2 dialog's message: the consequence, then the scopes it uses.
+    public var dialogMessage: String {
+        if scopes.isEmpty {
+            return client == .session ? "\(consequence) Uses your signed-in session." : consequence
+        }
+        return "\(consequence) \(scopes.joined(separator: ", "))."
+    }
 }
 
 /// Every reveal the app makes, run by `ActionRunner.reveal` (sections 6.4 and 8.3).

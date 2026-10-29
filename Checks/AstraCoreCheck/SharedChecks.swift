@@ -15,6 +15,7 @@ public func checkShared() async throws {
     try checkPathKeysAndSeal()
     try checkDeepLinks()
     try await checkWriteFlowCancel()
+    try checkAuthorityNote()
     try await checkRefusalMapping()
     try await checkGatewayTimeoutIsUnknown()
     try checkForbiddenClassification()
@@ -461,6 +462,22 @@ private func checkWriteFlowCancel() async throws {
     let result = await WriteFlow(intent: intent, client: client, authenticator: CancellingAuthenticator()).commit(choices: ConfirmChoices())
     guard case .cancelled = result else { throw CheckFailure.failed("cancelled authentication must end the flow") }
     try expectEqual(await transport.requestURLs.count, 0, "cancelled authentication sends nothing")
+}
+
+/// A session write with no scope names the session, not an empty scope list.
+private func checkAuthorityNote() throws {
+    func intent(_ scopes: [String], client: ClientKind) -> WriteIntent {
+        WriteIntent(
+            tier: .t2, client: client, verb: "Rename passkey", object: ObjectRef(kind: "passkey", id: "pk1", name: "MacBook"),
+            scopes: scopes, consequence: "The passkey keeps working.", changes: [], perform: { _, _ in .done("Renamed") }
+        )
+    }
+    try expectEqual(intent([], client: .session).authorityNote, "Uses your signed-in session", "session write without scopes names the session")
+    try expectEqual(intent([], client: .session).dialogMessage, "The passkey keeps working. Uses your signed-in session.", "T2 dialog ends with the session, not a bare period")
+    try expect(intent([], client: .primary).authorityNote == nil, "a token write without scopes names nothing")
+    try expectEqual(intent([], client: .primary).dialogMessage, "The passkey keeps working.", "no dangling scope clause")
+    try expectEqual(intent(["log:admin"], client: .primary).authorityNote, "Uses scope log:admin", "one scope")
+    try expectEqual(intent(["a:b", "c:d"], client: .primary).dialogMessage, "The passkey keeps working. a:b, c:d.", "scopes follow the consequence")
 }
 
 /// Server refusals keep their message and reach the refusal code spec 6.4 and 6.7 name.

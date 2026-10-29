@@ -55,7 +55,7 @@ private struct ActionHostModifier: ViewModifier {
                 Button(pending.intent.title) { runner.answerDialog(true) }
                 Button("Cancel", role: .cancel) { runner.answerDialog(false) }
             } message: { pending in
-                Text("\(pending.intent.consequence) \(pending.intent.scopes.joined(separator: ", ")).")
+                Text(pending.intent.dialogMessage)
             }
             .modifier(GatePresentation(inSheet: inSheet, host: host))
             .haptics(inSheet ? nil : runner.haptic)

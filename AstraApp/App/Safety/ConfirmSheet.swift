@@ -244,8 +244,10 @@ private struct ConfirmStepView: View {
                 Section {
                     Text(intent.consequence)
                         .fixedSize(horizontal: false, vertical: true)
-                    Label("\(intent.scopes.count == 1 ? "Uses scope" : "Uses scopes") \(intent.scopes.joined(separator: ", "))", systemImage: "key")
-                        .foregroundStyle(.secondary)
+                    if let note = intent.authorityNote {
+                        Label(note, systemImage: "key")
+                            .foregroundStyle(.secondary)
+                    }
                     if intent.affected.count == 1, intent.tier != .plan {
                         Label("Affects 1 \(intent.affected[0].kind): \(intent.affected[0].name)", systemImage: "scope")
                             .foregroundStyle(.secondary)
