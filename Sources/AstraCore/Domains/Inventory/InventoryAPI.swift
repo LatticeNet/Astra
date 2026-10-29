@@ -2,6 +2,23 @@ import Foundation
 
 private struct FiredEnvelope: Decodable { var fired: [RenewalReminderFire] }
 
+/// `POST /api/machines/reminders/run`: `{}` runs every machine, `{id}` one.
+struct InventoryRemindersRequest: Encodable {
+    var id: String?
+}
+
+/// `POST /api/machines/reveal-link`.
+struct InventoryRevealLinkRequest: Encodable {
+    var id: String
+    var kind: String
+    var stepUpGrant: String
+
+    enum CodingKeys: String, CodingKey {
+        case id, kind
+        case stepUpGrant = "step_up_grant"
+    }
+}
+
 struct MachineDeleteRequest: Encodable {
     var id: String
 }
@@ -121,8 +138,18 @@ public struct MachineProfileRequest: Encodable, Sendable {
 
 public extension LatticeClient {
     // Machine inventory
+
+    /// `GET /api/machines`: every node the caller can read, profiled or not,
+    /// as a bare array or a `{machines}` envelope.
     func listMachines() async throws -> [MachineProfile] {
-        try await perform([MachineProfile].self, path: "/api/machines")
+        let data = try await performData(path: "/api/machines")
+        return try LatticeListDecoder.decode(MachineProfile.self, from: data, key: "machines")
+    }
+
+    /// `GET /api/machine-vendors`, as a `{vendors}` envelope or a bare array.
+    func inventoryVendors() async throws -> [InventoryVendor] {
+        let data = try await performData(path: "/api/machine-vendors")
+        return try LatticeListDecoder.decode(InventoryVendor.self, from: data, key: "vendors")
     }
 
     func createMachine(_ request: MachineProfileRequest) async throws -> MachineProfile {
@@ -135,10 +162,12 @@ public extension LatticeClient {
         try await perform(MachineProfile.self, path: "/api/machines/update", method: "POST", body: request)
     }
 
+    /// `POST /api/machines/delete {id}`: removes the profile; the node stays.
     func deleteMachine(id: String) async throws {
         try await performVoid(path: "/api/machines/delete", body: MachineDeleteRequest(id: id))
     }
 
+    /// `POST /api/machines/renew {id, next_renewal}`; the server stores the UTC day.
     func renewMachine(id: String, nextRenewal: Date) async throws -> MachineProfile {
         try await perform(
             MachineProfile.self,
@@ -150,8 +179,23 @@ public extension LatticeClient {
 
     @discardableResult
     func runRenewalReminders() async throws -> [RenewalReminderFire] {
-        let data = try await performData(path: "/api/machines/reminders/run", method: "POST")
-        let envelope = (try? JSONDecoder().decode(FiredEnvelope.self, from: data)) ?? FiredEnvelope(fired: [])
-        return envelope.fired
+        try await inventoryRunReminders()
+    }
+
+    /// `POST /api/machines/reminders/run`: sends what is due now, skipping any
+    /// reminder already sent for the same date and offset, and answers what fired.
+    @discardableResult
+    func inventoryRunReminders(machineID: String? = nil) async throws -> [RenewalReminderFire] {
+        try await perform(FiredEnvelope.self, path: "/api/machines/reminders/run", method: "POST", body: InventoryRemindersRequest(id: machineID)).fired
+    }
+
+    /// `POST /api/machines/reveal-link {id, kind, step_up_grant}` on the session client.
+    func inventoryRevealLink(id: String, kind: InventoryLinkKind, grant: StepUpGrant) async throws -> InventoryLinkReveal {
+        try await perform(
+            InventoryLinkReveal.self,
+            path: "/api/machines/reveal-link",
+            method: "POST",
+            body: InventoryRevealLinkRequest(id: id, kind: kind.rawValue, stepUpGrant: grant.grant)
+        )
     }
 }
