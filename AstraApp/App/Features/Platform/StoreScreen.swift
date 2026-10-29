@@ -47,7 +47,7 @@ struct StoreScreen: View {
                 }
                 Section {
                 } footer: {
-                    Text("Values load only when you open an entry, and are never kept on this iPhone. Writing and deleting entries happen on the web.")
+                    Text("The server sends values with every listing; this app drops them and shows one only when you open an entry and ask. Nothing is kept on this iPhone. Writing and deleting entries happen on the web.")
                 }
             }
             .listStyle(.insetGrouped)

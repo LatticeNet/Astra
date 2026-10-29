@@ -109,7 +109,7 @@ struct StoreBucketScreen: View {
                 Text(all.count == 1 ? "1 \(storageKind == .kv ? "key" : "object")" : "\(all.count) \(storageKind == .kv ? "keys" : "objects")")
             } footer: {
                 VStack(alignment: .leading, spacing: Spacing.xs) {
-                    Text("Values load when you open an entry and are never kept.")
+                    Text("The server sends values with every listing; this app drops them and shows one only when you ask. Nothing is kept.")
                     FreshnessFooter(state: model.rows, interval: 60)
                 }
             }

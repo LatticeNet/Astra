@@ -23,6 +23,8 @@ struct StoreEntryScreen: View {
     @State private var loadingValue = false
     @State private var valueError: String?
     @State private var finding = false
+    /// Bumped by clear(), so a value still in flight is dropped when it lands.
+    @State private var generation = 0
 
     private var storageKind: PlatformStorageKind { PlatformStorageKind(rawValue: kind) ?? .kv }
 
@@ -75,6 +77,7 @@ struct StoreEntryScreen: View {
     }
 
     private func clear() {
+        generation += 1
         value = nil
         valueMissing = false
         finding = false
@@ -82,11 +85,13 @@ struct StoreEntryScreen: View {
 
     private func loadValue() async {
         guard let client = session.client else { return }
+        let started = generation
         loadingValue = true
         valueError = nil
         defer { loadingValue = false }
         do {
             let loaded = try await client.platformStoreValue(kind: storageKind, bucket: bucket, key: key)
+            guard started == generation, scenePhase == .active else { return }
             value = loaded
             valueMissing = loaded == nil
         } catch {
@@ -120,10 +125,16 @@ struct StoreEntryScreen: View {
         .announcing(valueError)
     }
 
+    private var listingSummary: String {
+        let rows = listing.rows.value ?? []
+        let total = rows.reduce(Int64(0)) { $0 + Int64(max($1.size, 0)) }
+        return "\(rows.count == 1 ? "1 entry" : "\(rows.count) entries"), \(ByteFormatter.bytes(UInt64(total))) in all"
+    }
+
     @ViewBuilder
     private func valueSection(_ row: PlatformBucketModel.Row) -> some View {
         Section {
-            if !row.hasContent, storageKind == .static {
+            if storageKind == .static, !PlatformBucketOwner.contentAvailable(name: bucket, kind: kind, reserved: false) {
                 Label("This listing carries no bytes: nodes fetch them under a task lease.", systemImage: "lock.doc")
                     .foregroundStyle(.secondary)
                     .frame(minHeight: Spacing.minimumTarget)
@@ -161,8 +172,8 @@ struct StoreEntryScreen: View {
         } header: {
             Text("Value")
         } footer: {
-            if value == nil, row.hasContent || storageKind == .kv {
-                Text("Loads \(ByteFormatter.bytes(UInt64(max(row.size, 0)))) from the server when you ask, and only for as long as this screen is open.")
+            if value == nil, storageKind == .kv || PlatformBucketOwner.contentAvailable(name: bucket, kind: kind, reserved: false) {
+                Text("Reads the bucket listing again (\(listingSummary)) and shows only this value, for as long as this screen is open.")
             }
         }
     }
