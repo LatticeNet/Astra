@@ -22,7 +22,9 @@ public enum TasksIntents {
             tier: .t2, verb: "Cancel task", object: object, scopes: [runScope],
             consequence: "It will not be handed to any agent, and a result that arrives late is refused. A run already under way on a node is not stopped.",
             verify: { client in
-                guard let fresh = try await client.tasksFind(id: task.id) else { return "\(task.id) is no longer listed." }
+                guard let fresh = try await client.tasksFind(id: task.id, hint: task) else {
+                    return "\(task.id) is no longer listed."
+                }
                 return "\(task.id) is now \(TaskRunState(serverValue: fresh.status).tasksWord)."
             },
             idempotent: false, changes: [.tasks, .audit],
@@ -79,26 +81,37 @@ public enum TasksIntents {
 
     static func sequentialReruns(_ task: LatticeTask, nodes: [ObjectRef], client: LatticeClient) async -> WriteOutcome {
         var succeeded: [ObjectRef] = []
-        var failed: [ObjectFailure] = []
+        var refused: [ObjectFailure] = []
+        // The request left the phone and the server may have queued the run
+        // (section 6.7), so these are never called "not queued".
+        var lost: [ObjectFailure] = []
         for node in nodes {
             do {
                 _ = try await client.tasksRerunNode(id: task.id, nodeID: node.id)
                 succeeded.append(node)
             } catch {
                 let api = LatticeAPIError(error)
-                let reason = WriteFlow.answerLostAfterSending(api)
-                    ? "Could not confirm: check the task list before trying again"
-                    : api.localizedDescription
-                failed.append(ObjectFailure(object: node, reason: reason))
+                if WriteFlow.answerLostAfterSending(api) {
+                    lost.append(ObjectFailure(object: node, reason: "Could not confirm the rerun. Check the task list before trying again."))
+                } else {
+                    refused.append(ObjectFailure(object: node, reason: api.localizedDescription))
+                }
             }
         }
-        if failed.isEmpty {
+        if refused.isEmpty, lost.isEmpty {
             return .done(succeeded.count == 1 ? "Queued a rerun on \(succeeded[0].name)" : "Queued \(succeeded.count) reruns")
         }
-        if succeeded.isEmpty, failed.count == 1 {
-            return .refused(.validation(failed[0].reason), "Not queued on \(failed[0].object.name): \(failed[0].reason)")
+        if succeeded.isEmpty, refused.isEmpty {
+            let on = lost.count == 1 ? lost[0].object.name : "\(lost.count) nodes"
+            return .unknown("Could not confirm the rerun on \(on). Check the task list before trying again.")
         }
-        return .partial(succeeded: succeeded, failed: failed, message: "\(succeeded.count) queued, \(failed.count) not queued")
+        if succeeded.isEmpty, lost.isEmpty, refused.count == 1 {
+            return .refused(.validation(refused[0].reason), "Not queued on \(refused[0].object.name): \(refused[0].reason)")
+        }
+        var parts = ["\(succeeded.count) queued"]
+        if !refused.isEmpty { parts.append("\(refused.count) not queued") }
+        if !lost.isEmpty { parts.append("\(lost.count) not confirmed") }
+        return .partial(succeeded: succeeded, failed: refused + lost, message: parts.joined(separator: ", "))
     }
 
     /// T4. Irreversible: the task and every result it reported.
@@ -107,7 +120,9 @@ public enum TasksIntents {
             tier: .t4, verb: "Delete task", object: object(task), scopes: [runScope],
             consequence: "The results every target reported are deleted with it. A run already under way on a node is not stopped. The audit log keeps a task.delete event.",
             verify: { client in
-                try await client.tasksFind(id: task.id) == nil ? "\(task.id) is deleted." : "\(task.id) is still listed."
+                // The hint reads the run's own node since it was queued, so an
+                // old run is still found; absence is "not listed", not a proven delete.
+                try await client.tasksFind(id: task.id, hint: task) == nil ? "\(task.id) is no longer listed." : "\(task.id) is still listed."
             },
             idempotent: false, changes: [.tasks, .audit],
             perform: { client, _ in

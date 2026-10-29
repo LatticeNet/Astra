@@ -311,6 +311,21 @@ private func checkTasksIntentFlows() async throws {
     let bodies = await transport.bodies
     try expectEqual(try bodies.map { try tasksCanonical($0) }, ["n1", "n2", "n3"].map { #"{"id":"task_a","node_id":"\#($0)"}"# }, "one rerun-node call per node, in order")
 
+    // A lost answer is unconfirmed, never "not queued" (section 6.7).
+    let lossy = SequencedRerunTransport(statuses: [200, 409, 0])
+    let lossyClient = LatticeClient(baseURL: URL(string: tasksBase)!, credential: LatticeCredential(bearerToken: "lat_check.notasecret"), transport: lossy)
+    let mixed = await WriteFlow(intent: TasksIntents.rerunFailed(task, nodes: nodes), client: lossyClient, authenticator: TasksAuthStub(outcome: .confirmed)).commit(choices: ConfirmChoices())
+    guard case .finished(.partial(_, let mixedFailed, let mixedMessage)) = mixed else { throw CheckFailure.failed("a lost rerun among others should be partial, got \(mixed)") }
+    try expectEqual(mixedMessage, "1 queued, 1 not queued, 1 not confirmed", "a lost node is counted apart")
+    try expect(mixedFailed.last?.reason.hasPrefix("Could not confirm") == true, "the lost node says it is unconfirmed")
+    try expectEqual(await lossy.bodies.count, 3, "a lost rerun is not retried")
+    let allLost = SequencedRerunTransport(statuses: [0])
+    let allLostClient = LatticeClient(baseURL: URL(string: tasksBase)!, credential: LatticeCredential(bearerToken: "lat_check.notasecret"), transport: allLost)
+    let unknown = await WriteFlow(intent: TasksIntents.rerunFailed(task, nodes: [nodes[0]]), client: allLostClient, authenticator: TasksAuthStub(outcome: .confirmed)).commit(choices: ConfirmChoices())
+    guard case .finished(.unknown(let unknownText)) = unknown else { throw CheckFailure.failed("a lost single rerun should be unknown, got \(unknown)") }
+    try expect(unknownText.contains("edge-n1") && unknownText.contains("Check the task list"), "names the node and says what to check: \(unknownText)")
+    try expectEqual(await allLost.bodies.count, 1, "a lost single rerun is not retried")
+
     // A refusal from the server is an outcome, not a thrown error.
     let (refusing, _) = tasksMock(["\(tasksBase)/api/tasks/cancel": (409, json(#"{"error":"only queued tasks can be cancelled","code":"bad_request"}"#))])
     let refused = await WriteFlow(intent: TasksIntents.cancel(task), client: refusing, authenticator: TasksAuthStub(outcome: .confirmed)).commit(choices: ConfirmChoices())
@@ -319,6 +334,7 @@ private func checkTasksIntentFlows() async throws {
 }
 
 /// Answers each rerun-node call with the next status, recording bodies.
+/// Status 0 times out after the request was sent.
 private actor SequencedRerunTransport: HTTPTransport {
     private var statuses: [Int]
     private(set) var bodies: [Data?] = []
@@ -328,6 +344,7 @@ private actor SequencedRerunTransport: HTTPTransport {
     func data(for request: URLRequest) async throws -> (Data, URLResponse) {
         bodies.append(request.httpBody)
         let status = statuses.isEmpty ? 500 : statuses.removeFirst()
+        if status == 0 { throw URLError(.timedOut) }
         let body = status == 200
             ? #"{"id":"task_r","targets":["n"],"status":"queued","created_at":"2026-10-28T12:00:00Z"}"#
             : #"{"error":"node n2 is managed by NetGuard","code":"conflict"}"#
