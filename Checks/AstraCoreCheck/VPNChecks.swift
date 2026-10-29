@@ -204,6 +204,9 @@ private func checkVPNIdentityDerivations() throws {
     try expectEqual(VPNIdentity.state(quotaOnPolicyOnly, now: now), .active, "the state follows the console's figures, not the policy word")
     try expectEqual(VPNIdentity.reason(expiredOver, state: .overQuota, now: now), "150 B of 100 B used.", "over quota reason")
     try expectEqual(VPNIdentity.reason(expiringUnbound, state: .expiring, now: now), "Expires in 12 days.", "expiring reason")
+    try expectEqual(VPNBytes.text(1023), "1023 B", "bytes under a KiB")
+    try expectEqual(VPNBytes.text(41_000_000_000), "38.2 GiB", "binary units")
+    try expectEqual(VPNBytes.text(107_374_182_400), "100 GiB", "no decimal from 100 up")
 
     let ordered = VPNIdentity.ordered([active, disabled, expiringUnbound, expiredOver], now: now).map(\.id)
     try expectEqual(ordered, ["1", "2", "4", "3"], "worst state first, disabled last")
@@ -488,7 +491,7 @@ private func checkVPNIntents() async throws {
     try expect(!rotate.idempotent, "rotate is never retried")
     let revoke = VPNIntents.revokeLink(userID: "vu_a", email: "a@example.org")
     try expectEqual(revoke.tier, .t4, "revoke is T4")
-    try expectEqual(revoke.title, "Revoke the subscription link of a@example.org", "revoke title names the identity")
+    try expectEqual(revoke.title, "Revoke the link of a@example.org", "revoke title names the identity")
 
     // Cancelling Face ID sends nothing.
     let (client, transport) = vpnClient([:])

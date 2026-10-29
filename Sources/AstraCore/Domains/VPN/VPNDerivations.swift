@@ -245,10 +245,20 @@ public struct VPNUsersSummary: Sendable, Hashable {
     }
 }
 
-/// Bytes the way the console writes them, binary units.
+/// Bytes the way the vpn-core console writes them (`formatBytes`): binary
+/// units named as such, no decimal from 100 up.
 public enum VPNBytes {
     public static func text(_ value: Int64) -> String {
-        ByteFormatter.bytes(UInt64(max(0, value)))
+        let bytes = max(0, value)
+        if bytes < 1024 { return "\(bytes) B" }
+        let units = ["KiB", "MiB", "GiB", "TiB"]
+        var amount = Double(bytes)
+        var unit = -1
+        repeat {
+            amount /= 1024
+            unit += 1
+        } while amount >= 1024 && unit < units.count - 1
+        return String(format: amount >= 100 ? "%.0f %@" : "%.1f %@", amount, units[unit])
     }
 }
 

@@ -13,7 +13,7 @@ public enum VPNIntents {
     public static let readScope = "vpncore:read"
 
     public static func userRef(id: String, email: String) -> ObjectRef {
-        ObjectRef(kind: "vpn identity", id: id, name: email)
+        ObjectRef(kind: "VPN identity", id: id, name: email)
     }
 
     /// A new token for the link. The old URL answers the decoy at once, for
@@ -23,7 +23,7 @@ public enum VPNIntents {
         let ref = userRef(id: userID, email: email)
         return WriteIntent(
             tier: .t3,
-            verb: "Rotate the subscription link of",
+            verb: "Rotate the link of",
             object: ref,
             scopes: [linkScope],
             consequence: "The old link stops working at once: every client that holds it gets nothing until it is given the new link. Reveal the new link afterwards and send it again.",
@@ -52,7 +52,7 @@ public enum VPNIntents {
         let ref = userRef(id: userID, email: email)
         return WriteIntent(
             tier: .t4,
-            verb: "Revoke the subscription link of",
+            verb: "Revoke the link of",
             object: ref,
             scopes: [linkScope],
             consequence: "The link stops answering at once and cannot be brought back: clients holding it get nothing, and a link issued later has a new URL. The identity and its lines stay as they are.",
