@@ -10,6 +10,7 @@ struct EvidenceDestination: View {
         case .connections(let filter): ConnectionsScreen(filter: filter)
         case .connection(let id): ConnectionDetailScreen(id: id)
         case .logs(let nodeID): LogExplorerScreen(nodeID: nodeID)
+        case .logSource(let id): LogExplorerScreen(sourceID: id)
         }
     }
 }
