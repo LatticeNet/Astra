@@ -288,10 +288,11 @@ struct FreshnessFooter: View {
     }
 
     private func accessState(now: Date) -> AccessState {
-        let time = loadedAt.map { TimeDisplay.clock($0, mode: mode, locale: locale) } ?? "never"
+        let time = loadedAt.map { TimeDisplay.clock($0, mode: mode, locale: locale) }
         if !network.isSatisfied { return .offline(since: time) }
         if isUpdating { return .updating }
-        guard let loadedAt else { return .stale(asOf: time) }
+        // Nothing loaded: the first read is still running unless it failed.
+        guard let loadedAt else { return lastAttemptFailed ? .stale(asOf: nil) : .updating }
         if lastAttemptFailed || now.timeIntervalSince(loadedAt) > 3 * interval { return .stale(asOf: time) }
         return .fresh(age: TimeDisplay.duration(now.timeIntervalSince(loadedAt), locale: locale))
     }

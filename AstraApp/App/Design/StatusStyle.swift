@@ -140,8 +140,10 @@ struct StatusStyle: Sendable, Hashable {
 enum AccessState: Sendable, Hashable {
     case fresh(age: String)
     case updating
-    case stale(asOf: String)
-    case offline(since: String)
+    /// nil when nothing has loaded yet.
+    case stale(asOf: String?)
+    /// nil when nothing has loaded yet.
+    case offline(since: String?)
     case denied(scope: String)
     case partial(plugins: String)
     case companionBehind(surface: String)
@@ -150,8 +152,8 @@ enum AccessState: Sendable, Hashable {
         switch self {
         case .fresh(let age): "Updated \(age) ago"
         case .updating: "Updating"
-        case .stale(let time): "Stale. As of \(time)"
-        case .offline(let time): "Offline. Showing data from \(time)"
+        case .stale(let time): time.map { "Stale. As of \($0)" } ?? "Not loaded yet"
+        case .offline(let time): time.map { "Offline. Showing data from \($0)" } ?? "Offline. Nothing loaded yet"
         case .denied(let scope): "Hidden: this token lacks \(scope)"
         case .partial(let plugins): "Hidden from this token: \(plugins)"
         case .companionBehind(let surface): "This app is behind the server. \(surface) could not be read."
