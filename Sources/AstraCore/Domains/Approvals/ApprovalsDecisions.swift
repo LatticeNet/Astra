@@ -74,10 +74,9 @@ public extension LatticeClient {
     /// listing carries the bodies; they are parsed for grouping, never shown
     /// or hashed, and Review still loads each approval by id.
     func approvalsListPage(query: ApprovalQuery, includePlan: Bool) async throws -> ApprovalPage {
-        var items = query.queryItems
-        if includePlan { items.insert(URLQueryItem(name: "include", value: "plan"), at: min(1, items.count)) }
-        let response = try await perform(ApprovalsQueryResponse.self, path: "/api/network/approvals", query: items)
-        return ApprovalPage(approvals: response.approvals, total: response.total, limit: response.limit, offset: response.offset)
+        var query = query
+        query.includePlan = includePlan
+        return try await listApprovals(query: query)
     }
 }
 

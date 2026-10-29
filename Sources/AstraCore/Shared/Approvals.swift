@@ -434,6 +434,8 @@ public struct ApprovalQuery: Sendable, Hashable {
     public var includeDismissed: Bool
     public var limit: Int
     public var offset: Int
+    /// `include=plan`: the listing omits plan bodies unless asked; the hash is always there.
+    public var includePlan: Bool = false
 
     public init(status: String? = nil, plugin: String? = nil, nodeID: String? = nil, since: Date? = nil, includeDismissed: Bool = false, limit: Int = 50, offset: Int = 0) {
         self.status = status
@@ -445,9 +447,15 @@ public struct ApprovalQuery: Sendable, Hashable {
         self.offset = offset
     }
 
+    public init(status: String? = nil, plugin: String? = nil, nodeID: String? = nil, since: Date? = nil, includeDismissed: Bool = false, includePlan: Bool, limit: Int = 50, offset: Int = 0) {
+        self.init(status: status, plugin: plugin, nodeID: nodeID, since: since, includeDismissed: includeDismissed, limit: limit, offset: offset)
+        self.includePlan = includePlan
+    }
+
     public var queryItems: [URLQueryItem] {
         var items: [URLQueryItem] = []
         if let status, !status.isEmpty { items.append(URLQueryItem(name: "status", value: status)) }
+        if includePlan { items.insert(URLQueryItem(name: "include", value: "plan"), at: min(1, items.count)) }
         if let plugin, !plugin.isEmpty { items.append(URLQueryItem(name: "plugin", value: plugin)) }
         if let nodeID, !nodeID.isEmpty { items.append(URLQueryItem(name: "node_id", value: nodeID)) }
         if let since { items.append(URLQueryItem(name: "since", value: AstraDateParser.string(from: since))) }
