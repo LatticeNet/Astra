@@ -27,6 +27,8 @@ struct AuditScreen: View {
     @State private var customRange: TimeRangeSelection?
     @State private var windowAnchor = Date()
     @State private var verifying = false
+    @State private var editingCustomRange = false
+    @Environment(\.dynamicTypeSize) private var typeSize
 
     var body: some View {
         Group {
@@ -44,10 +46,15 @@ struct AuditScreen: View {
         }
         .navigationSubtitle(subtitle)
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) { RangeMenu(selection: rangeBinding) }
+            if !typeSize.isAccessibilitySize {
+                ToolbarItem(placement: .topBarTrailing) { RangeMenu(selection: rangeBinding) }
+            }
             ToolbarItem(placement: .topBarTrailing) { moreMenu }
         }
         .sheet(isPresented: $verifying) { AuditVerifySheet() }
+        .sheet(isPresented: $editingCustomRange) {
+            ActivityCustomRangeSheet { rangeBinding.wrappedValue = $0 }
+        }
         .onAppear(perform: consumeQuery)
         .onAppear(perform: applyLaunchLayer)
         .onChange(of: appState.pendingQuery) { consumeQuery() }
@@ -84,15 +91,24 @@ struct AuditScreen: View {
         AuditModel.request(layer: layer == .integrity ? .all : layer, tokens: tokens, from: range.since(now: windowAnchor), to: range.until, offset: 0)
     }
 
-    /// Empty for the default view (Changes, last 24 h), so the tab's title keeps its place.
+    /// Empty for the default view (Changes, last 24 h), and otherwise short
+    /// (the layer and a filter count), so the tab's title keeps its place.
+    /// The filter row states the whole question.
     private var subtitle: String {
-        if layer == .changes, !isFiltered { return "" }
-        var parts = [layer == .changes ? "Changes" : (layer == .all ? "All events" : "Integrity")]
+        var parts: [String] = []
+        if layer != .changes { parts.append(layer == .all ? "All events" : "Integrity") }
         if layer != .integrity {
-            if !query.trimmingCharacters(in: .whitespaces).isEmpty { parts.append(query) }
-            parts.append(range == .all ? "any time" : "last \(range.title)")
+            let count = tokens.enums.count + tokens.values.count + (tokens.text.isEmpty ? 0 : 1) + (range != .lastDay ? 1 : 0)
+            if count > 0 { parts.append(count == 1 ? "1 filter" : "\(count) filters") }
         }
         return parts.joined(separator: ", ")
+    }
+
+    private var filterText: String {
+        var parts = [layer == .all ? "All events" : "Changes"]
+        if !query.trimmingCharacters(in: .whitespaces).isEmpty { parts.append(query) }
+        parts.append(range == .all ? "any time" : "last \(range.title)")
+        return "Showing " + parts.joined(separator: ", ")
     }
 
     private var isFiltered: Bool {
@@ -106,7 +122,7 @@ struct AuditScreen: View {
         return List {
             ActivityRefreshError(state: store.page, noun: "audit events", retry: refresh)
             if isFiltered {
-                FilterStateRow(text: "Showing \(subtitle)") {
+                FilterStateRow(text: filterText) {
                     query = ""
                     customRange = nil
                     rangeTitle = TimeRangeSelection.lastDay.title
@@ -212,6 +228,16 @@ struct AuditScreen: View {
     /// Export and Verify chain share one menu, so the tab's title keeps its place.
     private var moreMenu: some View {
         Menu {
+            if typeSize.isAccessibilitySize {
+                Section {
+                    Picker("Range: \(range.title)", systemImage: "calendar.badge.clock", selection: rangeBinding) {
+                        ForEach(TimeRangeSelection.presets, id: \.self) { Text($0.title).tag($0) }
+                        if case .custom = range { Text(range.title).tag(range) }
+                    }
+                    .pickerStyle(.menu)
+                    Button("Custom range", systemImage: "calendar") { editingCustomRange = true }
+                }
+            }
             Section("Export what this question matches") {
                 Button("Export CSV", systemImage: "tablecells") { export(.csv) }
                     .disabled(store.export.isRunning || store.page.value == nil)

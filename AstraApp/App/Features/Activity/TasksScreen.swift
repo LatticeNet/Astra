@@ -27,13 +27,13 @@ struct TasksScreen: View {
         .searchable(text: $query, prompt: "status:, node:, origin:, approval:")
         .navigationSubtitle(subtitle)
         .toolbar {
-            ToolbarItem(placement: .topBarLeading) {
-                Button("New task on web", systemImage: "safari") { router.openOnWeb(.tasks) }
-                    .accessibilityHint("Opens the console in the browser")
+            // The same trailing pair as Audit, so the title holds still between segments.
+            if !typeSize.isAccessibilitySize {
+                ToolbarItem(placement: .topBarTrailing) {
+                    ActivityPresetRangeMenu(selection: rangeBinding)
+                }
             }
-            ToolbarItem(placement: .topBarTrailing) {
-                ActivityPresetRangeMenu(selection: rangeBinding)
-            }
+            ToolbarItem(placement: .topBarTrailing) { moreMenu }
         }
         .onAppear(perform: consumeQuery)
         .onChange(of: appState.pendingQuery) { consumeQuery() }
@@ -79,11 +79,47 @@ struct TasksScreen: View {
 
     @State private var windowAnchor = Date()
 
-    private var subtitle: String {
+    /// What was sent, one part per token, the node by name: never the raw
+    /// field, which may hold words that were left out.
+    private var appliedParts: [String] {
         var parts: [String] = []
-        if !query.trimmingCharacters(in: .whitespaces).isEmpty { parts.append(query) }
+        if let statuses = tokens.enums["status"], !statuses.isEmpty {
+            parts.append("status:" + statuses.map { $0 == "leased" ? "running" : $0 }.joined(separator: ","))
+        }
+        if let origins = tokens.enums["origin"], !origins.isEmpty { parts.append("origin:" + origins.joined(separator: ",")) }
+        if let node = tokens.values["node"] { parts.append("node:" + nodes.name(for: node)) }
+        if let approval = tokens.values["approval"] { parts.append("approval:" + approval) }
         if range != .all { parts.append(range.title) }
-        return parts.joined(separator: ", ")
+        return parts
+    }
+
+    private var isFiltered: Bool {
+        !appliedParts.isEmpty || !query.trimmingCharacters(in: .whitespaces).isEmpty
+    }
+
+    /// A count, short enough to keep the tab's title beside the toolbar
+    /// (even "origin:approval" pushed it out). The filter row says it in full.
+    private var subtitle: String {
+        let count = appliedParts.count
+        return count == 0 ? "" : (count == 1 ? "1 filter" : "\(count) filters")
+    }
+
+    private var filterText: String {
+        appliedParts.isEmpty ? "Showing all runs: nothing in the field could be applied" : "Showing runs matching \(appliedParts.joined(separator: ", "))"
+    }
+
+    private var moreMenu: some View {
+        Menu {
+            if typeSize.isAccessibilitySize {
+                Picker("Range: \(range.title)", systemImage: "calendar.badge.clock", selection: rangeBinding) {
+                    ForEach(TimeRangeSelection.presets, id: \.self) { Text($0.title).tag($0) }
+                }
+                .pickerStyle(.menu)
+            }
+            Button("New task on web", systemImage: "safari") { router.openOnWeb(.tasks) }
+        } label: {
+            Label("More", systemImage: "ellipsis.circle")
+        }
     }
 
     private func offer(force: Bool) {
@@ -98,8 +134,8 @@ struct TasksScreen: View {
         let settled = shown.filter { !TasksModel.isLive($0.status) }
         return List {
             ActivityRefreshError(state: store.runs, noun: "runs", retry: refresh)
-            if !subtitle.isEmpty {
-                FilterStateRow(text: "Showing runs matching \(subtitle)") {
+            if isFiltered {
+                FilterStateRow(text: filterText) {
                     query = ""
                     rangeTitle = TimeRangeSelection.all.title
                 }
@@ -112,7 +148,7 @@ struct TasksScreen: View {
                 Section { PendingUpdatesRow(count: stable.pendingCount) { stable.showHeld() } }
             }
             if shown.isEmpty {
-                if subtitle.isEmpty {
+                if !isFiltered {
                     ContentUnavailableView {
                         Label("No runs", systemImage: "terminal")
                     } description: {
@@ -124,7 +160,7 @@ struct TasksScreen: View {
                     ContentUnavailableView {
                         Label("No runs match", systemImage: "magnifyingglass")
                     } description: {
-                        Text("Nothing matched \(subtitle). Widen the range, or drop a token.")
+                        Text("Nothing matched \(appliedParts.joined(separator: ", ")). Widen the range, or drop a token.")
                     }
                 }
             }
@@ -167,7 +203,7 @@ struct TasksScreen: View {
     /// finished in 24 h, and what is live now. Omitted when unread.
     @ViewBuilder
     private var countsSection: some View {
-        if let counts = store.counts.value, subtitle.isEmpty {
+        if let counts = store.counts.value, !isFiltered {
             let live = [(counts.running, "running"), (counts.stalled, "stalled"), (counts.queued, "queued"), (counts.pending, "pending")]
                 .filter { $0.0 > 0 }.map { "\($0.0) \($0.1)" }
             Section {

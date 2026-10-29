@@ -362,3 +362,37 @@ struct ActivityPresetRangeMenu: View {
         }
     }
 }
+
+/// Since and until pickers for a custom range, for when the range control
+/// sits inside a menu at accessibility sizes, where a menu cannot present
+/// RangeMenu's own sheet.
+struct ActivityCustomRangeSheet: View {
+    let apply: (TimeRangeSelection) -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var since = Date.now.addingTimeInterval(-86_400)
+    @State private var until = Date.now
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                DatePicker("Since", selection: $since, in: ...until)
+                DatePicker("Until", selection: $until, in: since...)
+            }
+            .navigationTitle("Custom range")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(role: .close) { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Apply") {
+                        apply(.custom(since: since, until: until))
+                        dismiss()
+                    }
+                }
+            }
+        }
+        .presentationDetents([.large])
+    }
+}
