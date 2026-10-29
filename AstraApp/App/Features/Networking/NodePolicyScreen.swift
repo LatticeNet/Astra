@@ -57,7 +57,10 @@ struct NodePolicyScreen: View {
     private var nodeName: String { nodes.nodes[nodeID]?.displayName ?? doc?.displayName ?? nodeID }
 
     private var subtitle: String {
-        guard let doc else { return store.netPolicies.value == nil ? "" : "No policy" }
+        guard let doc else {
+            if store.netPolicies.value == nil || store.groupPolicies.value == nil { return "" }
+            return covering.isEmpty ? "No policy" : "Not planned yet"
+        }
         return NetworkingPolicyState.of(doc).word.networkingCapitalized
     }
 
