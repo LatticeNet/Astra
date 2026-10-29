@@ -164,7 +164,12 @@ extension LatticeClient {
         if !query.isEmpty,
            let url = request.url,
            var components = URLComponents(url: url, resolvingAgainstBaseURL: false) {
-            components.queryItems = query
+            // URLComponents leaves "+" literal, and Go's url.Query() reads it
+            // as a space, so names and values are encoded here with "+", "&"
+            // and "=" escaped.
+            components.percentEncodedQueryItems = query.map {
+                URLQueryItem(name: Self.encodeQueryComponent($0.name), value: $0.value.map(Self.encodeQueryComponent))
+            }
             request.url = components.url
         }
         if let bodyData {
@@ -172,6 +177,16 @@ extension LatticeClient {
             request.httpBody = bodyData
         }
         return request
+    }
+
+    private static let queryValueAllowed: CharacterSet = {
+        var allowed = CharacterSet.urlQueryAllowed
+        allowed.remove(charactersIn: "+&=")
+        return allowed
+    }()
+
+    static func encodeQueryComponent(_ value: String) -> String {
+        value.addingPercentEncoding(withAllowedCharacters: queryValueAllowed) ?? value
     }
 
     /// Execute and validate, returning the raw response body.

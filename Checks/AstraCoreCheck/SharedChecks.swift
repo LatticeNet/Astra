@@ -17,6 +17,7 @@ public func checkShared() async throws {
     try await checkRefusalMapping()
     try await checkGatewayTimeoutIsUnknown()
     try checkForbiddenClassification()
+    try await checkQueryEncodingAndWindowEnd()
     try checkIncidentFilters()
     try checkQueryVectors()
     try checkScopeGoldens()
@@ -534,6 +535,21 @@ private func checkForbiddenClassification() throws {
         try expectEqual(failure, error, "the refusal keeps its message")
         try expect(last == nil, "a 403 drops the stale value")
     }
+}
+
+/// Go reads a literal "+" in a query as a space, and the server refuses a
+/// maintenance end that is not after its start.
+private func checkQueryEncodingAndWindowEnd() async throws {
+    let transport = MockTransport(responses: [:])
+    let client = LatticeClient(baseURL: URL(string: "https://lattice.example.com")!, transport: transport)
+    _ = try? await client.fetchAudit(action: "c++ a+b=c&d")
+    let sent = try expectUnwrapped(await transport.requestURLs.first, "audit request sent")
+    try expect(sent.contains("action=c%2B%2B%20a%2Bb%3Dc%26d"), "query values escape +, = and &: \(sent)")
+
+    let start = Date(timeIntervalSince1970: 1_800_000_000)
+    let scheduled = MaintenanceWindow(id: "w1", name: "Kernel", startsAt: start, endsAt: start.addingTimeInterval(3600))
+    try expectEqual(MaintenanceWindowInput(ending: scheduled, at: start.addingTimeInterval(-600)).endsAt, start.addingTimeInterval(1), "ending a scheduled window ends it a second after its start")
+    try expectEqual(MaintenanceWindowInput(ending: scheduled, at: start.addingTimeInterval(60)).endsAt, start.addingTimeInterval(60), "ending a running window ends it now")
 }
 
 private func checkIncidentFilters() throws {

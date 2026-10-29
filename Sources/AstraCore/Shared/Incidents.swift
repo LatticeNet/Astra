@@ -267,7 +267,11 @@ public struct MaintenanceWindowInput: Encodable, Equatable, Sendable {
     }
 
     /// The stored window with only `ends_at` replaced (End now, section 3.2).
-    public init(ending window: MaintenanceWindow, at endsAt: Date) {
+    /// The server refuses an end that is not after the start, so ending a
+    /// window that has not started, or started under a second ago, ends it
+    /// one second after its start, as the console's endWindowInput does.
+    public init(ending window: MaintenanceWindow, at requestedEnd: Date) {
+        let endsAt = window.startsAt.map { max(requestedEnd, $0.addingTimeInterval(1)) } ?? requestedEnd
         self.init(
             id: window.id,
             name: window.name,
