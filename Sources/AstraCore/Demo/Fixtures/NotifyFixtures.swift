@@ -586,7 +586,7 @@ public enum NotifyFixtures {
     }
 
     static func deliveriesRoute(limit: Int) -> DemoRoute {
-        DemoRoute(pathPattern: "/api/notify/deliveries", query: ["limit": String(limit)], body: SharedFixtures.deliveriesBody(allDeliveries),
+        DemoRoute(pathPattern: "/api/notify/deliveries", query: ["limit": String(limit)], body: outboxBody(allDeliveries),
                   emptyBody: SharedFixtures.deliveriesBody([])) { request, _ in
             if let refusal = confinedRefusal(request) { return refusal }
             var rows = allDeliveries
@@ -597,8 +597,19 @@ public enum NotifyFixtures {
             if let outcome = request.query["outcome"], !outcome.isEmpty {
                 rows = rows.filter { field($0, "outcome") == outcome }
             }
-            return .json(SharedFixtures.deliveriesBody(Array(rows.prefix(limit))))
+            return .json(outboxBody(Array(rows.prefix(limit))))
         }.requiring(admin)
+    }
+
+    /// `stored` is the whole outbox, as the server counts it, not the page.
+    static func outboxBody(_ rows: [DemoJSON]) -> String {
+        DemoJSON.object([
+            ("deliveries", .array(rows)),
+            ("stored", .number(Double(allDeliveries.count))),
+            ("durable", true),
+            ("max", 2_000),
+            ("floor", 200),
+        ]).text
     }
 
     static func field(_ row: DemoJSON, _ name: String) -> String? {

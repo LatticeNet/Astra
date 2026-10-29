@@ -119,7 +119,7 @@ struct NotifyWitnessPlanSheet: View {
             }
 
             Section {
-                TextField("http://127.0.0.1:8080", text: $barkURL)
+                TextField("Local bark-server URL", text: $barkURL, prompt: Text(verbatim: "http://127.0.0.1:8080").foregroundStyle(.tertiary))
                     .keyboardType(.URL)
                     .textContentType(.URL)
                     .textInputAutocapitalization(.never)
@@ -128,7 +128,6 @@ struct NotifyWitnessPlanSheet: View {
                     .focused($urlFocused)
                     .submitLabel(.done)
                     .frame(minHeight: Spacing.minimumTarget)
-                    .accessibilityLabel("Local bark-server URL")
                 if !barkURL.isEmpty, !NotifyWitness.isLoopbackBaseURL(barkURL) {
                     Text(NotifyWitness.FormProblem.barkURLLoopback.sentence)
                         .foregroundStyle(Color.statusWarnText)

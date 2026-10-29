@@ -90,7 +90,7 @@ struct DeliveryDetailScreen: View {
             await model.load(id: id, store: store, session: session)
         }
         .task {
-            if store.catalogue.value == nil { await store.refreshSent(filters: store.sentFilters) }
+            await store.refreshRoutingIfNeeded()
         }
     }
 
@@ -114,7 +114,7 @@ struct DeliveryDetailScreen: View {
         return List {
             Section {
                 NotifyRefreshError(state: model.delivery, noun: "the delivery", retry: refresh)
-                StatusRow(
+                NotifyDetailHeader(
                     style: .notifySent(state),
                     title: delivery.title.isEmpty ? store.eventLabel(delivery.eventType) : delivery.title,
                     detail: [NotifySent.severityWord(delivery), delivery.createdAt.map { NotifyTime.when($0, mode: mode, locale: locale) }].compactMap { $0 }.joined(separator: " · "),
@@ -189,7 +189,9 @@ struct DeliveryDetailScreen: View {
                     DetailRow(label: "Rule", value: delivery.ruleName.isEmpty ? delivery.ruleID : delivery.ruleName, copyable: false)
                 }
             } else {
-                DetailRow(label: "Rule", value: delivery.ruleName.isEmpty ? delivery.ruleID : "\(delivery.ruleName), since deleted", copyable: false)
+                // Rule fields are a snapshot too; "since deleted" only once the rules have loaded.
+                let name = delivery.ruleName.isEmpty ? delivery.ruleID : delivery.ruleName
+                DetailRow(label: "Rule", value: store.rules.value == nil ? name : "\(name), since deleted", copyable: false)
             }
             DetailRow(label: "Role", value: roleText(delivery), copyable: false)
             DetailRow(label: "From", value: NotifySent.origin(delivery), copyable: false)

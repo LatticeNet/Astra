@@ -118,3 +118,17 @@ Agents cannot tap, swipe or rotate a simulator, and they cannot run VoiceOver, V
 - Agent Updates: with a Triage token the screen reads "Hidden: this token lacks node:admin"; when the release host cannot be read the Nodes view says so in words and every standing reads unknown instead of current.
 - Release: each artifact row copies its digest from the whole row; Release notes opens the release page in the browser.
 - Voice Control "Show names": the Filter, More, Plan all behind and picker controls all have names.
+
+## M9 Notifications and webhooks
+
+- Notifications: the Routing and Sent control stays pinned under the bar, becomes a menu at AX5, and moves into the navigation bar in landscape; the headings rotor jumps between Needs attention, the channels, the rules and Control-plane witness.
+- Notifications: a failing channel reads its name, "failing" and the cause in one element; swipe Send test on a channel is listed once in the actions rotor, and the rotor also offers Copy link and Delete channel; with a Triage token the screen reads "Hidden: this token lacks notify:admin", and with a confined token "Hidden from a confined token" with Token scopes.
+- Send test: the dialog names the channel and says a notification goes to whoever it reaches; on Ops mail (failing) the banner says the test did not deliver and names the cause, with the error haptic, never green.
+- Witness: a row reads the node, its state word and the sentence (watching, not answering, sees it down); its rotor offers Review plan, Change settings and Remove the witness; Plan witness opens the sheet at full height, the URL field brings up the URL keyboard and stays above it at AX5, Continue stays off until the URL is a loopback address, and Continue pushes the plan confirmation inside the sheet (no second sheet); File plan opens the filed plan in Review.
+- Sent (Activity and Notifications): the Filter menu's Outcome, Channel and Event type show as search tokens and in the subtitle; removing a token clears that filter; a link with `outcome:failed` opens with the filter set; a misspelt field (`chanel:x`) shows a sentence instead of an empty list; the day headings are rotor headings; each row reads its severity, title and state word first.
+- Sent: while VoiceOver runs, a poll that inserts deliveries shows "1 update. Show" at the top and focus stays put.
+- Delivery: the message title reads in full as a heading at AX5; each attempt is one element with its result, time and cause; an incident row opens IncidentDetail; the More menu has Copy link, Copy ID and Open on web.
+- Channel: Send test and Delete channel are in the More menu and in the list; Delete on a channel that is the only one of an enabled rule asks for the typed name, then Face ID; cancelling Face ID sends nothing; "Test send on web (needs notify:send)" opens the browser and the phone never offers that send itself.
+- Rule: matches, channels, quiet hours and escalation read as label and value; Edit and Delete open the web.
+- Webhooks: "UPS on battery" reads "reaches nobody" with the reason; swipe Send test is listed once; Delete webhook asks for the typed name, then Face ID, and the screen closes only after the server confirms.
+- Voice Control "Show names": More, Filter, Send test, Plan witness, Continue and every web row have names.

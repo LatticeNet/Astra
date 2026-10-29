@@ -64,6 +64,11 @@ final class NotifyStore {
         return !results.contains(false)
     }
 
+    /// Channels and rules for a detail screen opened by link, read once.
+    func refreshRoutingIfNeeded() async {
+        if channels.value == nil || rules.value == nil { await refreshRouting() }
+    }
+
     /// The Sent log for `filters`, with the channels and catalogue the filter menu names.
     @discardableResult
     func refreshSent(filters: NotifySentFilters) async -> Bool {

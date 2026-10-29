@@ -100,12 +100,13 @@ struct NotificationsScreen: View {
                 ForEach(failing) { channel in
                     NavigationLink(value: AppRoute.notify(.channel(id: channel.id))) {
                         let line = NotifyChannelHealthLine.of(channel.health)
+                        let since = line.at.map { " Since \(NotifyTime.when($0, mode: mode, locale: locale)), \(line.failures) in a row." } ?? ""
                         StatusRow(
                             style: .notifyChannel(channel),
-                            title: "\(channel.displayName) is failing, so alerts routed only to it are not arriving.",
-                            detail: line.at.map { "Since \(NotifyTime.when($0, mode: mode, locale: locale)), \(line.failures) in a row" },
+                            title: channel.displayName,
+                            detail: "Alerts routed only to it are not arriving.\(since)",
                             reason: line.cause.map { "Last failure: \($0.sentence)." },
-                            accessibilityPhrase: "\(channel.displayName), failing"
+                            accessibilityPhrase: "\(channel.displayName) is failing, so alerts routed only to it are not arriving"
                         )
                     }
                 }
@@ -113,8 +114,8 @@ struct NotificationsScreen: View {
                     StatusRow(
                         style: item.isFailure ? StatusStyle(word: item.word, symbol: "xmark.octagon.fill", tone: .fail)
                             : StatusStyle(word: item.word, symbol: "exclamationmark.triangle.fill", tone: .warn),
-                        title: item.claim,
-                        detail: item.line.sentence(mode: mode, locale: locale, now: Date()),
+                        title: "Witness on \(item.node.nodeName)",
+                        detail: item.claim + " " + item.line.sentence(mode: mode, locale: locale, now: Date()),
                         accessibilityPhrase: item.claim
                     )
                 }
@@ -389,12 +390,13 @@ struct NotifyChannelRow: View {
 /// A rule: on or off, its events and channels, quiet hours.
 struct NotifyRuleRow: View {
     let rule: NotifyRule
-    let channels: [NotifyChannel]
+    /// Nil while the channels are unread: the row then claims no reach.
+    let channels: [NotifyChannel]?
 
     var body: some View {
         let style = StatusStyle.notifyRule(rule, channels: channels)
         let events = NotifyRules.matchesEverything(rule) ? "Every event" : (rule.eventTypes.count == 1 ? rule.eventTypes[0] : "\(rule.eventTypes.count) event types")
-        let names = rule.channelIDs.map { id in channels.first { $0.id == id }?.displayName ?? id }
+        let names = rule.channelIDs.map { id in channels?.first { $0.id == id }?.displayName ?? id }
         let to = names.isEmpty ? "no channel" : names.joined(separator: ", ")
         var detail = "\(events) to \(to)"
         if let quiet = NotifyRules.quietHoursText(rule) { detail += ". Quiet \(quiet)" }

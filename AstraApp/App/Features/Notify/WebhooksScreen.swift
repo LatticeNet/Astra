@@ -155,7 +155,7 @@ struct NotifyWebhookRow: View {
         let nobody = NotifyWebhookRouting.reachesNobody(hook, channels: channels, rules: rules)
         let style = StatusStyle.notifyWebhook(hook, reachesNobody: nobody)
         let called = hook.lastUsedAt.map { "called \(RelativeDateFormatter.string(from: $0))" } ?? "never called"
-        let reason: String? = nobody ? (routing == .noChannel ? "No notification channel is enabled." : "No enabled rule routes \(hook.eventType). Add a rule for it on the web.") : nil
+        let reason: String? = nobody ? (routing == .noChannel ? "No notification channel is enabled." : "No enabled rule routes \(hook.eventType).") : nil
         return StatusRow(
             style: style,
             title: hook.displayName,

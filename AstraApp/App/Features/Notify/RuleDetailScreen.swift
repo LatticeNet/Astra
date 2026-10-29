@@ -54,11 +54,10 @@ struct RuleDetailScreen: View {
     }
 
     private func detail(_ rule: NotifyRule) -> some View {
-        let channels = store.channels.value ?? []
         return List {
             Section {
                 NotifyRefreshError(state: store.rules, noun: "the rule", retry: refresh)
-                NotifyRuleRow(rule: rule, channels: channels)
+                NotifyRuleRow(rule: rule, channels: store.channels.value)
             }
 
             Section {

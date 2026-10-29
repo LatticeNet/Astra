@@ -28,7 +28,7 @@ public enum NotifyIntents {
         let object = object(channel)
         return WriteIntent(
             tier: .t2, verb: "Send a test through", object: object, scopes: [adminScope],
-            consequence: "Sends Lattice's fixed test message through \(object.name) now, so whoever it reaches gets a notification. notify:admin.",
+            consequence: "Sends Lattice's fixed test message through \(object.name) now, so whoever it reaches gets a notification.",
             verify: { client in
                 let channels = try await client.listNotifyChannels()
                 guard let fresh = channels.first(where: { $0.id == channel.id }) else { return "\(object.name) is no longer listed." }
@@ -80,7 +80,7 @@ public enum NotifyIntents {
         let d = status.defaults
         let watches = status.healthURL.isEmpty ? "the URL its plan names" : status.healthURL
         return WriteIntent(
-            tier: .plan, verb: "Plan the witness on", object: node, scopes: witnessScopes,
+            tier: .plan, verb: "Plan witness on", object: node, scopes: witnessScopes,
             consequence: "Files a plan that installs the control-plane witness on \(node.name). Every \(d.intervalSeconds) s it asks \(watches); after \(d.holdSeconds) s of failures it pushes one Bark alert (level \(d.barkLevel)) with \(channel.displayName)'s device key through \(barkURL). Nothing changes on the node until the plan is approved.",
             affected: [node], changes: [.approvals, .notify],
             perform: { client, _ in
@@ -92,7 +92,7 @@ public enum NotifyIntents {
     /// P. Files a plan that removes the witness from a node.
     public static func removeWitness(node: ObjectRef) -> WriteIntent {
         WriteIntent(
-            tier: .plan, verb: "Plan removing the witness from", object: node, scopes: witnessScopes,
+            tier: .plan, verb: "Remove witness on", object: node, scopes: witnessScopes,
             consequence: "Files a plan that stops the witness on \(node.name) and deletes its unit, config, device key and status. After it is applied, nothing outside watches the control plane from there.",
             affected: [node], changes: [.approvals, .notify],
             perform: { client, _ in
@@ -113,7 +113,7 @@ public enum NotifyIntents {
         let object = object(webhook)
         return WriteIntent(
             tier: .t2, verb: "Send a test of", object: object, scopes: [adminScope],
-            consequence: "Raises \(webhook.eventType) now with no data fields; every channel a rule routes it to gets a notification. notify:admin.",
+            consequence: "Raises \(webhook.eventType) now with no data fields; every channel a rule routes it to gets a notification.",
             idempotent: false, changes: [.webhooks, .notify],
             perform: { client, _ in
                 outcome(ofWebhookTest: try await client.notifyTestWebhook(id: webhook.id), webhook: object)
