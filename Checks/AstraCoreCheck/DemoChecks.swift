@@ -13,6 +13,7 @@ public func checkDemo() async throws {
     try await checkSessionWrites()
     try await checkSessionTaskWrites()
     try await checkExpiringFixture()
+    try await checkCapabilityRecords()
 }
 
 private let pinned = DemoClock(pinned: "2026-10-28T12:00:00Z")!
@@ -366,6 +367,20 @@ private func checkExpiringFixture() async throws {
     let triage = try await demoClient(scenario: .limitedToken).fetchExpiring(within: 30)
     try expectEqual(triage.hiddenKinds, ["vpn_user", "share"], "Triage cannot read VPN users or shares")
     try expect(!triage.items.contains { $0.kind == "vpn_user" || $0.kind == "share" }, "and their rows are left out")
+}
+
+/// The record list the SSH Guard board reads: enrolments where the demo
+/// has an SSH Guard story, lab-pi-2's exclusion, and a cleared record gone.
+private func checkCapabilityRecords() async throws {
+    let state = DemoState()
+    let client = demoClient(state: state)
+    let records = try await client.sshGuardCapabilityRecords()
+    try expectEqual(records[DemoWorld.node("edge-sin-1").id], "enrolled", "edge-sin-1 is enrolled, so it can be armed")
+    try expectEqual(records[DemoWorld.node("lab-pi-2").id], "excluded", "lab-pi-2 stays excluded")
+    try expectEqual(records[DemoWorld.node("dns-iad-1").id], nil, "dns-iad-1 has no record")
+    await state.setValue("", for: "fleet.cap.\(DemoWorld.node("edge-sin-1").id).sshguard")
+    let cleared = try await client.sshGuardCapabilityRecords()
+    try expectEqual(cleared[DemoWorld.node("edge-sin-1").id], nil, "clearing removes a standing record")
 }
 
 /// `expect` for a value computed with `await`, which an autoclosure cannot hold.

@@ -640,10 +640,13 @@ public enum FleetFixtures {
         [
             DemoRoute(pathPattern: "/api/nodes/capabilities", body: nodeCapabilitiesBody(DemoWorld.node("edge-tyo-2"), records: [:], gateState: [:]),
                       emptyBody: #"{"capabilities":[],"known":[]}"#) { request, state in
-                guard let id = request.query["node_id"], let node = DemoWorld.node(id: id) else {
-                    return .json(#"{"capabilities":[],"known":[]}"#)
-                }
                 let (records, gateState) = await capabilityState(state)
+                guard let id = request.query["node_id"] else {
+                    return .json(recordsBody(request, records: records, gateState: gateState))
+                }
+                guard let node = DemoWorld.node(id: id) else {
+                    return .error(status: 403, code: "forbidden", message: "forbidden")
+                }
                 return .json(nodeCapabilitiesBody(node, records: records, gateState: gateState))
             }.requiring("node:read"),
             DemoRoute(method: "POST", pathPattern: "/api/nodes/capabilities") { request, state in
@@ -664,7 +667,8 @@ public enum FleetFixtures {
                 default:
                     return .error(status: 400, code: "bad_request", message: "state must be \"enrolled\", \"excluded\", or empty to clear")
                 }
-                await state.setValue(decision.isEmpty ? nil : "\(decision)|\(reason)", for: "fleet.cap.\(node.id).\(capability)")
+                // An empty value, not a missing one, so clearing also clears a standing record.
+                await state.setValue(decision.isEmpty ? "" : "\(decision)|\(reason)", for: "fleet.cap.\(node.id).\(capability)")
                 let enforced = await gateEnforced(capability, state: state)
                 return .json(DemoJSON.object([
                     "node_id": .string(node.id), "capability": .string(capability), "state": .string(decision),
@@ -694,9 +698,14 @@ public enum FleetFixtures {
         return gates.first { $0.id == capability }?.enforced ?? false
     }
 
-    /// Explicit records and gate overrides from this session, with lab-pi-2's standing exclusion.
+    /// Explicit records and gate overrides from this session, over the
+    /// standing ones: lab-pi-2 excluded from SSH Guard, and every node with an
+    /// SSH Guard story enrolled in it.
     static func capabilityState(_ state: DemoState) async -> (records: [String: String], gates: [String: Bool]) {
         var records: [String: String] = ["\(DemoWorld.node("lab-pi-2").id).sshguard": "excluded|No exposed port until port forwarding is configured"]
+        for name in SharedFixtures.sshGuardEnrolledNodes {
+            records["\(DemoWorld.node(name).id).sshguard"] = "enrolled|"
+        }
         var gateState: [String: Bool] = [:]
         for gate in gates {
             if let value = await state.value(for: "fleet.gate.\(gate.id)") { gateState[gate.id] = value == "true" }
@@ -722,6 +731,36 @@ public enum FleetFixtures {
         let base = derived(gate.id, node)
         if !enforced { return (true, "unenforced", base.allowed ? "" : base.reason, "", "") }
         return (base.allowed, base.source, base.reason, "", "")
+    }
+
+    /// `GET /api/nodes/capabilities` without `node_id`: every explicit record
+    /// on a node the caller may read, and the known capabilities.
+    static func recordsBody(_ request: DemoRequest, records: [String: String], gateState: [String: Bool]) -> String {
+        let scopes = DemoTransport.scopes(for: request.identity, scenario: request.scenario)
+        let rows: [DemoJSON] = records.keys.sorted().compactMap { key in
+            guard let dot = key.lastIndex(of: ".") else { return nil }
+            let nodeID = String(key[..<dot])
+            let capability = String(key[key.index(after: dot)...])
+            guard scopes.allows("node:read", nodeID: nodeID) else { return nil }
+            let parts = (records[key] ?? "").split(separator: "|", maxSplits: 1, omittingEmptySubsequences: false).map(String.init)
+            guard let decision = parts.first, !decision.isEmpty else { return nil }
+            let reason = parts.count > 1 ? parts[1] : ""
+            return .object([
+                "node_id": .string(nodeID),
+                "capability": .string(capability),
+                "state": .string(decision),
+                "reason": reason.isEmpty ? nil : .string(reason),
+                "actor_id": .string(DemoWorld.actorID),
+                "updated_at": .time("-3d"),
+                "enforced": .bool(gateState[capability] ?? gates.first { $0.id == capability }?.enforced ?? false),
+            ])
+        }
+        return DemoJSON.object([
+            "capabilities": .array(rows),
+            "known": .array(gates.map { gate in
+                .object(["id": .string(gate.id), "enforced": .bool(gateState[gate.id] ?? gate.enforced), "mutates": .bool(gate.mutates), "derived": .bool(gate.derived)])
+            }),
+        ]).text
     }
 
     static func nodeCapabilitiesBody(_ node: DemoWorldNode, records: [String: String], gateState: [String: Bool]) -> String {

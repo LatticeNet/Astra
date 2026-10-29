@@ -91,6 +91,12 @@ extension SharedFixtures {
         GuardRow(node: "dns-iad-1", stage: "idle", posture: "partial", enrolled: false, knock: "no_knock"),
     ]
 
+    /// Nodes with an SSH Guard story carry an explicit `enrolled` record, as
+    /// arming needs; dns-iad-1 is the one the gate does not admit.
+    static var sshGuardEnrolledNodes: [String] {
+        guardRows.filter(\.enrolled).map(\.node)
+    }
+
     /// The server answers a row for every node the caller may see. Nodes the
     /// demo gives no SSH Guard story sit idle: key-only sshd when reporting,
     /// nothing reported otherwise.
