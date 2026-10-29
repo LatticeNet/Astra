@@ -27,6 +27,7 @@ final class MonitoringSeriesModel {
             series = .loaded(value, at: Date())
             return true
         } catch {
+            if MonitoringStore.isCancellation(error) { series = series.value.map { .loaded($0, at: series.loadedAt ?? Date()) } ?? .idle; return true }
             let apiError = LatticeAPIError(error)
             if case .invalidResponse = apiError { session.markCompanionBehind("Path series") }
             series = series.failing(apiError, surface: "The path series", missingScope: "monitor:read")
@@ -66,11 +67,19 @@ struct PathDetailScreen: View {
         .navigationBarTitleDisplayMode(.inline)
         .navigationSubtitle(item.map { StatusStyle.path($0.display).word } ?? "")
         .toolbar { ToolbarItem(placement: .topBarTrailing) { menu } }
+        .onAppear {
+            // Demo only: `-AstraDemoCompare YES` turns the comparison on for screenshots.
+            if session.isDemo, UserDefaults.standard.bool(forKey: "AstraDemoCompare") { compare = true }
+        }
         .polling(.paths, version: pollVersion) {
             await nodes.refreshIfOlder(than: 60)
             let incidents = Task { await store.refreshIncidents() }
+            let early = item.map { current in
+                Task { await model.load(MonitoringSeriesSubject(path: current.path), window: appState.monitorWindow, compare: compare, session: session) }
+            }
             let ok = await store.refreshPaths(window: appState.monitorWindow)
             _ = await incidents.value
+            if let early { return await early.value && ok }
             guard let item else { return ok }
             return await model.load(MonitoringSeriesSubject(path: item.path), window: appState.monitorWindow, compare: compare, session: session) && ok
         }
@@ -124,6 +133,7 @@ struct PathDetailScreen: View {
             MonitoringRefreshError(state: store.paths, noun: "the path", retry: refreshAll)
             headerSection(item)
             chartSection(item)
+            factsSection(item)
             relatedSection(item)
             beaconSection(item)
             Section {
@@ -156,6 +166,11 @@ struct PathDetailScreen: View {
             if let evidence = MonitoringPathEvidence.sentence(item.path.degraded, since: since) {
                 Text(evidence).font(.body)
             }
+        }
+    }
+
+    private func factsSection(_ item: MonitoringPathItem) -> some View {
+        Section {
             DetailRow(label: "Method", value: item.path.method, copyable: false)
             if let figures = MonitoringPaths.figures(item) {
                 DetailRow(label: "Over \(appState.monitorWindow.rawValue)", value: figures, copyable: false)
@@ -207,7 +222,7 @@ struct PathDetailScreen: View {
         return VStack(alignment: .leading, spacing: Spacing.xs) {
             StateStrip(cells: cells.map(MonitoringStyle.cell), height: 18)
             HStack {
-                Text(series.from.map { TimeDisplay.clock($0, mode: mode, locale: locale) } ?? "")
+                Text("\(series.window) ago")
                 Spacer()
                 Text("now")
             }

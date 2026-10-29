@@ -117,6 +117,14 @@ final class MonitoringStore {
 
     // MARK: Loading
 
+    /// A request abandoned because its view disappeared, not a failure.
+    nonisolated static func isCancellation(_ error: any Error) -> Bool {
+        if error is CancellationError { return true }
+        if let url = error as? URLError, url.code == .cancelled { return true }
+        if case .transport(.cancelled) = LatticeAPIError(error) { return true }
+        return Task.isCancelled
+    }
+
     private func resetIfCredentialChanged() {
         guard generation != session.generation else { return }
         generation = session.generation
@@ -142,12 +150,18 @@ final class MonitoringStore {
             return true
         }
         guard let client = session.client else { return false }
-        self[keyPath: keyPath] = self[keyPath: keyPath].reloading
+        let before = self[keyPath: keyPath]
+        self[keyPath: keyPath] = before.reloading
         do {
             let value = try await fetch(client)
             self[keyPath: keyPath] = .loaded(value, at: Date())
             return true
         } catch {
+            if Self.isCancellation(error) {
+                // The screen went away mid-request: nothing failed.
+                self[keyPath: keyPath] = before
+                return true
+            }
             let apiError = LatticeAPIError(error)
             if case .invalidResponse = apiError { session.markCompanionBehind(surface) }
             if case .forbidden = apiError { session.noteForbidden() }

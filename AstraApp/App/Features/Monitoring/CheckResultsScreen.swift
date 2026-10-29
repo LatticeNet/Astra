@@ -26,6 +26,7 @@ final class MonitoringResultsModel {
             results = .loaded(try await client.monitoringResults(monitorID: monitorID, nodeID: nodeID, limit: limit), at: Date())
             return true
         } catch {
+            if MonitoringStore.isCancellation(error) { results = results.value.map { .loaded($0, at: results.loadedAt ?? Date()) } ?? .idle; return true }
             results = results.failing(LatticeAPIError(error), surface: "Check results", missingScope: "monitor:read")
             return false
         }

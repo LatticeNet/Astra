@@ -408,6 +408,8 @@ public enum MonitoringFixtures {
                 ("max_ms", maxValue),
                 ("jitter_ms", jitterValue),
                 ("loss", lossValue),
+                ("sent", .number(Double(n * 10))),
+                ("lost", .number((Double(n * 10) * (loss ?? 0)).rounded())),
             ]
             buckets.append(.object(fields))
             let earlier: DemoJSON

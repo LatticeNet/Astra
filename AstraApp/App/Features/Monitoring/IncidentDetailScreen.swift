@@ -20,6 +20,7 @@ final class MonitoringDeliveriesModel {
             deliveries = .loaded(all.filter { $0.incidentIDs.contains(incidentID) }.sorted { ($0.createdAt ?? .distantPast) > ($1.createdAt ?? .distantPast) }, at: Date())
             return true
         } catch {
+            if MonitoringStore.isCancellation(error) { deliveries = deliveries.value.map { .loaded($0, at: deliveries.loadedAt ?? Date()) } ?? .idle; return true }
             deliveries = deliveries.failing(LatticeAPIError(error), surface: "Notify deliveries", missingScope: "notify:admin")
             return false
         }
@@ -52,6 +53,10 @@ struct IncidentDetailScreen: View {
             .navigationBarTitleDisplayMode(.inline)
             .navigationSubtitle(store.incident(id: id).map { style($0).word } ?? "")
             .toolbar { toolbar }
+            .toolbarVisibility(showsBottomBar ? .visible : .automatic, for: .bottomBar)
+            // The bottom toolbar and the floating tab bar share the same edge;
+            // while the actions show, the tab bar steps aside (back returns it).
+            .toolbarVisibility(showsBottomBar ? .hidden : .automatic, for: .tabBar)
             .monitoringSnoozeDialog($snoozeTarget)
             .announcing(failure)
             .polling(.monitoring, version: changes.version([.incidents, .maintenance])) {
@@ -342,6 +347,11 @@ struct IncidentDetailScreen: View {
     }
 
     // MARK: Actions
+
+    private var showsBottomBar: Bool {
+        guard verticalSizeClass != .compact, let incident = store.incident(id: id) else { return false }
+        return IncidentFilter.isActive(incident) && !incident.isDerivedPending
+    }
 
     @ToolbarContentBuilder
     private var toolbar: some ToolbarContent {

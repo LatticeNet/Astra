@@ -131,18 +131,20 @@ struct MonitoringMatrixGrid: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            HStack {
+            VStack(alignment: .leading, spacing: Spacing.xs) {
                 MonitoringMatrixLegend()
-                Spacer(minLength: 0)
-                Text("\(matrix.rows.count) sources, \(matrix.columns.count) targets").textRole(.chartAxis).foregroundStyle(.secondary)
+                Text("\(matrix.rows.count) sources, \(matrix.columns.count) targets. Tap a name for its paths.")
+                    .textRole(.chartAxis)
+                    .foregroundStyle(.secondary)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, Spacing.l)
             .padding(.vertical, Spacing.s)
             .accessibilityElement(children: .combine)
             Divider()
             GeometryReader { proxy in
                 let pitch = cellPitch(width: proxy.size.width)
-                grid(pitch: pitch)
+                grid(pitch: pitch, viewport: proxy.size)
             }
             Divider()
             MonitoringFreshness(state: state, cadence: .paths)
@@ -158,7 +160,7 @@ struct MonitoringMatrixGrid: View {
         return min(max(fitted, 8), 44)
     }
 
-    private func grid(pitch: CGFloat) -> some View {
+    private func grid(pitch: CGFloat, viewport: CGSize) -> some View {
         let width = CGFloat(matrix.columns.count) * pitch
         let height = CGFloat(matrix.rows.count) * pitch
         return ZStack(alignment: .topLeading) {
@@ -168,6 +170,8 @@ struct MonitoringMatrixGrid: View {
                     .padding(.leading, labelWidth)
                     .padding(.top, headerHeight)
                     .padding([.trailing, .bottom], Spacing.l)
+                    // A grid smaller than the screen stays at the top leading corner, under its headers.
+                    .frame(minWidth: viewport.width, minHeight: viewport.height, alignment: .topLeading)
             }
             .onScrollGeometryChange(for: CGPoint.self) { geometry in
                 CGPoint(x: geometry.contentOffset.x + geometry.contentInsets.leading, y: geometry.contentOffset.y + geometry.contentInsets.top)
@@ -187,8 +191,8 @@ struct MonitoringMatrixGrid: View {
             Text("Source \u{2193}  Target \u{2192}")
                 .textRole(.chartAxis)
                 .foregroundStyle(.secondary)
-                .frame(width: labelWidth, height: headerHeight, alignment: .bottomLeading)
                 .padding(.leading, Spacing.s)
+                .frame(width: labelWidth, height: headerHeight, alignment: .bottomLeading)
                 .background(Color(uiColor: .systemGroupedBackground))
                 .accessibilityHidden(true)
         }
@@ -205,8 +209,7 @@ struct MonitoringMatrixGrid: View {
                         .textRole(.chartAxis)
                         .lineLimit(1)
                         .truncationMode(.middle)
-                        .fixedSize()
-                        .frame(width: headerHeight - Spacing.s, alignment: .leading)
+                        .frame(width: headerHeight - Spacing.s, height: pitch, alignment: .leading)
                         .rotationEffect(.degrees(-90))
                         .frame(width: pitch, height: headerHeight - Spacing.s)
                         .contentShape(Rectangle())

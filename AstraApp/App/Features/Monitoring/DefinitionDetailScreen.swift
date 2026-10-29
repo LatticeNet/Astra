@@ -18,6 +18,7 @@ final class MonitoringDefinitionModel {
             definition = .loaded(try await client.monitoringDefinition(id: id), at: Date())
             return true
         } catch {
+            if MonitoringStore.isCancellation(error) { definition = definition.value.map { .loaded($0, at: definition.loadedAt ?? Date()) } ?? .idle; return true }
             let apiError = LatticeAPIError(error)
             if case .invalidResponse = apiError { session.markCompanionBehind("Check definition") }
             definition = definition.failing(apiError, surface: "The check definition", missingScope: "monitor:read")

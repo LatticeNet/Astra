@@ -50,9 +50,15 @@ struct PathCharts: View {
         let median = p50s.isEmpty ? nil : p50s[p50s.count / 2]
         let runs = measured.reduce(0) { $0 + $1.n }
         let failed = measured.reduce(0) { $0 + $1.fail }
+        let sent = measured.reduce(0) { $0 + $1.sent }
+        let lost = measured.reduce(0) { $0 + $1.lost }
         var parts: [String] = []
         if let median { parts.append("p50 \(MonitoringFormat.milliseconds(median))") }
-        if runs > 0 { parts.append("loss \(MonitoringFormat.percent(Double(failed) / Double(runs)))") }
+        if sent > 0 {
+            parts.append("loss \(MonitoringFormat.percent(Double(lost) / Double(sent)))")
+        } else if runs > 0 {
+            parts.append("loss \(MonitoringFormat.percent(Double(failed) / Double(runs)))")
+        }
         parts.append("last \(series.window)")
         let gaps = series.buckets.filter { $0.n == 0 && $0.expected > 0 }.count
         if gaps > 0 { parts.append(gaps == 1 ? "1 step without data" : "\(gaps) steps without data") }
@@ -127,7 +133,7 @@ struct PathCharts: View {
                 RuleMark(x: .value("Degraded", degradedSince))
                     .foregroundStyle(Color.statusFailFill)
                     .lineStyle(StrokeStyle(lineWidth: 1))
-                    .annotation(position: .top, alignment: .leading) {
+                    .annotation(position: .top, alignment: nearEnd(degradedSince) ? .trailing : .leading) {
                         label("degraded \(TimeDisplay.clock(degradedSince, mode: mode, locale: locale))")
                     }
                     .accessibilityHidden(true)
@@ -232,6 +238,12 @@ struct PathCharts: View {
     }
 
     private func inRange(_ date: Date) -> Bool { domain.contains(date) }
+
+    /// In the last third of the chart, where a leading label would be clipped.
+    private func nearEnd(_ date: Date) -> Bool {
+        let span = domain.upperBound.timeIntervalSince(domain.lowerBound)
+        return date.timeIntervalSince(domain.lowerBound) > span * 2 / 3
+    }
 
     /// Maintenance windows clipped to the chart's span.
     private var maintenanceSpans: [(start: Date, end: Date)] {

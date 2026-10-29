@@ -89,6 +89,12 @@ struct CheckDetailScreen: View {
                 }
                 .accessibilityElement(children: .combine)
                 .accessibilityAddTraits(.isHeader)
+            }
+            if monitor.isGenerated { generatedSection(monitor) }
+            resultsSection(monitor)
+            chartSection(monitor)
+            incidentsSection(monitor)
+            Section {
                 DetailRow(label: "Type", value: MonitorType(rawValue: monitor.typeRaw)?.displayName ?? monitor.typeRaw, copyable: false)
                 DetailRow(label: "Target", value: monitor.target, monospaced: true)
                 if !monitor.targetNode.isEmpty {
@@ -107,11 +113,9 @@ struct CheckDetailScreen: View {
                 if !monitor.alert.isEmpty {
                     DetailRow(label: "Alerts", value: alertWords(monitor), copyable: false)
                 }
+            } header: {
+                Text("Configuration").accessibilityAddTraits(.isHeader)
             }
-            if monitor.isGenerated { generatedSection(monitor) }
-            resultsSection(monitor)
-            chartSection(monitor)
-            incidentsSection(monitor)
             if !monitor.isGenerated { actionsSection(monitor) }
             Section {
                 WebLinkRow(title: monitor.isGenerated ? "Open on web" : "Edit on web", path: .check(id: monitor.id))

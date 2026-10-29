@@ -186,6 +186,10 @@ struct MonitoringPathsList: View {
         if let linked = appState.monitorView, let wanted = MonitoringPathsView(rawValue: linked) {
             viewRaw = wanted.rawValue
             appState.monitorView = nil
+        } else if appState.monitorView == "matrix" {
+            // `lattice://monitor?segment=paths&view=matrix` opens the matrix over Paths.
+            appState.monitorView = nil
+            router.push(.monitoring(.matrix))
         }
         if let pending = appState.consumeQuery(MonitorSegment.paths.rawValue) {
             rootQuery = pending
