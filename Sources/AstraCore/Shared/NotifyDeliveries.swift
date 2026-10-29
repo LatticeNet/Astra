@@ -58,6 +58,21 @@ public struct NotifyDelivery: Codable, Equatable, Hashable, Sendable, Identifiab
     /// How many times the same message repeated while held.
     public var repeats: Int = 0
     public var heldUntil: Date?
+    /// The inbound webhook's own delivery record, for a webhook source.
+    public var sourceRef: String = ""
+    /// The failed delivery a channel's critical fallback stands in for. A
+    /// rule's fallback, which covers every primary, leaves it empty.
+    public var fallbackOf: String = ""
+    /// The message was cut to the server's title and body limits; what is
+    /// stored is what was sent.
+    public var truncated: Bool = false
+    /// The latest repeat a folded no_route row took in.
+    public var lastSeenAt: Date?
+    /// A Bark interruption level that overrides the channel's own for this
+    /// delivery (an incident escalation sends at critical).
+    public var barkLevel: String = ""
+    /// Sent again after a server restart interrupted it.
+    public var redriven: Bool = false
 
     enum CodingKeys: String, CodingKey {
         case id, source, severity, role, outcome, reason, attempts, title, body
@@ -76,6 +91,11 @@ public struct NotifyDelivery: Codable, Equatable, Hashable, Sendable, Identifiab
         case fallbackFor = "fallback_for"
         case nextAttemptAt = "next_attempt_at"
         case heldUntil = "held_until"
+        case sourceRef = "source_ref"
+        case fallbackOf = "fallback_of"
+        case truncated, redriven
+        case lastSeenAt = "last_seen_at"
+        case barkLevel = "bark_level"
     }
 
     public init(from decoder: Decoder) throws {
@@ -106,6 +126,12 @@ public struct NotifyDelivery: Codable, Equatable, Hashable, Sendable, Identifiab
         nextAttemptAt = try DateValue.decodeIfPresent(from: c, forKey: .nextAttemptAt)
         repeats = try c.decodeIfPresent(Int.self, forKey: .repeats) ?? 0
         heldUntil = try DateValue.decodeIfPresent(from: c, forKey: .heldUntil)
+        sourceRef = try c.decodeIfPresent(String.self, forKey: .sourceRef) ?? ""
+        fallbackOf = try c.decodeIfPresent(String.self, forKey: .fallbackOf) ?? ""
+        truncated = try c.decodeIfPresent(Bool.self, forKey: .truncated) ?? false
+        lastSeenAt = try DateValue.decodeIfPresent(from: c, forKey: .lastSeenAt)
+        barkLevel = try c.decodeIfPresent(String.self, forKey: .barkLevel) ?? ""
+        redriven = try c.decodeIfPresent(Bool.self, forKey: .redriven) ?? false
     }
 }
 
@@ -115,8 +141,10 @@ public struct NotifyDeliveriesResponse: Decodable, Equatable, Sendable {
     public var stored: Int
     public var durable: Bool
     public var max: Int
+    /// Settled deliveries each source keeps when the outbox evicts.
+    public var floor: Int
 
-    enum CodingKeys: String, CodingKey { case deliveries, stored, durable, max }
+    enum CodingKeys: String, CodingKey { case deliveries, stored, durable, max, floor }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -124,6 +152,7 @@ public struct NotifyDeliveriesResponse: Decodable, Equatable, Sendable {
         stored = try c.decodeIfPresent(Int.self, forKey: .stored) ?? 0
         durable = try c.decodeIfPresent(Bool.self, forKey: .durable) ?? false
         max = try c.decodeIfPresent(Int.self, forKey: .max) ?? 0
+        floor = try c.decodeIfPresent(Int.self, forKey: .floor) ?? 0
     }
 }
 

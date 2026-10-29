@@ -165,7 +165,9 @@ struct DeliveryDetailScreen: View {
         } header: {
             Text("Message as sent").accessibilityAddTraits(.isHeader)
         } footer: {
-            Text("This is the text the channel received, after the rule's templates.")
+            Text(delivery.truncated
+                 ? "The server cut this message to its title and body limits. This is the shortened text the channel received."
+                 : "This is the text the channel received, after the rule's templates.")
         }
     }
 

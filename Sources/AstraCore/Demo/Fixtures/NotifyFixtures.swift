@@ -535,8 +535,9 @@ public enum NotifyFixtures {
                  attempts: [attempt("-5h", ok: true, status: 200, ms: 512)]),
         delivery("dlv_n07", event: "evt_n07", type: "backup.finished", severity: "info", category: "webhooks", source: ("webhook", "wh_backup"),
                  channel: ("ch_tg", "Team chat", "telegram"), rule: ("rule_backups", "Backups to ops mail"), role: "primary",
-                 outcome: "sent", at: "-7h", title: "Backup of nas.example.net finished", body: "412 GB in 38 min, 0 errors.",
-                 attempts: [attempt("-7h", ok: true, status: 200, ms: 288)]),
+                 outcome: "sent", at: "-7h", title: "Backup of nas.example.net finished",
+                 body: "412 GB in 38 min, 0 errors. Largest changes: /srv/media/photos/2026 (96 GB), /srv/vm/images (71 GB), /srv/home/ops/archive (40 GB), /srv/media/video/2026/10 (",
+                 attempts: [attempt("-7h", ok: true, status: 200, ms: 288)], truncated: true),
         delivery("dlv_n08", event: "evt_n08", type: "notify.test", severity: "info", category: "notify", source: ("operator", ""),
                  channel: ("ch_bark", "Phone (Bark)", "bark"), rule: nil, role: "test", outcome: "sent", at: "-1d",
                  title: "Lattice test", body: "Test message for the bark channel \"Phone (Bark)\", sent from Notifications. If you can read this, the channel works.",
@@ -554,7 +555,7 @@ public enum NotifyFixtures {
     static func delivery(_ id: String, event: String, type: String, severity: String, category: String, source: (String, String) = ("server", ""),
                          channel: (String, String, String)?, rule: (String, String)?, role: String, fallbackFor: String = "",
                          outcome: String, at: String, title: String, body: String, attempts: [DemoJSON], reason: String = "",
-                         incidents: [String] = [], next: String? = nil, held: String? = nil, repeats: Int = 0) -> DemoJSON {
+                         incidents: [String] = [], next: String? = nil, held: String? = nil, repeats: Int = 0, truncated: Bool = false) -> DemoJSON {
         let settled = outcome == "sent" || outcome == "failed" || outcome == "no_route"
         return .object([
             "id": .string(id), "event_id": .string(event), "event_type": .string(type),
@@ -564,7 +565,7 @@ public enum NotifyFixtures {
             "role": role.isEmpty ? nil : .string(role), "fallback_for": fallbackFor.isEmpty ? nil : .string(fallbackFor),
             "outcome": .string(outcome), "reason": reason.isEmpty ? nil : .string(reason),
             "attempts": attempts.isEmpty ? nil : .array(attempts), "next_attempt_at": next.map(DemoJSON.time),
-            "title": .string(title), "body": .string(body),
+            "title": .string(title), "body": .string(body), "truncated": truncated ? true : nil,
             "created_at": .time(at), "settled_at": settled ? .time(at) : nil,
             "repeats": repeats > 0 ? .number(Double(repeats)) : nil, "last_seen_at": repeats > 0 ? .time("-50m") : nil,
             "held_until": held.map(DemoJSON.time), "incident_ids": incidents.isEmpty ? nil : .strings(incidents),

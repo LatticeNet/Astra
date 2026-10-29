@@ -15,6 +15,7 @@ public func checkDemo() async throws {
     try await checkExpiringFixture()
     try await checkCapabilityRecords()
     try await checkDDNSFollowsWrites()
+    try await checkDeliveries()
 }
 
 private let pinned = DemoClock(pinned: "2026-10-28T12:00:00Z")!
@@ -401,6 +402,25 @@ private func checkDDNSFollowsWrites() async throws {
     try expect(after.first { $0.id == "ddns_d03" }?.lastError.isEmpty == true, "and clears its error")
     try expect(!after.contains { $0.id == "ddns_d02" }, "a deleted profile leaves the list")
     try expectEqual(after.count, before.count - 1, "nothing else changes")
+}
+
+/// The shared outbox fixture uses the server's event types, channel kinds
+/// and limits, decodes the fields the server sends, and refuses a confined
+/// token as `refuseConfinedNotifyRead` does.
+private func checkDeliveries() async throws {
+    let page = try await demoClient().fetchDeliveries()
+    try expectEqual(page.max, 1000, "MaxNotifyDeliveries")
+    try expectEqual(page.floor, 50, "NotifyDeliveryFloorPerSource")
+    try expect(!page.deliveries.contains { $0.eventType.hasPrefix("incident.") }, "no invented incident.* event types")
+    try expect(!page.deliveries.contains { $0.channelKind == "email" }, "no email channel kind")
+    let decoded = try JSONDecoder().decode(NotifyDelivery.self, from: Data(#"{"id":"d","truncated":true,"fallback_of":"d0","last_seen_at":"2026-10-28T11:00:00Z","bark_level":"critical","redriven":true,"source_ref":"whd_1"}"#.utf8))
+    try expect(decoded.truncated && decoded.redriven, "truncated and redriven decode")
+    try expectEqual([decoded.fallbackOf, decoded.barkLevel, decoded.sourceRef], ["d0", "critical", "whd_1"], "fallback_of, bark_level and source_ref decode")
+    try expect(decoded.lastSeenAt != nil, "last_seen_at decodes")
+    do {
+        _ = try await demoClient(scenario: .confinedToken).fetchDeliveries()
+        throw CheckFailure.failed("a confined token must not read the outbox")
+    } catch LatticeAPIError.forbidden {}
 }
 
 /// `expect` for a value computed with `await`, which an autoclosure cannot hold.

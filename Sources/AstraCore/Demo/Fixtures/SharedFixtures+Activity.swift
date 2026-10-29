@@ -57,7 +57,11 @@ extension SharedFixtures {
                 auditAnswer(request)
             }.requiring("audit:read"),
             DemoRoute(pathPattern: "/api/notify/deliveries", body: deliveriesBody(deliveries), emptyBody: deliveriesBody([])) { request, _ in
-                deliveriesAnswer(request)
+                // refuseConfinedNotifyRead: the outbox is fleet-wide.
+                if DemoTransport.scopes(for: request.identity, scenario: request.scenario).isConfined {
+                    return .error(status: 403, code: "capability_denied", message: "notification history is fleet-wide with no node to confine it to; it requires a token without a server allowlist restriction")
+                }
+                return deliveriesAnswer(request)
             }.requiring("notify:admin"),
             DemoRoute(pathPattern: "/api/expiring", body: expiringBody(within: 30), emptyBody: #"{"generated_at":"{{now}}","within_days":30,"items":[],"totals":[],"hidden_kinds":[]}"#) { request, _ in
                 let scopes = DemoTransport.scopes(for: request.identity, scenario: request.scenario)
@@ -348,13 +352,13 @@ extension SharedFixtures {
     // MARK: Deliveries
 
     static let deliveries: [DemoJSON] = [
-        delivery(id: "dlv_d01", event: "inc_d01", type: "incident.open", severity: "critical", channel: ("ch_bark", "Phone (Bark)", "bark"), outcome: "sent", at: "-175m", title: "relay-fra-2 offline", incidents: ["inc_d01"]),
-        delivery(id: "dlv_d02", event: "inc_d01", type: "incident.open", severity: "critical", channel: ("ch_mail", "Ops mail", "email"), outcome: "failed", at: "-175m", title: "relay-fra-2 offline", incidents: ["inc_d01"], reason: "smtp: 421 try again later"),
-        delivery(id: "dlv_d03", event: "inc_d02", type: "incident.open", severity: "warning", channel: ("ch_bark", "Phone (Bark)", "bark"), outcome: "sent", at: "-45m", title: "Path edge-tyo-1 to relay-fra-1 degraded", incidents: ["inc_d02"]),
-        delivery(id: "dlv_d04", event: "inc_d07", type: "incident.open", severity: "critical", channel: ("ch_bark", "Phone (Bark)", "bark"), outcome: "suppressed", at: "-6d", title: "lab-pi-2 offline", incidents: ["inc_d07"], reason: "held by maintenance window Home lab rewiring"),
-        delivery(id: "dlv_d05", event: "inc_d09", type: "incident.resolved", severity: "warning", channel: ("ch_bark", "Phone (Bark)", "bark"), outcome: "sent", at: "-2h", title: "dns-fra-1 DNS answer check recovered", incidents: ["inc_d09"]),
+        delivery(id: "dlv_d01", event: "inc_d01", type: "node.offline", severity: "critical", channel: ("ch_bark", "Phone (Bark)", "bark"), outcome: "sent", at: "-175m", title: "relay-fra-2 offline", incidents: ["inc_d01"]),
+        delivery(id: "dlv_d02", event: "inc_d01", type: "node.offline", severity: "critical", channel: ("ch_mail", "Ops mail", "webhook"), outcome: "failed", at: "-175m", title: "relay-fra-2 offline", incidents: ["inc_d01"], reason: "upstream status 503"),
+        delivery(id: "dlv_d03", event: "inc_d02", type: "path.degraded", severity: "warning", channel: ("ch_bark", "Phone (Bark)", "bark"), outcome: "sent", at: "-45m", title: "Path edge-tyo-1 to relay-fra-1 degraded", incidents: ["inc_d02"]),
+        delivery(id: "dlv_d04", event: "inc_d07", type: "node.offline", severity: "critical", channel: ("ch_bark", "Phone (Bark)", "bark"), outcome: "suppressed", at: "-6d", title: "lab-pi-2 offline", incidents: ["inc_d07"], reason: "held by maintenance window Home lab rewiring"),
+        delivery(id: "dlv_d05", event: "inc_d09", type: "monitor.recovered", severity: "warning", channel: ("ch_bark", "Phone (Bark)", "bark"), outcome: "sent", at: "-2h", title: "dns-fra-1 DNS answer check recovered", incidents: ["inc_d09"]),
         delivery(id: "dlv_d06", event: "evt_d06", type: "plugin.health", severity: "info", channel: ("", "", ""), outcome: "no_route", at: "-4h", title: "Plugin example-labs.reports restarted", incidents: [], reason: "no rule matches plugin.health"),
-        delivery(id: "dlv_d07", event: "inc_d03", type: "incident.open", severity: "warning", channel: ("ch_bark", "Phone (Bark)", "bark"), outcome: "sent", at: "-20m", title: "tls-api.example.org check failing", incidents: ["inc_d03"]),
+        delivery(id: "dlv_d07", event: "inc_d03", type: "monitor.down", severity: "warning", channel: ("ch_bark", "Phone (Bark)", "bark"), outcome: "sent", at: "-20m", title: "tls-api.example.org check failing", incidents: ["inc_d03"]),
     ]
 
     private static func delivery(id: String, event: String, type: String, severity: String, channel: (String, String, String), outcome: String, at: String, title: String, incidents: [String], reason: String = "") -> DemoJSON {
@@ -377,8 +381,8 @@ extension SharedFixtures {
             "attempts": attempted ? [.object([
                 "at": .time(at),
                 "ok": .bool(outcome == "sent"),
-                "kind": .string(channel.2),
-                "status": outcome == "sent" ? 200 : nil,
+                "kind": outcome == "sent" ? nil : "upstream_5xx",
+                "status": outcome == "sent" ? 200 : 503,
                 "duration_ms": outcome == "sent" ? 412 : 30_000,
             ])] : nil,
             "title": .string(title),
@@ -394,8 +398,8 @@ extension SharedFixtures {
             ("deliveries", .array(rows)),
             ("stored", .number(Double(rows.count))),
             ("durable", true),
-            ("max", 2_000),
-            ("floor", 200),
+            ("max", 1_000),
+            ("floor", 50),
         ]).text
     }
 
