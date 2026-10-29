@@ -110,6 +110,36 @@ struct IncidentRow: View {
     }
 }
 
+/// The snooze choices of every snooze dialog (section 4.5): 1 h, 4 h, and
+/// until the next 08:00. Before
+/// 08:00 that is this morning, so a 3am snooze does not silence repeat
+/// alerts through the whole next working day; the label names the day.
+struct IncidentSnoozeChoice: Identifiable {
+    let id: String
+    let label: String
+    let minutes: Int
+    let until: String
+
+    static func choices(now: Date, mode: TimeZoneMode, locale: Locale) -> [IncidentSnoozeChoice] {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = mode.timeZone
+        let todayMorning = calendar.date(bySettingHour: 8, minute: 0, second: 0, of: now) ?? now
+        let isToday = todayMorning > now
+        let morning = isToday ? todayMorning : (calendar.date(byAdding: .day, value: 1, to: todayMorning) ?? todayMorning)
+        let clock = { (date: Date) in TimeDisplay.clock(date, mode: mode, locale: locale) }
+        let hour = now.addingTimeInterval(3600), four = now.addingTimeInterval(4 * 3600)
+        let minutes = max(1, Int(morning.timeIntervalSince(now) / 60))
+        let rounded = Int((morning.timeIntervalSince(now) / 3600).rounded())
+        let hours = rounded < 1 ? "under an hour" : (rounded == 1 ? "1 hour" : "\(rounded) hours")
+        let until = isToday ? "\(clock(morning)) this morning" : "\(clock(morning)) tomorrow"
+        return [
+            IncidentSnoozeChoice(id: "1h", label: "1 hour, until \(clock(hour))", minutes: 60, until: clock(hour)),
+            IncidentSnoozeChoice(id: "4h", label: "4 hours, until \(clock(four))", minutes: 240, until: clock(four)),
+            IncidentSnoozeChoice(id: "morning", label: "Until \(until), \(hours)", minutes: minutes, until: until),
+        ]
+    }
+}
+
 /// An approval row with its plan seal (section 4.7). Never offers a swipe to approve.
 struct ApprovalRow: View {
     let approval: Approval

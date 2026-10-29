@@ -216,8 +216,8 @@ struct MonitoringQueryErrorRow: View {
 
 // MARK: Snooze
 
-/// The one snooze dialog per list or screen (section 4.5): 1 h, 4 h, until
-/// 08:00 tomorrow, and End snooze while snoozed. Its title names the incident.
+/// The one snooze dialog per list or screen (section 4.5): the shared
+/// choices, and End snooze while snoozed. Its title names the incident.
 struct MonitoringSnoozeDialog: ViewModifier {
     @Binding var target: Incident?
 
@@ -232,7 +232,7 @@ struct MonitoringSnoozeDialog: ViewModifier {
             titleVisibility: .visible,
             presenting: target
         ) { incident in
-            ForEach(options(now: Date()), id: \.minutes) { option in
+            ForEach(IncidentSnoozeChoice.choices(now: Date(), mode: mode, locale: locale)) { option in
                 Button(option.label) {
                     Task { await runner.run(IncidentRow.snoozeIntent(incident, minutes: option.minutes, until: option.until)) }
                 }
@@ -246,26 +246,6 @@ struct MonitoringSnoozeDialog: ViewModifier {
         } message: { _ in
             Text("No repeat alerts until the time you choose. Acknowledging stops them for good.")
         }
-    }
-
-    private struct Option {
-        let label: String
-        let minutes: Int
-        let until: String
-    }
-
-    private func options(now: Date) -> [Option] {
-        var calendar = Calendar.current
-        calendar.timeZone = mode.timeZone
-        let tomorrow = calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: now)) ?? now
-        let morning = calendar.date(bySettingHour: 8, minute: 0, second: 0, of: tomorrow) ?? now
-        func until(_ date: Date) -> String { TimeDisplay.clock(date, mode: mode, locale: locale) }
-        let toMorning = max(1, Int((morning.timeIntervalSince(now) / 60).rounded(.up)))
-        return [
-            Option(label: "1 hour, until \(until(now.addingTimeInterval(3_600)))", minutes: 60, until: until(now.addingTimeInterval(3_600))),
-            Option(label: "4 hours, until \(until(now.addingTimeInterval(14_400)))", minutes: 240, until: until(now.addingTimeInterval(14_400))),
-            Option(label: "Until \(until(morning)) tomorrow", minutes: toMorning, until: "\(until(morning)) tomorrow"),
-        ]
     }
 }
 

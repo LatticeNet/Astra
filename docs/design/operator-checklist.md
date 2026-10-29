@@ -26,7 +26,7 @@ Agents cannot tap, swipe or rotate a simulator, and they cannot run VoiceOver, V
 ## M1 Inbox and approvals
 
 - Inbox: the verdict line is the first thing VoiceOver reads and is a heading; the headings rotor jumps Incidents, Needs you, Attention, Due soon. Each incident row lists Acknowledge (or Unacknowledge) and Snooze once in the actions rotor. With VoiceOver on, a poll that adds or reorders rows shows "N updates. Show" at the top, announces it once, and focus does not move.
-- Inbox: swiping Snooze opens one dialog naming the incident with 1 hour, 4 hours and until 08:00 tomorrow (and End snooze when snoozed); the banner offers Undo, and Undo restores the earlier state.
+- Inbox: swiping Snooze opens one dialog naming the incident with 1 hour, 4 hours and until the next 08:00 (and End snooze when snoozed); the banner offers Undo, and Undo restores the earlier state.
 - Inbox: the filter menu shows "Showing approvals only. Show all" while filtered; relaunching starts at All.
 - Inbox: a grouped row ("Agent update to 0.3.10 on 3 nodes") opens BatchReview; a single row opens Review; there is no swipe to approve anywhere.
 - Review: Face ID (Touch ID and the passcode on an SE, which show the reason "Approve ... plan 3f9a…c210") runs before every approve, reject and dismiss; cancelling sends nothing and plays no haptic.

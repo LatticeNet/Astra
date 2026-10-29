@@ -114,10 +114,9 @@ struct NodeOverviewSection: View {
 
     @ViewBuilder
     private func snoozeButtons(_ incident: Incident) -> some View {
-        let options: [(String, Int)] = [("1 hour", 60), ("4 hours", 240), ("Until \(tomorrowEight)", minutesUntilTomorrowEight)]
-        ForEach(options, id: \.1) { title, minutes in
-            Button("Snooze \(title)") {
-                Task { await runner.run(IncidentRow.snoozeIntent(incident, minutes: minutes, until: title.lowercased())) }
+        ForEach(IncidentSnoozeChoice.choices(now: Date(), mode: mode, locale: locale)) { choice in
+            Button(choice.label) {
+                Task { await runner.run(IncidentRow.snoozeIntent(incident, minutes: choice.minutes, until: choice.until)) }
             }
         }
         if incident.snoozed {
@@ -125,15 +124,6 @@ struct NodeOverviewSection: View {
         }
         Button("Cancel", role: .cancel) {}
     }
-
-    private var tomorrowEightDate: Date {
-        let calendar = Calendar.current
-        let tomorrow = calendar.date(byAdding: .day, value: 1, to: Date()) ?? Date()
-        return calendar.date(bySettingHour: 8, minute: 0, second: 0, of: tomorrow) ?? tomorrow
-    }
-
-    private var tomorrowEight: String { TimeDisplay.clock(tomorrowEightDate, mode: mode, locale: locale) + " tomorrow" }
-    private var minutesUntilTomorrowEight: Int { max(1, Int(tomorrowEightDate.timeIntervalSinceNow / 60)) }
 
     // MARK: Now
 
