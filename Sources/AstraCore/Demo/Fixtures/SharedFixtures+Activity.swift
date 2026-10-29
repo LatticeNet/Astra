@@ -44,14 +44,14 @@ public struct DemoTaskOutcome: Sendable, Hashable {
 extension SharedFixtures {
     static var activityRoutes: [DemoRoute] {
         [
-            DemoRoute(pathPattern: "/api/tasks", body: DemoJSON.array(tasks.map(taskJSON)).text) { request, _ in
-                tasksAnswer(request)
+            DemoRoute(pathPattern: "/api/tasks", body: DemoJSON.array(tasks.map(taskJSON)).text) { request, state in
+                await tasksAnswer(request, state: state)
             },
-            DemoRoute(pathPattern: "/api/tasks/counts", body: taskCountsBody(tasks), emptyBody: taskCountsBody([])) { request, _ in
-                .json(taskCountsBody(request.scenario == .quiet ? tasks.filter { $0.status == "finished" } : tasks))
+            DemoRoute(pathPattern: "/api/tasks/counts", body: taskCountsBody(tasks), emptyBody: taskCountsBody([])) { request, state in
+                .json(taskCountsBody(await sessionTasks(state, scenario: request.scenario)))
             }.requiring("task:read"),
-            DemoRoute(pathPattern: "/api/task-results", body: DemoJSON.array(taskResults(nil)).text) { request, _ in
-                taskResultsAnswer(request)
+            DemoRoute(pathPattern: "/api/task-results", body: DemoJSON.array(taskResults(nil)).text) { request, state in
+                taskResultsAnswer(request, deleted: await state.members(of: deletedTasksSet))
             }.requiring("task:read"),
             DemoRoute(pathPattern: "/api/audit", body: DemoJSON.array(auditEvents.map(\.json)).text) { request, _ in
                 auditAnswer(request)
@@ -119,12 +119,50 @@ extension SharedFixtures {
         return list
     }()
 
-    static func tasksAnswer(_ request: DemoRequest) -> DemoResponse {
+    // The Tasks writes (TasksFixtures) record what they did here, so every
+    // later read of the run list, counts and results agrees with them.
+    static let deletedTasksSet = "tasks.deleted"
+    static let cancelledTasksSet = "tasks.cancelled"
+    /// Members are "<new id>|<source id>|<node id, empty for every target>".
+    static let rerunTasksSet = "tasks.reruns"
+
+    /// The invented runs with this session's deletes, cancels and reruns
+    /// applied, newest first as the server lists them.
+    static func sessionTasks(_ state: DemoState, scenario: DemoScenario) async -> [DemoTask] {
+        let deleted = await state.members(of: deletedTasksSet)
+        let cancelled = await state.members(of: cancelledTasksSet)
+        let base = scenario == .quiet ? tasks.filter { $0.status == "finished" } : tasks
+        // Oldest rerun first, so a rerun of a rerun finds its source.
+        let entries = await state.members(of: rerunTasksSet)
+            .map { $0.split(separator: "|", omittingEmptySubsequences: false).map(String.init) }
+            .filter { $0.count == 3 }
+            .sorted { rerunNumber($0[0]) < rerunNumber($1[0]) }
+        var reruns: [DemoTask] = []
+        for parts in entries {
+            guard let source = (reruns + tasks).first(where: { $0.id == parts[1] }) else { continue }
+            var fresh = DemoTask(id: parts[0], status: "queued", script: source.script, targets: parts[2].isEmpty ? source.targets : [parts[2]], createdAt: "")
+            fresh.origin = "rerun"
+            fresh.rerunOf = source.rerunOf.isEmpty ? source.id : source.rerunOf
+            reruns.append(fresh)
+        }
+        return (reruns.reversed() + base).compactMap { task in
+            guard !deleted.contains(task.id) else { return nil }
+            var task = task
+            if cancelled.contains(task.id) { task.status = "cancelled" }
+            return task
+        }
+    }
+
+    private static func rerunNumber(_ id: String) -> Int {
+        Int(id.drop { !$0.isNumber }) ?? 0
+    }
+
+    static func tasksAnswer(_ request: DemoRequest, state: DemoState) async -> DemoResponse {
         let scopes = DemoTransport.scopes(for: request.identity, scenario: request.scenario)
         guard scopes.allows("task:read") || scopes.allows("task:run") else {
             return .error(status: 403, code: "forbidden", message: "missing scope task:read")
         }
-        var rows = request.scenario == .quiet ? tasks.filter { $0.status == "finished" } : tasks
+        var rows = await sessionTasks(state, scenario: request.scenario)
         guard !request.query.isEmpty else { return .json(DemoJSON.array(rows.map(taskJSON)).text) }
         if let status = request.query["status"], !status.isEmpty {
             let wanted = Set(status.split(separator: ",").map(String.init))
@@ -206,9 +244,13 @@ extension SharedFixtures {
         }
     }
 
-    static func taskResultsAnswer(_ request: DemoRequest) -> DemoResponse {
-        guard !request.query.isEmpty else { return .json(DemoJSON.array(taskResults(nil)).text) }
-        var rows = taskResults(request.query["task_id"])
+    static func taskResultsAnswer(_ request: DemoRequest, deleted: Set<String> = []) -> DemoResponse {
+        let kept = { (row: DemoJSON) -> Bool in
+            guard case .object(let pairs) = row, case .string(let id)? = pairs.first(where: { $0.0 == "task_id" })?.1 else { return true }
+            return !deleted.contains(id)
+        }
+        guard !request.query.isEmpty else { return .json(DemoJSON.array(taskResults(nil).filter(kept)).text) }
+        var rows = taskResults(request.query["task_id"]).filter(kept)
         if let node = request.query["node_id"], !node.isEmpty {
             rows = rows.filter { row in
                 guard case .object(let pairs) = row, case .string(let id)? = pairs.first(where: { $0.0 == "node_id" })?.1 else { return false }

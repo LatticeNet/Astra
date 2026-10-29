@@ -11,6 +11,7 @@ public func checkDemo() async throws {
     try await checkSharedFixturesDecode()
     try await checkScenarios()
     try await checkSessionWrites()
+    try await checkSessionTaskWrites()
 }
 
 private let pinned = DemoClock(pinned: "2026-10-28T12:00:00Z")!
@@ -327,6 +328,27 @@ private func checkSessionWrites() async throws {
         try expectEqual(signedIn.sessionCookie, "sess_demo_notasecret", "the demo session cookie")
         try expect(signedIn.expiresAt != nil, "the cookie's Max-Age gives the session an expiry")
     }
+}
+
+/// The task writes change what the run list, counts and results read next.
+private func checkSessionTaskWrites() async throws {
+    let state = DemoState()
+    let writer = demoClient(scenario: .rootToken, state: state)
+    _ = try await writer.cancelTask(id: "task_d06")
+    try await writer.tasksDelete(id: "task_d01")
+    let fresh = try await writer.tasksRerunNode(id: "task_d02", nodeID: DemoWorld.node("edge-hkg-2").id)
+    let again = try await writer.tasksRerun(id: fresh.id)
+
+    let list = try await writer.listTasks(query: TaskQuery(limit: 200)).tasks
+    try expectEqual(list.first { $0.id == "task_d06" }?.status, "cancelled", "a cancelled run reads cancelled")
+    try expect(!list.contains { $0.id == "task_d01" }, "a deleted run leaves the list")
+    try expectEqual(Array(list.prefix(2).map(\.id)), [again.id, fresh.id], "reruns lead the list, newest first")
+    try expectEqual(list.first { $0.id == again.id }?.rerunOfTaskID, "task_d02", "a rerun of a rerun names the first run")
+    try expectEqual(list.first { $0.id == fresh.id }?.targets, [DemoWorld.node("edge-hkg-2").id], "rerun on one node targets it alone")
+    let deletedResults = try await writer.listTaskResults(taskID: "task_d01")
+    try expect(deletedResults.isEmpty, "a deleted run has no results")
+    let counts = try await writer.fetchTaskCounts()
+    try expectEqual(counts.total, list.count, "counts agree with the list")
 }
 
 /// `expect` for a value computed with `await`, which an autoclosure cannot hold.

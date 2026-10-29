@@ -15,35 +15,37 @@ public enum TasksFixtures {
             await rerun(request, state: state, node: request.bodyStrings["node_id"] ?? "")
         }.requiring("task:run"),
         DemoRoute(method: "POST", pathPattern: "/api/tasks/delete") { request, state in
-            guard let task = task(request) else { return notFound }
+            guard let task = await task(request, state: state) else { return notFound }
             await state.insert(task.id, into: deletedSet)
             return .json(#"{"ok":true}"#)
         }.requiring("task:run"),
-        DemoRoute(method: "POST", pathPattern: "/api/tasks/reveal-script") { request, _ in
-            reveal(request)
+        DemoRoute(method: "POST", pathPattern: "/api/tasks/reveal-script") { request, state in
+            await reveal(request, state: state)
         }.requiring("task:read"),
         // The polls of the run screens: bodies left out, the stderr head kept.
-        DemoRoute(pathPattern: "/api/task-results", query: ["omit_output": "1"], body: resultsBody(ids: [], node: nil, limit: 500, offset: 0), emptyBody: resultsBody(ids: [], node: nil, limit: 500, offset: 0)) { request, _ in
-            let ids = (request.query["task_id"] ?? "").split(separator: ",").map(String.init)
+        DemoRoute(pathPattern: "/api/task-results", query: ["omit_output": "1"], body: resultsBody(ids: [], node: nil, limit: 500, offset: 0), emptyBody: resultsBody(ids: [], node: nil, limit: 500, offset: 0)) { request, state in
+            let deleted = await state.members(of: deletedSet)
+            let ids = (request.query["task_id"] ?? "").split(separator: ",").map(String.init).filter { !deleted.contains($0) }
             let node = request.query["node_id"].flatMap { $0.isEmpty ? nil : $0 }
             let rows = request.scenario == .empty ? [] : ids
             return .json(resultsBody(ids: rows, node: node, limit: SharedFixtures.intQuery(request, "limit") ?? 100, offset: SharedFixtures.intQuery(request, "offset") ?? 0))
         }.requiring("task:read"),
     ]
 
-    static let deletedSet = "tasks.deleted"
-    static let cancelledSet = "tasks.cancelled"
+    static let deletedSet = SharedFixtures.deletedTasksSet
+    static let cancelledSet = SharedFixtures.cancelledTasksSet
     static let notFound = DemoResponse.error(status: 404, code: "not_found", message: "task not found")
 
-    static func task(_ request: DemoRequest) -> DemoTask? {
+    /// The run a write names, as this session sees it: deleted runs are
+    /// gone, cancelled ones read cancelled, and reruns exist.
+    static func task(_ request: DemoRequest, state: DemoState) async -> DemoTask? {
         let id = request.bodyStrings["id"] ?? ""
-        return SharedFixtures.tasks.first { $0.id == id }
+        return await SharedFixtures.sessionTasks(state, scenario: .normal).first { $0.id == id }
     }
 
     static func cancel(_ request: DemoRequest, state: DemoState) async -> DemoResponse {
-        guard var task = task(request), await !state.contains(request.bodyStrings["id"] ?? "", in: deletedSet) else { return notFound }
-        let cancelled = await state.contains(task.id, in: cancelledSet)
-        guard !cancelled, ["queued", "leased", "pending", "stalled"].contains(task.status) else {
+        guard var task = await task(request, state: state) else { return notFound }
+        guard ["queued", "leased", "pending", "stalled"].contains(task.status) else {
             return .error(status: 409, code: "bad_request", message: "only queued tasks can be cancelled")
         }
         await state.insert(task.id, into: cancelledSet)
@@ -52,25 +54,27 @@ public enum TasksFixtures {
     }
 
     static func rerun(_ request: DemoRequest, state: DemoState, node: String?) async -> DemoResponse {
-        guard let source = task(request) else { return notFound }
+        guard let source = await task(request, state: state) else { return notFound }
         if let node {
             guard source.targets.contains(node) else {
                 return .error(status: 400, code: "bad_request", message: "node_id is not a target of the source task")
             }
         }
         let count = await state.recordHit("tasks.reruns")
-        var fresh = DemoTask(id: "task_demo_rerun\(count)", status: "queued", script: source.script, targets: node.map { [$0] } ?? source.targets, createdAt: "")
+        let id = "task_demo_rerun\(count)"
+        await state.insert("\(id)|\(source.id)|\(node ?? "")", into: SharedFixtures.rerunTasksSet)
+        var fresh = DemoTask(id: id, status: "queued", script: source.script, targets: node.map { [$0] } ?? source.targets, createdAt: "")
         fresh.origin = "rerun"
         fresh.rerunOf = source.rerunOf.isEmpty ? source.id : source.rerunOf
         return .json(SharedFixtures.taskJSON(fresh).text)
     }
 
-    static func reveal(_ request: DemoRequest) -> DemoResponse {
+    static func reveal(_ request: DemoRequest, state: DemoState) async -> DemoResponse {
         // The server's refusal for a bearer token without secrets:reveal (decideSecretReveal).
         guard request.identity == .session else {
             return .error(status: 403, code: "secret_reveal_scope_required", message: "this API token cannot reveal secrets: that needs a token carrying the secrets:reveal scope, which no other scope implies and which a full administrator grants from an interactive session after step-up")
         }
-        guard let task = task(request) else { return notFound }
+        guard let task = await task(request, state: state) else { return notFound }
         guard (request.bodyStrings["step_up_grant"] ?? "").isEmpty == false else {
             return .error(status: 403, code: "step_up_required", message: "a current second-factor check is required")
         }
