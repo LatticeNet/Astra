@@ -143,7 +143,7 @@ struct PlatformEntryRow: View {
         let detail = row.contentType.isEmpty ? size : "\(size) · \(row.contentType)"
         let modified = row.updatedAt.map { TimeDisplay.relative($0, now: Date(), locale: locale) }
         StatusRow(style: StatusStyle(word: "", symbol: kind == .kv ? "key" : (PlatformStoreContent.isText(contentType: row.contentType) ? "doc.text" : "doc"), tone: .quiet),
-                  title: row.key, detail: detail, trailing: modified, titleIsIdentifier: true,
+                  title: PlatformFormat.breakable(row.key), detail: detail, trailing: modified, titleIsIdentifier: true,
                   accessibilityPhrase: "\(row.key), \(detail)\(modified.map { ", changed \($0)" } ?? "")")
     }
 }

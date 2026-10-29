@@ -183,12 +183,13 @@ struct PlatformExtensionRowView: View {
         let title = row.title
         let rest = row.cells.filter { $0.text != title || $0.isSecret }
         VStack(alignment: .leading, spacing: Spacing.xs) {
-            Text(title).textRole(.rowTitle).lineLimit(typeSize.isAccessibilitySize ? 3 : 2)
+            Text(PlatformFormat.breakable(title)).textRole(.rowTitle).lineLimit(typeSize.isAccessibilitySize ? nil : 2)
             ForEach(Array(rest.enumerated()), id: \.offset) { _, cell in
                 line(cell)
             }
         }
-        .frame(maxWidth: .infinity, minHeight: Spacing.minimumTarget, alignment: .leading)
+        .fixedSize(horizontal: false, vertical: true)
+        .frame(maxWidth: .infinity, minHeight: Spacing.minimumTarget, alignment: .topLeading)
         .padding(.vertical, Spacing.xxs)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(([title] + rest.map { "\($0.label), \($0.isSecret ? "masked" : ($0.text.isEmpty ? "none" : $0.text))" }).joined(separator: ", "))

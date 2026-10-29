@@ -57,6 +57,11 @@ extension StatusStyle {
     }
 }
 
+extension PlatformStorageKind {
+    /// "KV" or "static", inside a sentence.
+    var platformNoun: String { self == .kv ? "KV" : "static" }
+}
+
 extension PlatformCapabilityRisk {
     /// "Host risk", for detail rows.
     var platformTitle: String {
@@ -235,6 +240,17 @@ enum PlatformCopy {
 }
 
 enum PlatformFormat {
+    /// Hostnames, paths, keys and ids break after ".", "/", ":" and "-"
+    /// instead of being hyphenated mid-word at large text sizes.
+    static func breakable(_ identifier: String) -> String {
+        var out = ""
+        for character in identifier {
+            out.append(character)
+            if ".:/-_".contains(character) { out.append("\u{200B}") }
+        }
+        return out
+    }
+
     static func bytes(_ value: Int64?) -> String {
         guard let value, value >= 0 else { return "Not reported" }
         return ByteFormatter.bytes(UInt64(value))

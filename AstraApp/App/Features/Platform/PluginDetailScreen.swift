@@ -37,7 +37,7 @@ struct PluginDetailScreen: View {
         let style = StatusStyle.platformPlugin(row)
         List {
             Section {
-                StatusRow(style: style, title: row.name, detail: row.id, reason: runtimeReason(row),
+                StatusRow(style: style, title: row.name, detail: PlatformFormat.breakable(row.id), reason: runtimeReason(row),
                           accessibilityPhrase: "\(row.name), \(style.word)")
                 PlatformRefreshError(state: store.registered, noun: "the plugin") { Task { await store.refresh() } }
                 lifecycleAction(row)

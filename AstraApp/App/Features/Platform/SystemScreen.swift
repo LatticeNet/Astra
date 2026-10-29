@@ -152,10 +152,10 @@ struct SystemScreen: View {
         Section {
             switch model.series {
             case .loaded(let query, _), .loading(let query?, _), .failed(_, let query?, _):
-                PlatformSystemChart(title: "Memory used", unit: "bytes", segments: PlatformSystem.segments(query.series(named: "host.mem_used"), stepSeconds: query.stepSeconds))
-                PlatformSystemChart(title: "Process memory", unit: "bytes", segments: PlatformSystem.segments(query.series(named: "proc.rss"), stepSeconds: query.stepSeconds))
-                PlatformSystemChart(title: "Process CPU", unit: "percent", segments: PlatformSystem.segments(query.series(named: "proc.cpu"), stepSeconds: query.stepSeconds))
-                PlatformSystemChart(title: "Load", unit: "load", segments: PlatformSystem.segments(query.series(named: "host.load1"), stepSeconds: query.stepSeconds))
+                PlatformSystemChart(clockAxis: ["1h", "6h", "24h"].contains(range), title: "Memory used", unit: "bytes", segments: PlatformSystem.segments(query.series(named: "host.mem_used"), stepSeconds: query.stepSeconds))
+                PlatformSystemChart(clockAxis: ["1h", "6h", "24h"].contains(range), title: "Process memory", unit: "bytes", segments: PlatformSystem.segments(query.series(named: "proc.rss"), stepSeconds: query.stepSeconds))
+                PlatformSystemChart(clockAxis: ["1h", "6h", "24h"].contains(range), title: "Process CPU", unit: "percent", segments: PlatformSystem.segments(query.series(named: "proc.cpu"), stepSeconds: query.stepSeconds))
+                PlatformSystemChart(clockAxis: ["1h", "6h", "24h"].contains(range), title: "Load", unit: "load", segments: PlatformSystem.segments(query.series(named: "host.load1"), stepSeconds: query.stepSeconds))
             default:
                 PlatformSectionState(state: model.series, noun: "charts") { Task { await reload() } }
             }
@@ -270,12 +270,16 @@ struct PlatformEventRowView: View {
 /// One control-plane series as a line that breaks at gaps, with a text
 /// summary above it and an Audio Graph descriptor (section 4.6).
 struct PlatformSystemChart: View {
+    /// Short ranges label the time axis with clock times, longer ones with dates.
+    let clockAxis: Bool
     let title: String
     let unit: String
     let segments: [[PlatformSystem.Point]]
 
     @ScaledMetric(relativeTo: .body) private var chartHeight = ChartStyle.height
     @Environment(\.dynamicTypeSize) private var typeSize
+    @Environment(\.timeZoneMode) private var mode
+    @Environment(\.locale) private var locale
 
     var body: some View {
         let points = segments.flatMap { $0 }
@@ -307,11 +311,17 @@ struct PlatformSystemChart: View {
                     }
                 }
                 .chartXAxis {
-                    AxisMarks(values: .automatic(desiredCount: typeSize.isAccessibilitySize ? 2 : 4)) { _ in
+                    AxisMarks(values: .automatic(desiredCount: typeSize.isAccessibilitySize ? 2 : 3)) { value in
                         AxisGridLine()
-                        AxisValueLabel().font(TextRole.chartAxis.font)
+                        AxisValueLabel(collisionResolution: .greedy) {
+                            if let date = value.as(Date.self) {
+                                Text(clockAxis ? TimeDisplay.clock(date, mode: mode, locale: locale) : date.formatted(.dateTime.month(.abbreviated).day()))
+                                    .font(TextRole.chartAxis.font)
+                            }
+                        }
                     }
                 }
+                .environment(\.timeZone, mode.timeZone)
                 .frame(height: max(chartHeight, ChartStyle.minimumHeight))
                 .accessibilityChartDescriptor(PlatformChartDescriptor(title: title, unit: unit, points: points))
             }

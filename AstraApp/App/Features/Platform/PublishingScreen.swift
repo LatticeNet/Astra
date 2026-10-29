@@ -258,7 +258,7 @@ struct PublishingScreen: View {
         } else if !visible {
             ScopeDeniedRow(scope: origin == "plugin" ? (store.shareMissing ?? "proxy:admin") : "\(origin):read")
         } else if empty {
-            let noun = origin == "plugin" ? "share" : origin
+            let noun = origin == "plugin" ? "share" : (origin == "kv" ? "KV" : origin)
             Text(query.isEmpty ? "No \(noun) routes" : "No matching routes")
                 .foregroundStyle(.secondary)
                 .frame(minHeight: Spacing.minimumTarget)
@@ -336,7 +336,7 @@ struct PublishingScreen: View {
                 PlatformRefreshError(state: state, noun: "\(kind.title) tokens") { Task { await store.refresh() } }
                 let rows = filterTokens(list)
                 if rows.isEmpty {
-                    Text(list.isEmpty ? "No \(kind.title) storage tokens" : "No matching tokens")
+                    Text(list.isEmpty ? "No \(kind.platformNoun) storage tokens" : "No matching tokens")
                         .foregroundStyle(.secondary).frame(minHeight: Spacing.minimumTarget)
                 }
                 ForEach(rows.sorted { ($0.isRevoked ? 1 : 0, $0.name) < ($1.isRevoked ? 1 : 0, $1.name) }) { token in
@@ -447,7 +447,7 @@ struct PlatformRouteRow: View {
         let label = PlatformPublishing.routeLabel(record)
         let target = PlatformPublishing.originTargetLabel(record, shareSlugs: shareSlugs)
         let detail = detailLine(target: target)
-        StatusRow(style: style, title: label, detail: detail, titleIsIdentifier: true,
+        StatusRow(style: style, title: PlatformFormat.breakable(label), detail: detail, titleIsIdentifier: true,
                   accessibilityPhrase: "\(label.replacingOccurrences(of: "*", with: "any host")), \(style.word), \(detail)")
     }
 
@@ -536,7 +536,7 @@ struct PlatformBucketSection: View {
                     .filter { text.isEmpty || $0.name.lowercased().contains(text) }
                     .sorted { $0.name < $1.name }
                 if entries.isEmpty {
-                    Text(list.allBuckets.isEmpty ? "No \(kind.title) buckets" : "No matching buckets")
+                    Text(list.allBuckets.isEmpty ? "No \(kind.platformNoun) buckets" : "No matching buckets")
                         .foregroundStyle(.secondary).frame(minHeight: Spacing.minimumTarget)
                 }
                 ForEach(entries) { entry in
@@ -570,7 +570,7 @@ struct PlatformBucketRow: View {
         let detail = entry.reserved
             ? "Typed private state the server owns; its contents are refused to every scope"
             : [displayName?.isEmpty == false ? displayName : nil, owner.sentence, count, entry.registered ? nil : "not registered"].compactMap { $0 }.joined(separator: " · ")
-        StatusRow(style: .platformBucket(entry), title: entry.name, detail: detail, titleIsIdentifier: true,
+        StatusRow(style: .platformBucket(entry), title: PlatformFormat.breakable(entry.name), detail: detail, titleIsIdentifier: true,
                   accessibilityPhrase: "\(entry.name), \(detail)")
     }
 }

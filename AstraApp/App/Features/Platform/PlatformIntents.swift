@@ -95,7 +95,7 @@ enum PlatformIntents {
     static func refreshShare(id: String, slug: String, sink: PlatformRefreshSink) -> WriteIntent {
         WriteIntent(
             tier: .t2,
-            verb: "Refresh share",
+            verb: "Refresh",
             object: shareRef(id: id, slug: slug),
             scopes: [PublishingStore.shareScope],
             consequence: "Fetches \(slug)'s subscription from its provider now and drops the cached body, so clients get new content on their next fetch.",
@@ -118,7 +118,7 @@ enum PlatformIntents {
         let ref = shareRef(id: id, slug: slug)
         return WriteIntent(
             tier: .t3,
-            verb: "Rotate share",
+            verb: "Rotate the URL of",
             object: ref,
             scopes: [PublishingStore.shareScope],
             consequence: "The current URL of \(slug) stops working at once for every client that holds it. Reveal the new URL afterwards and send it again.",

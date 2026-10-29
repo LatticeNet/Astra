@@ -48,7 +48,7 @@ struct ShareDetailScreen: View {
         let missing = store.shareMissing
         List {
             Section {
-                StatusRow(style: style, title: share.slug, detail: share.maskedPath, reason: headline(share, state: state), titleIsIdentifier: true,
+                StatusRow(style: style, title: PlatformFormat.breakable(share.slug), detail: PlatformFormat.breakable(share.maskedPath), reason: headline(share, state: state), titleIsIdentifier: true,
                           accessibilityPhrase: "Share \(share.slug), \(style.word)")
                 PlatformRefreshError(state: store.shares, noun: "the share") { Task { await store.refresh() } }
                 PlatformActionRow(title: "Reveal share URL", systemImage: "eye", note: revealNote, missing: store.revealMissing) {

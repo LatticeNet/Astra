@@ -327,7 +327,7 @@ private func checkPlatformExtensionPages() throws {
     let data = try PlatformJSONValue.parse(try fixture("platform-extension-data.json"))
     let rows = ExtensionPageModel.rows(of: data)
     try expectEqual(rows.count, 2, "a {rows} envelope yields its rows")
-    try expectEqual(rows[0]["note"], .string("café 🔒 \"quoted\""), "escapes and surrogate pairs decode")
+    try expectEqual(rows[0]["note"], .string("caf\u{E9} \u{1D11E} \"quoted\""), "escapes and surrogate pairs decode")
     if case .object(let pairs) = rows[0] {
         try expectEqual(pairs.map(\.0), ["id", "host", "expires_at", "chain_bytes", "alert_hook", "tags", "note"], "keys keep the order sent")
     } else {
