@@ -49,6 +49,15 @@ public struct NotifyDelivery: Codable, Equatable, Hashable, Sendable, Identifiab
     public var settledAt: Date?
     /// The incidents an incident message reports.
     public var incidentIDs: [String]
+    public var category: String = ""
+    /// A recovery message rather than an open one.
+    public var recovery: Bool = false
+    /// The delivery this one stands in for, when the primary failed.
+    public var fallbackFor: String = ""
+    public var nextAttemptAt: Date?
+    /// How many times the same message repeated while held.
+    public var repeats: Int = 0
+    public var heldUntil: Date?
 
     enum CodingKeys: String, CodingKey {
         case id, source, severity, role, outcome, reason, attempts, title, body
@@ -63,6 +72,10 @@ public struct NotifyDelivery: Codable, Equatable, Hashable, Sendable, Identifiab
         case createdAt = "created_at"
         case settledAt = "settled_at"
         case incidentIDs = "incident_ids"
+        case category, recovery, repeats
+        case fallbackFor = "fallback_for"
+        case nextAttemptAt = "next_attempt_at"
+        case heldUntil = "held_until"
     }
 
     public init(from decoder: Decoder) throws {
@@ -87,6 +100,12 @@ public struct NotifyDelivery: Codable, Equatable, Hashable, Sendable, Identifiab
         createdAt = try DateValue.decodeIfPresent(from: c, forKey: .createdAt)
         settledAt = try DateValue.decodeIfPresent(from: c, forKey: .settledAt)
         incidentIDs = try c.decodeIfPresent([String].self, forKey: .incidentIDs) ?? []
+        category = try c.decodeIfPresent(String.self, forKey: .category) ?? ""
+        recovery = try c.decodeIfPresent(Bool.self, forKey: .recovery) ?? false
+        fallbackFor = try c.decodeIfPresent(String.self, forKey: .fallbackFor) ?? ""
+        nextAttemptAt = try DateValue.decodeIfPresent(from: c, forKey: .nextAttemptAt)
+        repeats = try c.decodeIfPresent(Int.self, forKey: .repeats) ?? 0
+        heldUntil = try DateValue.decodeIfPresent(from: c, forKey: .heldUntil)
     }
 }
 

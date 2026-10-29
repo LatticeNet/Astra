@@ -386,30 +386,47 @@ extension SharedFixtures {
     private static func pathJSON(_ cell: DemoPath) -> DemoJSON {
         let target = DemoWorld.node(cell.target)
         let source = cell.source.map(DemoWorld.node)
-        let measured = cell.p50 != nil
+        let address: String = cell.method == "http" ? "https://\(target.hostname)/healthz" : "\(target.ipv4):443"
+        let monitor = "mon_\(cell.method)_\(source?.name ?? "cp")_\(target.name)"
+        let degraded: DemoJSON? = cell.degraded ? .object([
+            "since": .time("-48m"),
+            "evaluated_at": .time("-30s"),
+            "loss": .object(["value": 0.062, "baseline": 0.004, "trigger": 0.02, "sent": 900, "lost": 56]),
+        ]) : nil
+        var p50: DemoJSON = .null
+        var p95: DemoJSON = .null
+        var jitter: DemoJSON = .null
+        var previous: DemoJSON?
+        if let median = cell.p50 {
+            p50 = .number(median)
+            p95 = .number((median * 1.35).rounded())
+            jitter = .number((median * 0.8).rounded() / 10)
+            previous = .object(["p50_ms": .number((median * 0.97).rounded()), "loss": 0.001])
+        }
+        let loss: DemoJSON = cell.loss.map(DemoJSON.number) ?? .null
+        let samples: Double = cell.p50 != nil || cell.state == "down" ? 60 : 0
+        let expected: Double = cell.state == "unknown" ? 0 : 60
+        let reason: DemoJSON? = cell.reason.isEmpty ? nil : .string(cell.reason)
+        let lastAt: DemoJSON? = cell.state == "unknown" ? nil : .time("-40s")
         return .object([
             "source": .string(source?.id ?? ""),
             "target_node": .string(target.id),
-            "target": .string(cell.method == "http" ? "https://\(target.hostname)/healthz" : "\(target.ipv4):443"),
-            "monitor_id": .string("mon_\(cell.method)_\(source?.name ?? "cp")_\(target.name)"),
+            "target": .string(address),
+            "monitor_id": .string(monitor),
             "managed": false,
             "check_definition_id": "def_fleet_mesh",
             "method": .string(cell.method),
             "state": .string(cell.state),
-            "reason": cell.reason.isEmpty ? nil : .string(cell.reason),
-            "degraded": cell.degraded ? .object([
-                "since": .time("-48m"),
-                "evaluated_at": .time("-30s"),
-                "loss": .object(["value": 0.062, "baseline": 0.004, "trigger": 0.02, "sent": 900, "lost": 56]),
-            ]) : nil,
-            "p50_ms": cell.p50.map(DemoJSON.number) ?? .null,
-            "p95_ms": cell.p50.map { .number(($0 * 1.35).rounded()) } ?? .null,
-            "jitter_ms": cell.p50.map { .number(($0 * 0.08 * 10).rounded() / 10) } ?? .null,
-            "loss": cell.loss.map(DemoJSON.number) ?? .null,
-            "samples": .number(measured ? 60 : (cell.state == "down" ? 60 : 0)),
-            "expected": .number(cell.state == "unknown" ? 0 : 60),
-            "prev": measured ? .object(["p50_ms": .number((cell.p50! * 0.97).rounded()), "loss": .number(0.001)]) : nil,
-            "last_at": cell.state == "unknown" ? nil : .time("-40s"),
+            "reason": reason,
+            "degraded": degraded,
+            "p50_ms": p50,
+            "p95_ms": p95,
+            "jitter_ms": jitter,
+            "loss": loss,
+            "samples": .number(samples),
+            "expected": .number(expected),
+            "prev": previous,
+            "last_at": lastAt,
         ])
     }
 }

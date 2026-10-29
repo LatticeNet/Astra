@@ -11,6 +11,12 @@ public struct LatticeIdentity: Codable, Equatable, Hashable, Sendable {
     public var authKind: String?
     /// The nodes this credential is confined to; empty means unconfined.
     public var serverAllowlist: [String]
+    /// The token behind a bearer credential; empty for a session.
+    public var tokenID: String = ""
+    /// The account must enroll a second factor before it can do anything.
+    public var mfaRequired: Bool = false
+    /// The server requires a second factor of every account.
+    public var totpPolicyRequired: Bool = false
 
     public init(
         actorID: String = "",
@@ -43,6 +49,9 @@ public struct LatticeIdentity: Codable, Equatable, Hashable, Sendable {
         case authKind = "auth_kind"
         case kind
         case serverAllowlist = "server_allowlist"
+        case tokenID = "token_id"
+        case mfaRequired = "mfa_required"
+        case totpPolicyRequired = "totp_policy_required"
     }
 
     public init(from decoder: Decoder) throws {
@@ -56,6 +65,9 @@ public struct LatticeIdentity: Codable, Equatable, Hashable, Sendable {
         authKind = try container.decodeIfPresent(String.self, forKey: .authKind)
             ?? container.decodeIfPresent(String.self, forKey: .kind)
         serverAllowlist = try container.decodeIfPresent([String].self, forKey: .serverAllowlist) ?? []
+        tokenID = try container.decodeIfPresent(String.self, forKey: .tokenID) ?? ""
+        mfaRequired = try container.decodeIfPresent(Bool.self, forKey: .mfaRequired) ?? false
+        totpPolicyRequired = try container.decodeIfPresent(Bool.self, forKey: .totpPolicyRequired) ?? false
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -66,6 +78,9 @@ public struct LatticeIdentity: Codable, Equatable, Hashable, Sendable {
         try container.encode(totpEnabled, forKey: .totpEnabled)
         try container.encodeIfPresent(authKind, forKey: .authKind)
         try container.encode(serverAllowlist, forKey: .serverAllowlist)
+        try container.encode(tokenID, forKey: .tokenID)
+        try container.encode(mfaRequired, forKey: .mfaRequired)
+        try container.encode(totpPolicyRequired, forKey: .totpPolicyRequired)
     }
 
     /// True when the identity has the given scope, treating `*` and a matching
@@ -93,6 +108,8 @@ public struct LatticeServerVersion: Codable, Equatable, Hashable, Sendable {
     public var date: String
     public var dashboardRef: String?
     public var dashboardBuilt: String?
+    /// The server refuses script tasks (`task_execution_disabled`).
+    public var taskExecutionDisabled: Bool = false
 
     public init(version: String = "", commit: String = "", date: String = "", dashboardRef: String? = nil, dashboardBuilt: String? = nil) {
         self.version = version
@@ -108,6 +125,7 @@ public struct LatticeServerVersion: Codable, Equatable, Hashable, Sendable {
         case date = "server_date"
         case dashboardRef = "dashboard_ref"
         case dashboardBuilt = "dashboard_built"
+        case taskExecutionDisabled = "task_execution_disabled"
     }
 
     public init(from decoder: Decoder) throws {
@@ -117,6 +135,7 @@ public struct LatticeServerVersion: Codable, Equatable, Hashable, Sendable {
         date = try container.decodeIfPresent(String.self, forKey: .date) ?? ""
         dashboardRef = try container.decodeIfPresent(String.self, forKey: .dashboardRef)
         dashboardBuilt = try container.decodeIfPresent(String.self, forKey: .dashboardBuilt)
+        taskExecutionDisabled = try container.decodeIfPresent(Bool.self, forKey: .taskExecutionDisabled) ?? false
     }
 
     public var shortCommit: String { commit.isEmpty ? "" : String(commit.prefix(8)) }
