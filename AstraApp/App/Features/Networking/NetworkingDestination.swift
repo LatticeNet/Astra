@@ -19,6 +19,7 @@ struct NetworkingDestination: View {
         case .tunnel(let id): TunnelScreen(id: id)
         case .inboundFirewall(let nodeID): InboundFirewallScreen(nodeID: nodeID)
         case .securityGroup(let id): SecurityGroupScreen(id: id)
+        case .outboundPolicyView(let view): OutboundPolicyScreen(initialView: view)
         }
     }
 }

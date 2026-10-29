@@ -224,9 +224,10 @@ public struct NetworkingMatrixCell: Decodable, Hashable, Sendable {
 
     /// "tcp 443, 8443", "any protocol, all ports".
     public var trafficText: String {
-        let protos = protocols.isEmpty ? "any protocol" : protocols.joined(separator: "/")
-        let portText = ports.isEmpty ? "all ports" : ports.map(String.init).joined(separator: ", ")
-        return "\(protos), \(portText)"
+        let named = protocols.filter { $0 != "any" }
+        guard !named.isEmpty else { return "any protocol" }
+        let protos = named.joined(separator: "/")
+        return ports.isEmpty ? "\(protos), all ports" : "\(protos) \(ports.map(String.init).joined(separator: ", "))"
     }
 }
 
