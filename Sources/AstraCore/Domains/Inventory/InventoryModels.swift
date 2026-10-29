@@ -858,7 +858,8 @@ public enum InventoryQuery {
                 valueAliases: ["incomplete": "renewalIncomplete", "one-time": "onetime", "none": "unprofiled"],
                 get: { .string(InventoryCost.billing($0.machine).rawValue) }
             ),
-            LatticeQueryField(key: "price", type: .number, get: { $0.machine.isProfiled ? .number(Double($0.machine.priceCents) / 100) : .none }),
+            // The server omits a zero price, so the console reads a free profile as no price.
+            LatticeQueryField(key: "price", type: .number, get: { $0.machine.isProfiled && $0.machine.priceCents != 0 ? .number(Double($0.machine.priceCents) / 100) : .none }),
             LatticeQueryField(key: "currency", type: .string, get: { optional($0.machine.canonicalCurrency) }),
             LatticeQueryField(key: "cycle", type: .string, get: { optional($0.machine.renewalCycleRaw) }),
             LatticeQueryField(key: "renews_in", aliases: ["renewal"], type: .duration, get: { row in
