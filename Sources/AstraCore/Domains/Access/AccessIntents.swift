@@ -22,6 +22,12 @@ public enum AccessIntents {
     /// The sentence the confirmation adds when the token is this iPhone's.
     public static let ownTokenWarning = "This is the token this iPhone uses. You will be signed out."
 
+    /// The sign-out warning leads, so it is the first line the confirmation
+    /// shows even at the largest text size.
+    private static func lead(_ isOwn: Bool, _ consequence: String) -> String {
+        isOwn ? ownTokenWarning + " " + consequence : consequence
+    }
+
     // MARK: Tokens
 
     /// T4, the leak response. Revoking is one-way. Revoking the token this
@@ -29,8 +35,7 @@ public enum AccessIntents {
     /// after the server confirms (the screen does that on `.done`).
     public static func revokeToken(_ token: LatticeToken, isOwn: Bool) -> WriteIntent {
         let object = object(token)
-        var consequence = "Anything calling the API with \(object.name) gets 401 from now on. This is one-way: nothing brings a revoked token back."
-        if isOwn { consequence += " " + ownTokenWarning }
+        let consequence = lead(isOwn, "Anything calling the API with \(object.name) gets 401 from now on. This is one-way: nothing brings a revoked token back.")
         return WriteIntent(
             tier: .t4, verb: "Revoke token", object: object, scopes: [tokenScope],
             consequence: consequence,
@@ -55,8 +60,7 @@ public enum AccessIntents {
     /// T4. Removes a revoked token from the list; the audit trail keeps it.
     public static func deleteToken(_ token: LatticeToken, isOwn: Bool) -> WriteIntent {
         let object = object(token)
-        var consequence = "Removes \(object.name) from the token list. This cannot be undone. Audit history is kept."
-        if isOwn { consequence += " " + ownTokenWarning }
+        let consequence = lead(isOwn, "Removes \(object.name) from the token list. This cannot be undone. Audit history is kept.")
         return WriteIntent(
             tier: .t4, verb: "Delete token", object: object, scopes: [tokenScope],
             consequence: consequence,

@@ -292,7 +292,7 @@ private func checkAccessIntents() async throws {
     let mine = accessToken("tok_mine")
     let own = AccessIntents.revokeToken(mine, isOwn: true)
     try expect(own.tier == .t4 && own.client == .primary && own.scopes == ["token:admin"], "revoke is T4 on the token client")
-    try expect(own.consequence.hasSuffix(AccessIntents.ownTokenWarning), "own token revoke warns about sign-out")
+    try expect(own.consequence.hasPrefix(AccessIntents.ownTokenWarning), "own token revoke leads with the sign-out warning")
     try expectEqual(own.confirmPhrase, mine.displayName, "own token revoke asks for the name")
     let other = AccessIntents.revokeToken(mine, isOwn: false)
     try expect(other.confirmPhrase == nil && !other.consequence.contains("signed out"), "another token's revoke has no sign-out warning")
