@@ -556,6 +556,7 @@ Contrast targets, checked by M0 against every background colored text can sit on
 |---|---|---|---|---|---|
 | `accent.text` | `#2F5BEA` | `#7C9BFF` | `#1A3DB8` | `#A3BAFF` | Tinted text, links, selection, the primary chart series. Never a status. |
 | `accent.fill` | `#2F5BEA` | `#2F5BEA` | `#1A3DB8` | `#2F5BEA` | Background of prominent buttons only (white label 5.52:1, 8.74:1 in Light Increase Contrast). Set as the tint of `.glassProminent` and `.borderedProminent`. |
+| `destructive.fill` | `#D70015` | `#D70015` | `#A00010` | `#D70015` | Background of the T4 destructive button. System red under a white label is about 3.5:1; this reaches 4.5:1 in every variant. |
 | `status.ok.fill` | `#248A3D` | `#30D158` | `#1B6B30` | `#30DB5B` | Healthy glyphs, ok chart marks and strip cells |
 | `status.ok.text` | `#1F7A35` | `#30D158` | `#145A26` | `#5BE37D` | Rarely used: "resolved", "applied" words on detail screens |
 | `status.warn.fill` | `#C93400` | `#FF9F0A` | `#A12A00` | `#FFB340` | Degraded, stale, stalled, reverting glyphs; loss bars on a degraded path; trigger rule |
@@ -647,9 +648,8 @@ A running task never shows a spinner or pulse: it shows a determinate count ("9 
 | `approved` with `waiting.blocked` | waiting | `pause.circle` | warn | "Approved, waiting: {reason}" |
 | `approved` without block, or `applying` | applying | `arrow.clockwise.circle` | quiet | "Approved, applying" |
 | `applied` | applied | `checkmark.circle` | ok glyph, quiet word | "Applied" |
-| `applied_unobserved` | applied, not observed | `checkmark.circle.trianglebadge.exclamationmark` | warn | "Applied, but the node has not confirmed" |
-| `failed` | failed | `xmark.circle.fill` | fail | "Apply failed" |
-| `rejected` | rejected | `xmark.circle` | quiet | "Rejected by {who}" |
+| `rejected` without `rejected_by` (the server rejects an approval whose apply task failed, keeping `approved_by`; there is no `failed` or `applied_unobserved` approval status) | failed | `xmark.circle.fill` | fail | "Apply failed" |
+| `rejected` with `rejected_by` | rejected | `xmark.circle` | quiet | "Rejected by {who}" |
 | `dismissed` | dismissed | `archivebox` | quiet | "Dismissed" |
 | auto-approved `singbox-linemeta` by `lattice-server` or `system` | auto | `gearshape` | quiet | "Approved automatically" (history only, never in Inbox, never badged) |
 
@@ -1451,9 +1451,9 @@ AstraApp/App/
 ```swift
 public enum LatticeAPIError: Error, Sendable, Equatable {
     case unauthorized(message: String)                 // 401; step-up 401 is mapped by its caller (6.4)
-    case forbidden(code: String, scope: String?)       // 403 with the envelope's code (step_up_required, secret_reveal_scope_required, mfa_required, forbidden)
+    case forbidden(code: String, message: String)      // 403 with the envelope's code and message; the envelope names no scope, so callers take it from their requirement
     case notFound                                      // 404
-    case conflict(code: String, findings: [String])    // 409 with the envelope's code and findings
+    case conflict(code: String, message: String, findings: [String])  // 409 with the envelope's code, message and findings
     case server(status: Int, code: String?, message: String)
     case transport(URLError.Code)                      // timeout, offline, TLS; before or after send is recorded by the runner
     case invalidResponse                               // undecodable body (companion behind)
