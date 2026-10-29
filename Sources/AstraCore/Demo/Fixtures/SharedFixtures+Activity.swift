@@ -59,8 +59,9 @@ extension SharedFixtures {
             DemoRoute(pathPattern: "/api/notify/deliveries", body: deliveriesBody(deliveries), emptyBody: deliveriesBody([])) { request, _ in
                 deliveriesAnswer(request)
             }.requiring("notify:admin"),
-            DemoRoute(pathPattern: "/api/expiring", body: expiringBody(within: 30), emptyBody: #"{"generated_at":"{{now}}","within_days":30,"items":[],"totals":[]}"#) { request, _ in
-                .json(expiringBody(within: intQuery(request, "within") ?? 30))
+            DemoRoute(pathPattern: "/api/expiring", body: expiringBody(within: 30), emptyBody: #"{"generated_at":"{{now}}","within_days":30,"items":[],"totals":[],"hidden_kinds":[]}"#) { request, _ in
+                let scopes = DemoTransport.scopes(for: request.identity, scenario: request.scenario)
+                return .json(expiringBody(within: intQuery(request, "within") ?? 30, scopes: scopes))
             },
         ]
     }
@@ -413,29 +414,58 @@ extension SharedFixtures {
 
     // MARK: Expiring
 
-    static func expiringBody(within days: Int) -> String {
-        let items: [(days: Int, json: DemoJSON)] = [
-            (-2, expiring(kind: "machine_renewal", id: DemoWorld.node("edge-tyo-1").id, title: "edge-tyo-1", subtitle: "Northwind Cloud · tyo", days: -2, state: "overdue", cost: 1_200, href: "/inventory?machine=\(DemoWorld.node("edge-tyo-1").id)")),
-            (3, expiring(kind: "machine_renewal", id: DemoWorld.node("relay-fra-1").id, title: "relay-fra-1", subtitle: "Fabrikam Hosting · fra", days: 3, state: "due", cost: 2_400, href: "/inventory?machine=\(DemoWorld.node("relay-fra-1").id)")),
-            (5, expiring(kind: "vpn_user", id: "vu_alice", title: "alice", subtitle: "alice@example.org", days: 5, state: "due", cost: 0, href: "/plugins/latticenet.vpn-core/users")),
-            (6, expiring(kind: "tls_certificate", id: "cert_tls_api", title: "tls-api.example.org", subtitle: "tls-api.example.org:443", days: 6, state: "due", cost: 0, href: "/monitoring?view=checks&open=mon_tls_api")),
-            (9, expiring(kind: "share", id: "share_family", title: "family", subtitle: "12 users", days: 9, state: "upcoming", cost: 0, href: "/platform/publishing?view=routes&origin=share&open=share_family")),
-            (12, expiring(kind: "machine_renewal", id: DemoWorld.node("core-lon-1").id, title: "core-lon-1", subtitle: "Tailspin Metal · lon", days: 12, state: "auto", cost: 4_900, href: "/inventory?machine=\(DemoWorld.node("core-lon-1").id)")),
-        ]
-        let within = items.filter { $0.days <= days }
-        let cost = within.reduce(0.0) { total, item in
-            guard case .object(let pairs) = item.json, case .number(let cents)? = pairs.first(where: { $0.0 == "cost_cents" })?.1 else { return total }
-            return total + cents
+    /// The kinds of `/api/expiring` and the scope each needs, as the server
+    /// decides them; VPN users and shares are hidden from a confined token.
+    static func expiringReadable(_ scopes: ScopeSet) -> Set<String> {
+        var kinds: Set<String> = []
+        if scopes.allows("inventory:read") { kinds.insert("machine_renewal") }
+        if !scopes.isConfined, scopes.allows("proxy:read") { kinds.insert("vpn_user") }
+        if !scopes.isConfined, scopes.allows("proxy:admin") { kinds.insert("share") }
+        if scopes.allows("monitor:read") { kinds.insert("tls_certificate") }
+        return kinds
+    }
+
+    /// Machine rows carry the profile id (`m-<node>`) and the figures of the
+    /// Inventory demo machines, so a due row opens the right machine.
+    static func expiringBody(within days: Int, scopes: ScopeSet = ScopeSet(scopes: ["*"])) -> String {
+        func machine(_ name: String, vendor: String, region: String, days: Int, state: String, cost: Int, currency: String) -> (days: Int, kind: String, node: String?, json: DemoJSON) {
+            let id = "m-\(name)"
+            return (days, "machine_renewal", DemoWorld.node(name).id, expiring(kind: "machine_renewal", id: id, title: name, subtitle: "\(vendor) · \(region)", days: days, state: state, cost: cost, currency: currency, href: "/inventory?machine=\(id)"))
         }
+        let items: [(days: Int, kind: String, node: String?, json: DemoJSON)] = [
+            machine("edge-tyo-1", vendor: "Northwind Cloud", region: "Tokyo", days: -2, state: "overdue", cost: 1_200, currency: "USD"),
+            machine("relay-fra-1", vendor: "Fabrikam Hosting", region: "Frankfurt", days: 3, state: "due", cost: 2_400, currency: "EUR"),
+            (5, "vpn_user", nil, expiring(kind: "vpn_user", id: "vu_alice", title: "alice", subtitle: "alice@example.org", days: 5, state: "due", cost: 0, href: "/plugins/latticenet.vpn-core/users")),
+            (6, "tls_certificate", nil, expiring(kind: "tls_certificate", id: "cert_tls_api", title: "tls-api.example.org", subtitle: "tls-api.example.org:443", days: 6, state: "due", cost: 0, href: "/monitoring?view=checks&open=mon_tls_api")),
+            (9, "share", nil, expiring(kind: "share", id: "share_family", title: "family", subtitle: "12 users", days: 9, state: "upcoming", cost: 0, href: "/platform/publishing?view=routes&origin=share&open=share_family")),
+            machine("core-lon-1", vendor: "Tailspin Metal", region: "London", days: 12, state: "auto", cost: 4_900, currency: "USD"),
+        ]
+        let readable = expiringReadable(scopes)
+        let visible = scopes.isConfined ? Set(scopes.serverAllowlist) : nil
+        let within = items.filter { item in
+            item.days <= days && readable.contains(item.kind) && (item.node.map { visible?.contains($0) ?? true } ?? true)
+        }
+        var totals: [String: (cents: Double, count: Int)] = [:]
+        for item in within where item.days >= -30 {
+            guard case .object(let pairs) = item.json,
+                  case .number(let cents)? = pairs.first(where: { $0.0 == "cost_cents" })?.1, cents > 0,
+                  case .string(let currency)? = pairs.first(where: { $0.0 == "currency" })?.1 else { continue }
+            totals[currency, default: (0, 0)].cents += cents
+            totals[currency, default: (0, 0)].count += 1
+        }
+        let hidden = ["machine_renewal", "vpn_user", "share", "tls_certificate"].filter { !readable.contains($0) }
         return DemoJSON.object([
             ("generated_at", .time()),
             ("within_days", .number(Double(days))),
             ("items", .array(within.map(\.json))),
-            ("totals", [.object(["currency": "USD", "cost_cents": .number(cost), "count": .number(Double(within.filter { $0.days >= -30 }.count))])]),
+            ("totals", .array(totals.keys.sorted().map { code in
+                .object(["currency": .string(code), "cost_cents": .number(totals[code]!.cents), "count": .number(Double(totals[code]!.count))])
+            })),
+            ("hidden_kinds", .strings(hidden)),
         ]).text
     }
 
-    private static func expiring(kind: String, id: String, title: String, subtitle: String, days: Int, state: String, cost: Int, href: String) -> DemoJSON {
+    private static func expiring(kind: String, id: String, title: String, subtitle: String, days: Int, state: String, cost: Int, currency: String = "", href: String) -> DemoJSON {
         .object([
             "kind": .string(kind),
             "id": .string(id),
@@ -445,7 +475,7 @@ extension SharedFixtures {
             "days": .number(Double(days)),
             "state": .string(state),
             "cost_cents": .number(Double(cost)),
-            "currency": "USD",
+            "currency": .string(currency),
             "href": .string(href),
         ])
     }

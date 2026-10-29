@@ -12,6 +12,7 @@ public func checkDemo() async throws {
     try await checkScenarios()
     try await checkSessionWrites()
     try await checkSessionTaskWrites()
+    try await checkExpiringFixture()
 }
 
 private let pinned = DemoClock(pinned: "2026-10-28T12:00:00Z")!
@@ -349,6 +350,18 @@ private func checkSessionTaskWrites() async throws {
     try expect(deletedResults.isEmpty, "a deleted run has no results")
     let counts = try await writer.fetchTaskCounts()
     try expectEqual(counts.total, list.count, "counts agree with the list")
+}
+
+/// Machine rows name profile ids, totals split by currency, and a token
+/// that cannot read a kind sees its name in `hidden_kinds`.
+private func checkExpiringFixture() async throws {
+    let week = try await demoClient().fetchExpiring(within: 7)
+    try expectEqual(week.items.filter { $0.kind == "machine_renewal" }.map(\.objectID), ["m-edge-tyo-1", "m-relay-fra-1"], "due machines carry profile ids")
+    try expectEqual(Set(week.totals.map(\.currency)), ["EUR", "USD"], "totals per currency")
+    try expectEqual(week.hiddenKinds, [], "the Operator token reads every kind")
+    let triage = try await demoClient(scenario: .limitedToken).fetchExpiring(within: 30)
+    try expectEqual(triage.hiddenKinds, ["vpn_user", "share"], "Triage cannot read VPN users or shares")
+    try expect(!triage.items.contains { $0.kind == "vpn_user" || $0.kind == "share" }, "and their rows are left out")
 }
 
 /// `expect` for a value computed with `await`, which an autoclosure cannot hold.
