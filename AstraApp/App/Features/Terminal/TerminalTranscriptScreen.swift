@@ -269,6 +269,11 @@ struct TerminalTranscriptScreen: View {
                         }
                     }
                 }
+                if model.hasLines {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button("Find", systemImage: "magnifyingglass") { finding = true }
+                    }
+                }
             }
         }
     }
@@ -342,7 +347,7 @@ struct TerminalTranscriptScreen: View {
                     Text(lines.count == 1 ? "1 line" : "\(lines.count) lines").monospacedDigit()
                 }
             } footer: {
-                Text("Read only. Typing stays on the web. Find with the search field; copy from the More menu or by touching and holding a line.")
+                Text("Read only. Typing stays on the web. Find from the toolbar; copy from the More menu or by touching and holding a line.")
             }
         }
     }
