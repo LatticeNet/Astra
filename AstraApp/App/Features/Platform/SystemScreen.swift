@@ -110,7 +110,7 @@ struct SystemScreen: View {
                 let style = doubt == nil ? StatusStyle(word: "up \(uptime)", symbol: "checkmark.circle.fill", tone: .ok) : PlatformConfidence.style
                 StatusRow(style: style,
                           title: "Control plane \(process.version)", detail: process.commit.isEmpty ? nil : "commit \(process.commit)",
-                          reason: doubt,
+                          reason: PlatformConfidence.reason(doubt),
                           accessibilityPhrase: "Control plane \(process.version), \(style.word)")
             }
             if let probe = health.probe {

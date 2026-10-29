@@ -179,6 +179,14 @@ struct PlatformSectionState<Value: Sendable>: View {
 enum PlatformConfidence {
     static let style = StatusStyle(word: "cannot confirm", symbol: "questionmark.circle", tone: .quiet)
 
+    /// The doubt as a row's reason line, under a word that already says
+    /// "cannot confirm".
+    static func reason(_ doubt: String?) -> String? {
+        guard let doubt else { return nil }
+        let trimmed = doubt.hasPrefix("Cannot confirm. ") ? String(doubt.dropFirst("Cannot confirm. ".count)) : doubt
+        return trimmed == "Cannot confirm." ? nil : trimmed
+    }
+
     /// Nil when the data is fresh enough to claim health; otherwise the
     /// sentence that replaces the claim.
     static func doubt<Value>(_ state: ResourceState<Value>, offline: Bool, now: Date, interval: TimeInterval = 60,

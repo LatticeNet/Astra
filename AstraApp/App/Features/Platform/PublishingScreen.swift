@@ -178,7 +178,7 @@ struct PublishingScreen: View {
                 }
                 StatusRow(style: style, title: title,
                           detail: records.isEmpty ? nil : (records.count == 1 ? "1 route" : "\(records.count) routes"),
-                          reason: expired == 0 && !records.isEmpty ? doubt : nil,
+                          reason: expired == 0 && !records.isEmpty ? PlatformConfidence.reason(doubt) : nil,
                           accessibilityPhrase: "\(title), \(style.word), \(serving) of \(records.count) serving")
             }
             .tint(.primary)
