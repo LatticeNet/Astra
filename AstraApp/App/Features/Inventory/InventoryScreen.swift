@@ -64,6 +64,7 @@ struct InventoryScreen: View {
         } else {
             List {
                 Section {
+                    InventoryRefreshError(state: store.machines, noun: "machines") { Task { await store.refresh() } }
                     if store.held != nil, store.heldForVoiceOver {
                         PendingUpdatesRow(count: store.heldCount) { store.showHeld() }
                     }
@@ -77,7 +78,6 @@ struct InventoryScreen: View {
                         }
                         .frame(minHeight: Spacing.minimumTarget)
                     }
-                    InventoryRefreshError(state: store.machines, noun: "machines") { Task { await store.refresh() } }
                 }
                 if filtered.isEmpty {
                     Section {
@@ -176,41 +176,50 @@ struct InventoryScreen: View {
         }
     }
 
+    /// No nodes at all; VPN users or certificates can still be due, so the Upcoming row stays.
     private var emptyInventory: some View {
-        WholeScreenState {
-            ContentUnavailableView {
-                Label("No machines", systemImage: "server.rack")
-            } description: {
-                Text("This token can read no nodes, so there is nothing to price or renew. Profiles are written on the web.")
-            } actions: {
-                Button("New machine on web") { router.openOnWeb(.inventory) }
-                    .buttonStyle(.bordered)
+        List {
+            Section {
+                InventoryRefreshError(state: store.machines, noun: "machines") { Task { await store.refresh() } }
+                InventoryUpcomingRow(state: store.expiring)
+            }
+            Section {
+                ContentUnavailableView {
+                    Label("No machines", systemImage: "server.rack")
+                } description: {
+                    Text("No nodes are enrolled, or none are visible to this token. Profiles are written on the web.")
+                } actions: {
+                    Button("New machine on web") { router.openOnWeb(.inventory) }
+                        .buttonStyle(.bordered)
+                }
+            } footer: {
+                FreshnessFooter(state: store.machines, interval: 60)
             }
         }
+        .listStyle(.insetGrouped)
     }
 
     // MARK: Toolbar
 
     @ToolbarContentBuilder
     private var toolbar: some ToolbarContent {
+        // One leading item: two left no room for the inline title on an iPhone SE at AX5.
         ToolbarItem(placement: .topBarLeading) {
             Menu {
-                Picker("Group by", selection: $groupRaw) {
+                Picker(selection: $groupRaw) {
                     ForEach(InventoryGroupBy.allCases, id: \.self) { Text($0.title).tag($0.rawValue) }
+                } label: {
+                    Label("Group by", systemImage: "rectangle.3.group")
                 }
-                .pickerStyle(.inline)
-            } label: {
-                Label("Group by \(groupBy.title)", systemImage: "rectangle.3.group")
-            }
-            .accessibilityValue(groupBy.title)
-        }
-        ToolbarItem(placement: .topBarLeading) {
-            Menu {
-                Button("Reminders", systemImage: "bell") { showsReminders = true }
-                Button("New machine on web", systemImage: "safari") { router.openOnWeb(.inventory) }
+                .pickerStyle(.menu)
+                Section {
+                    Button("Reminders", systemImage: "bell") { showsReminders = true }
+                    Button("New machine on web", systemImage: "safari") { router.openOnWeb(.inventory) }
+                }
             } label: {
                 Label("More", systemImage: "ellipsis")
             }
+            .accessibilityValue("Grouped by \(groupBy.title)")
         }
     }
 }
@@ -239,8 +248,11 @@ struct InventoryUpcomingRow: View {
         default:
             guard let response = state.value else { return ("Checking what runs out", nil, .quiet) }
             let counts = InventoryUpcoming.headerCounts(response.items)
-            let due = "\(counts.due) due in \(InventoryUpcoming.withinDays) days"
-            return (due, counts.overdue > 0 ? "\(counts.overdue) overdue" : nil, .quiet)
+            var due = "\(counts.due) due in \(InventoryUpcoming.withinDays) days"
+            // A failed refresh keeps the last counts; say so rather than read as current.
+            if case .failed(_, _?, _) = state { due += ", could not refresh" }
+            let stale: StatusTone = if case .failed = state { .warn } else { .quiet }
+            return (due, counts.overdue > 0 ? "\(counts.overdue) overdue" : nil, stale)
         }
     }
 }
