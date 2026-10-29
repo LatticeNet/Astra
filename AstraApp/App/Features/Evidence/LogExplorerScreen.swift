@@ -88,9 +88,11 @@ struct LogExplorerScreen: View {
     @Environment(NodeDirectory.self) private var nodes
     @Environment(ChangeLog.self) private var changes
     @Environment(Router.self) private var router
+    @Environment(NetworkMonitor.self) private var network
     @Environment(\.timeZoneMode) private var mode
     @Environment(\.locale) private var locale
     @Environment(\.dynamicTypeSize) private var typeSize
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
 
     @SceneStorage(LogExplorerScreen.searchKey) private var searchText = ""
     @State private var submittedSearch = ""
@@ -136,9 +138,11 @@ struct LogExplorerScreen: View {
             }
             .safeAreaBar(edge: .top) {
                 if finding {
+                    // Opaque, so the count never sits on top of a log line.
                     findBar
                         .padding(.horizontal, Spacing.l)
-                        .padding(.bottom, Spacing.s)
+                        .padding(.vertical, Spacing.xs)
+                        .background(Color(uiColor: .systemGroupedBackground))
                 }
             }
             .polling(.standard, version: LogPollKey.of(changes.version([.evidence]), source?.id, submittedSearch)) {
@@ -186,6 +190,8 @@ struct LogExplorerScreen: View {
     private var content: some View {
         if let missing = store.readMissing {
             ScopeDeniedScreen(scope: missing)
+        } else if !network.isSatisfied && store.sources.value == nil {
+            EvidenceOfflineState(noun: "Raw logs")
         } else if store.logStoreOff {
             WholeScreenState {
                 ContentUnavailableView("Raw logs are not enabled on this server", systemImage: "exclamationmark.triangle",
@@ -368,7 +374,8 @@ struct LogExplorerScreen: View {
 
     /// Find over the loaded lines: the field, "2 of 14", previous and next.
     private var findBar: some View {
-        let accessible = typeSize.isAccessibilitySize
+        // Two rows at accessibility sizes, except in landscape, where height is scarce.
+        let accessible = typeSize.isAccessibilitySize && verticalSizeClass != .compact
         let layout = accessible
             ? AnyLayout(VStackLayout(alignment: .leading, spacing: Spacing.s))
             : AnyLayout(HStackLayout(spacing: Spacing.s))

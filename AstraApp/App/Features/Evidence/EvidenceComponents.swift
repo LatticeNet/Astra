@@ -179,6 +179,7 @@ struct EvidenceConnectionRow: View {
     let record: EvidenceConnRecord
     let nodeName: String
 
+    @Environment(\.dynamicTypeSize) private var typeSize
     @Environment(\.timeZoneMode) private var mode
     @Environment(\.locale) private var locale
 
@@ -197,10 +198,14 @@ struct EvidenceConnectionRow: View {
         )
     }
 
+    /// "198.51.100.150 \u{2192} api.example.org:443". At accessibility sizes the
+    /// title keeps three lines and would be cut before the destination, so the
+    /// destination alone leads and the source opens the detail line, which
+    /// wraps without a limit there.
     private var title: String {
-        let source = record.source.isEmpty ? "unknown source" : record.source
         let destination = record.destination.isEmpty ? "unknown destination" : record.destination
-        return "\(source) \u{2192} \(destination)"
+        if typeSize.isAccessibilitySize { return DetailRow.breakable(destination) }
+        return "\(record.srcIP.isEmpty ? "unknown source" : record.srcIP) \u{2192} \(destination)"
     }
 
     private var protocolText: String {
@@ -208,7 +213,7 @@ struct EvidenceConnectionRow: View {
     }
 
     private var detail: String {
-        var parts = [nodeName]
+        var parts = typeSize.isAccessibilitySize ? ["from \(record.source.isEmpty ? "an unknown source" : record.source)", nodeName] : [nodeName]
         if !protocolText.isEmpty { parts.append(protocolText) }
         parts.append(EvidenceBytes.text(record))
         if let duration = EvidenceDuration.text(milliseconds: record.durationMS) { parts.append(duration) }
@@ -251,6 +256,22 @@ struct EvidenceGatedButton: View {
             }
         }
         .disabled(blocked != nil)
+    }
+}
+
+/// Nothing has loaded and there is no network path: say so instead of
+/// showing placeholders that never fill (section 6.11).
+struct EvidenceOfflineState: View {
+    let noun: String
+
+    var body: some View {
+        WholeScreenState {
+            ContentUnavailableView {
+                Label("Offline", systemImage: "wifi.slash")
+            } description: {
+                Text("\(noun) has not loaded yet. It loads when the phone is back online.")
+            }
+        }
     }
 }
 

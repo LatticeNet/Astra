@@ -15,6 +15,7 @@ struct ConnectionsScreen: View {
     @Environment(NodeDirectory.self) private var nodes
     @Environment(ChangeLog.self) private var changes
     @Environment(Router.self) private var router
+    @Environment(NetworkMonitor.self) private var network
     @Environment(\.accessibilityVoiceOverEnabled) private var voiceOver
     @Environment(\.timeZoneMode) private var mode
     @Environment(\.locale) private var locale
@@ -261,6 +262,8 @@ struct ConnectionsScreen: View {
     private var content: some View {
         if let missing = store.readMissing {
             ScopeDeniedScreen(scope: missing)
+        } else if !network.isSatisfied && store.connections.value == nil {
+            EvidenceOfflineState(noun: "Connections")
         } else if store.traceStoreOff {
             WholeScreenState {
                 ContentUnavailableView("Connection tracing is not enabled on this server", systemImage: "exclamationmark.triangle",
@@ -321,7 +324,7 @@ struct ConnectionsScreen: View {
             ContentUnavailableView.search(text: text)
         } else if answer?.collectedTotal == 0 {
             ContentUnavailableView {
-                Label("Nothing has been collected", systemImage: "arrow.left.arrow.right")
+                Label("Nothing collected yet", systemImage: "arrow.left.arrow.right")
             } description: {
                 Text("Connection records exist only where collection is on. Start a capture from Evidence; it stops by itself.")
             } actions: {

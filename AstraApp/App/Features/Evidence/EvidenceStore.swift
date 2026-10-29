@@ -204,7 +204,9 @@ final class EvidenceStore {
     }
 
     nonisolated static func isUnavailable(_ error: LatticeAPIError?) -> Bool {
-        if case .server(let status, _, _)? = error { return status == 503 }
+        // The trace and log stores answer 503 "... is not enabled on this
+        // server" when the server runs without them; any other 503 is an outage.
+        if case .server(let status, _, let message)? = error { return status == 503 && message.localizedCaseInsensitiveContains("not enabled") }
         return false
     }
 

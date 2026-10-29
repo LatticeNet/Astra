@@ -25,7 +25,7 @@ public enum EvidenceFixtures {
             DemoRoute(pathPattern: "/api/trace/policy", body: #"{"policies":[]}"#, emptyBody: #"{"policies":[]}"#) { request, _ in
                 .json(DemoJSON.object([("policies", .array(visibleNodes(request).map(policyJSON)))]).text)
             }.requiring(readScope),
-            DemoRoute(pathPattern: "/api/trace/stats", body: statsBody(scoped: false), emptyBody: statsBody(scoped: false)) { request, _ in
+            DemoRoute(pathPattern: "/api/trace/stats", body: statsBody(scoped: false), emptyBody: emptyStatsBody) { request, _ in
                 .json(statsBody(scoped: isConfined(request)))
             }.requiring(readScope),
             DemoRoute(pathPattern: "/api/trace/connections", body: #"{"records":[],"collected_total":0}"#, emptyBody: #"{"records":[],"collected_total":0}"#) { request, _ in
@@ -679,6 +679,8 @@ public enum EvidenceFixtures {
             "raw_source_max_bytes": [.number(1_048_576), .number(1_073_741_824)],
         ]),
     ]).text
+
+    static let emptyStatsBody = #"{"path":"/var/lib/lattice/trace.db","schema_version":4,"records":0,"open_records":0,"lines":0,"rollups":0,"size_bytes":4096,"max_bytes":2147483648,"cipher_enabled":true}"#
 
     static func statsBody(scoped: Bool) -> String {
         if scoped { return #"{"scoped":true,"schema_version":4,"cipher_enabled":true}"# }

@@ -60,6 +60,8 @@ struct EvidenceScreen: View {
     private var content: some View {
         if let missing = store.readMissing {
             ScopeDeniedScreen(scope: missing)
+        } else if !network.isSatisfied && store.policies.value == nil && store.sources.value == nil {
+            EvidenceOfflineState(noun: "Evidence")
         } else if store.traceStoreOff {
             ResourceView(state: store.sources, noun: "evidence", retry: refresh) { _ in list }
         } else {
@@ -118,28 +120,34 @@ struct EvidenceScreen: View {
                 )
             } else {
                 let summary = EvidenceCoverage.summary(rows)
-                VStack(alignment: .leading, spacing: Spacing.xs) {
-                    Text(headline(summary))
-                        .textRole(.verdict)
-                    if let proof = proofLine {
-                        Text(proof).textRole(.footnote)
-                    }
-                }
-                .frame(minHeight: Spacing.minimumTarget, alignment: .leading)
-                .accessibilityElement(children: .combine)
+                Text(headline(summary))
+                    .textRole(.verdict)
+                    .frame(minHeight: Spacing.minimumTarget, alignment: .leading)
+                    .accessibilityAddTraits(.isHeader)
             }
-            if case .failed(let error, _, _) = store.sessions, !store.traceStoreOff {
-                ErrorRow(message: "Could not refresh captures: \(error.localizedDescription)", retry: refresh)
-            }
-            if case .failed(let error, _, _) = store.policies, store.policies.value != nil {
-                ErrorRow(message: "Could not refresh trace policies: \(error.localizedDescription)", retry: refresh)
-            }
-            if case .failed(let error, _, _) = store.sources, !store.logStoreOff {
-                ErrorRow(message: "Raw log sources not read: \(error.localizedDescription). Raw log counts are unknown, not zero.", retry: refresh)
+            if let failure = refreshFailure {
+                ErrorRow(message: failure, retry: refresh)
             }
             if case .companionBehind(let surface) = store.sessions { CompanionBehindRow(surface: surface) }
             if case .companionBehind(let surface) = store.sources { CompanionBehindRow(surface: surface) }
+        } footer: {
+            if let proof = proofLine, !store.traceStoreOff { Text(proof) }
         }
+    }
+
+    /// One row for every list that failed to refresh, its data kept below.
+    private var refreshFailure: String? {
+        var names: [String] = []
+        var reason: LatticeAPIError?
+        if case .failed(let error, _, _) = store.sessions, !store.traceStoreOff { names.append("captures"); reason = reason ?? error }
+        if case .failed(let error, _, _) = store.policies, store.policies.value != nil { names.append("trace policies"); reason = reason ?? error }
+        if case .failed(let error, _, _) = store.sources, !store.logStoreOff { names.append("raw log sources"); reason = reason ?? error }
+        guard let reason, !names.isEmpty else { return nil }
+        let list = names.count == 1 ? names[0] : names.dropLast().joined(separator: ", ") + " and " + names.last!
+        var text = "Could not refresh \(list): \(reason.localizedDescription)"
+        if !text.hasSuffix(".") { text += "." }
+        if names.contains("raw log sources") && store.sources.value == nil { text += " Raw log counts are unknown, not zero." }
+        return text
     }
 
     private func headline(_ summary: (recording: Int, needsAttention: Int, total: Int)) -> String {
@@ -181,7 +189,7 @@ struct EvidenceScreen: View {
                     }
                 }
             } header: {
-                Text(running.count == 1 ? "1 capture running" : "\(running.count) captures running").accessibilityAddTraits(.isHeader)
+                Text(running.isEmpty ? "Captures" : running.count == 1 ? "1 capture running" : "\(running.count) captures running").accessibilityAddTraits(.isHeader)
             } footer: {
                 Text("A capture raises the log level on its nodes while it runs and stops by itself. It never restarts sing-box. Swipe a node to start one.")
             }

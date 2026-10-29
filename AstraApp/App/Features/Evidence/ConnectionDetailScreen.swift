@@ -65,6 +65,7 @@ struct ConnectionDetailScreen: View {
     @Environment(NodeDirectory.self) private var nodes
     @Environment(ChangeLog.self) private var changes
     @Environment(Router.self) private var router
+    @Environment(NetworkMonitor.self) private var network
     @Environment(\.timeZoneMode) private var mode
     @Environment(\.locale) private var locale
 
@@ -105,7 +106,9 @@ struct ConnectionDetailScreen: View {
 
     @ViewBuilder
     private var content: some View {
-        if model.key == nil {
+        if !network.isSatisfied && model.hops.value == nil {
+            EvidenceOfflineState(noun: "This connection")
+        } else if model.key == nil {
             WholeScreenState {
                 ContentUnavailableView("Not a connection link", systemImage: "link",
                                        description: Text("The link does not name a node, core generation, log id and start time."))
@@ -142,7 +145,8 @@ struct ConnectionDetailScreen: View {
                 Section { ErrorRow(message: "Could not refresh: \(error.localizedDescription)", retry: refresh) }
             }
             Section {
-                Text("\(record.source.isEmpty ? "Unknown source" : record.source) to \(record.destination.isEmpty ? "an unknown destination" : record.destination)")
+                // Addresses break anywhere rather than hyphenate at accessibility sizes.
+                Text("\(record.source.isEmpty ? "Unknown source" : DetailRow.breakable(record.source)) to \(record.destination.isEmpty ? "an unknown destination" : DetailRow.breakable(record.destination))")
                     .textRole(.detailHeader)
                     .frame(minHeight: Spacing.minimumTarget, alignment: .leading)
                     .accessibilityAddTraits(.isHeader)
