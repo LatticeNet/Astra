@@ -163,7 +163,7 @@ struct DefinitionDetailScreen: View {
             }
             Section {
                 Button(role: .destructive) {
-                    Task { await runner.run(MonitoringIntents.deleteDefinition(id: definition.id, name: definition.displayName)) }
+                    Task { await runner.run(MonitoringIntents.deleteDefinition(id: definition.id, name: definition.displayName, nodeNames: nodes.nodes.mapValues(\.displayName))) }
                 } label: {
                     VStack(alignment: .leading, spacing: Spacing.xxs) {
                         Label("Delete definition", systemImage: "trash")

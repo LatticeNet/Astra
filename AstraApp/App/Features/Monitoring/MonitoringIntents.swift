@@ -1,4 +1,5 @@
 import Foundation
+import Synchronization
 
 /// The M3 writes, each at the tier the parity matrix assigns (section 3.2).
 enum MonitoringIntents {
@@ -62,10 +63,12 @@ enum MonitoringIntents {
     // MARK: Definitions
 
     /// Delete a definition (T4). The dry run reads the definition by id and
-    /// lists every monitor that goes with it; the write sends that version and
-    /// exactly those monitor ids, and stops if either changed in between.
-    nonisolated static func deleteDefinition(id: String, name: String) -> WriteIntent {
+    /// lists every monitor that goes with it; the write sends the version and
+    /// monitor ids of the last dry run, the one WriteFlow compared with what
+    /// the operator reviewed, and never re-reads in between.
+    nonisolated static func deleteDefinition(id: String, name: String, nodeNames: [String: String] = [:]) -> WriteIntent {
         let object = ObjectRef(kind: "definition", id: id, name: name)
+        let reviewed = MonitoringReviewedDefinition()
         return WriteIntent(
             tier: .t4,
             verb: "Delete definition",
@@ -76,13 +79,14 @@ enum MonitoringIntents {
             confirmPhrase: name,
             dryRun: { client in
                 let definition = try await client.monitoringDefinition(id: id)
-                return report(definition)
+                reviewed.value.withLock { $0 = definition }
+                return report(definition, nodeNames: nodeNames)
             },
             changes: [.definitions, .checks, .paths],
             perform: { client, _ in
-                let definition = try await client.monitoringDefinition(id: id)
-                guard let request = MonitoringDefinitionDeleteRequest(definition: definition) else {
-                    return .refused(.validation("The server did not list this definition's checks."), "The server did not list this definition's checks.")
+                guard let definition = reviewed.value.withLock({ $0 }), let request = MonitoringDefinitionDeleteRequest(definition: definition) else {
+                    let message = "The checks of \(name) were not listed for review. Review again."
+                    return .refused(.validation(message), message)
                 }
                 do {
                     let result = try await client.monitoringDeleteDefinition(request)
@@ -96,20 +100,27 @@ enum MonitoringIntents {
         )
     }
 
-    /// The definition's monitors as dry-run lines, grouped by what goes.
-    nonisolated static func report(_ definition: MonitoringCheckDefinition) -> DryRunReport {
+    /// The definition's monitors as dry-run lines, grouped by what goes, each
+    /// named by its target node or its sources rather than a raw address. A
+    /// definition that expanded to nothing (created paused) deletes alone.
+    nonisolated static func report(_ definition: MonitoringCheckDefinition, nodeNames: [String: String] = [:]) -> DryRunReport {
         guard let monitors = definition.monitors else {
             return DryRunReport(lines: [DetailLine(label: "Checks", value: "not listed by the server")], blocking: true, fingerprint: "none")
         }
+        func name(_ id: String) -> String { nodeNames[id] ?? id }
         let lines = monitors.map { monitor in
-            DetailLine(
-                label: "\(monitor.method) to \(monitor.target)",
+            let label = !monitor.targetNode.isEmpty
+                ? "\(monitor.method) to \(name(monitor.targetNode))"
+                : monitor.sources.isEmpty ? "\(monitor.method) to \(monitor.target)" : "\(monitor.method) from \(monitor.sources.map(name).joined(separator: ", "))"
+            return DetailLine(
+                label: label,
                 value: monitor.runs == 1 ? "1 result" : "\(monitor.runs.formatted()) results",
                 group: monitor.inSet ? "Checks and their history" : "Paused targets and their history"
             )
         }
         let fingerprint = "\(definition.version):" + monitors.map(\.monitorID).sorted().joined(separator: ",")
-        return DryRunReport(lines: lines, blocking: monitors.isEmpty, fingerprint: fingerprint)
+        let summary = monitors.isEmpty ? [DetailLine(label: "Checks", value: "none generated")] : []
+        return DryRunReport(lines: summary + lines, blocking: false, fingerprint: fingerprint)
     }
 
     // MARK: Maintenance
@@ -168,4 +179,10 @@ enum MonitoringIntents {
             }
         )
     }
+}
+
+/// The definition the last dry run read, which WriteFlow has compared with
+/// the reviewed one by the time the write runs.
+final class MonitoringReviewedDefinition: Sendable {
+    let value = Mutex<MonitoringCheckDefinition?>(nil)
 }
