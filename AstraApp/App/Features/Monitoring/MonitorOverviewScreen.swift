@@ -9,6 +9,7 @@ struct MonitorOverviewScreen: View {
     @Environment(NodeDirectory.self) private var nodes
     @Environment(Router.self) private var router
     @Environment(\.timeZoneMode) private var mode
+    @Environment(\.dynamicTypeSize) private var typeSize
     @Environment(\.locale) private var locale
 
     var body: some View {
@@ -161,9 +162,11 @@ struct MonitorOverviewScreen: View {
         } label: {
             HStack(alignment: .firstTextBaseline) {
                 StatusRow(style: style, title: title, detail: detail, accessibilityPhrase: "\(title), \(style.word)")
-                Text(segment.title)
-                    .textRole(.footnote)
-                    .accessibilityHidden(true)
+                if !typeSize.isAccessibilitySize {
+                    Text(segment.title)
+                        .textRole(.footnote)
+                        .accessibilityHidden(true)
+                }
             }
         }
         .tint(.primary)

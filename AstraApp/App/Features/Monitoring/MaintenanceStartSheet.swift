@@ -12,6 +12,7 @@ struct MaintenanceStartSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.timeZoneMode) private var mode
     @Environment(\.locale) private var locale
+    @Environment(\.dynamicTypeSize) private var typeSize
 
     @State private var subject = ""
     @State private var name = ""
@@ -120,10 +121,12 @@ struct MaintenanceStartSheet: View {
             Button {
                 start()
             } label: {
-                Text(subject.isEmpty ? "Start maintenance" : "Start maintenance on \(subjectName)")
+                Text(subject.isEmpty || typeSize.isAccessibilitySize ? "Start" : "Start maintenance on \(subjectName)")
                     .frame(maxWidth: .infinity, minHeight: Spacing.minimumTarget)
             }
+            .accessibilityLabel(subject.isEmpty ? "Start maintenance" : "Start maintenance on \(subjectName)")
             .buttonStyle(.borderedProminent)
+            .buttonBorderShape(.roundedRectangle(radius: 14))
             .tint(Color.accentFill)
             .disabled(problem != nil || !missing.isEmpty || starting)
         }

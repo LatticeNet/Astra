@@ -150,19 +150,7 @@ struct PathDetailScreen: View {
         let style = StatusStyle.path(item.display)
         let since = item.path.degraded?.since.map { TimeDisplay.clock($0, mode: mode, locale: locale) }
         return Section {
-            HStack(alignment: .firstTextBaseline, spacing: Spacing.m) {
-                StatusGlyph(style: style)
-                VStack(alignment: .leading, spacing: Spacing.xxs) {
-                    Text(style.word.capitalized)
-                        .textRole(.detailHeader)
-                        .foregroundStyle(style.tone.isProblem ? style.tone.word : .primary)
-                    if let reason = item.reason {
-                        Text(reason.sentence).textRole(.rowReason(style.tone.isProblem ? style.tone.word : .secondary))
-                    }
-                }
-            }
-            .accessibilityElement(children: .combine)
-            .accessibilityAddTraits(.isHeader)
+            MonitoringStateHeader(style: style, reason: item.reason?.sentence)
             if let evidence = MonitoringPathEvidence.sentence(item.path.degraded, since: since) {
                 Text(evidence).font(.body)
             }

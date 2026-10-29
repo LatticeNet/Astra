@@ -74,7 +74,7 @@ struct MonitoringMatrixList: View {
             Section {
                 ForEach(matrix.rows) { row in
                     NavigationLink(value: AppRoute.monitoring(.paths(query: MonitoringMatrix.sourceQuery(row)))) {
-                        StatusRow(style: style(row), title: row.name, detail: counts(row), accessibilityPhrase: row.summary)
+                        StatusRow(style: style(row), title: row.name, accessibilityPhrase: row.summary)
                     }
                     .accessibilityRotorEntry(id: row.id, in: rotor)
                 }
@@ -103,11 +103,12 @@ struct MonitoringMatrixList: View {
         }
     }
 
+    /// The worst state's symbol and tone, with every count as the word.
     private func style(_ row: MonitoringMatrixRow) -> StatusStyle {
-        if row.down > 0 { return .path(.down) }
-        if row.degraded > 0 { return .path(.degraded(nil)) }
-        if row.up == 0 && row.unknown > 0 { return .path(.unknown(nil)) }
-        return .path(.up)
+        var base: StatusStyle
+        if row.down > 0 { base = .path(.down) } else if row.degraded > 0 { base = .path(.degraded(nil)) } else if row.up == 0 && row.unknown > 0 { base = .path(.unknown(nil)) } else { base = .path(.up) }
+        base.word = counts(row)
+        return base
     }
 
     private func counts(_ row: MonitoringMatrixRow) -> String {

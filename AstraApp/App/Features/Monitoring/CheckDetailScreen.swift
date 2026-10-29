@@ -81,14 +81,7 @@ struct CheckDetailScreen: View {
         return List {
             MonitoringRefreshError(state: store.monitors, noun: "the check") { Task { await store.refreshChecks() } }
             Section {
-                HStack(alignment: .firstTextBaseline, spacing: Spacing.m) {
-                    StatusGlyph(style: style)
-                    Text(style.word.capitalized)
-                        .textRole(.detailHeader)
-                        .foregroundStyle(style.tone.isProblem ? style.tone.word : .primary)
-                }
-                .accessibilityElement(children: .combine)
-                .accessibilityAddTraits(.isHeader)
+                MonitoringStateHeader(style: style)
             }
             if monitor.isGenerated { generatedSection(monitor) }
             resultsSection(monitor)

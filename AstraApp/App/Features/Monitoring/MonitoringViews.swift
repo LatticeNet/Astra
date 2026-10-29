@@ -354,3 +354,35 @@ final class MonitoringStableList<Row: Identifiable & Sendable> where Row.ID: Sen
         held = nil
     }
 }
+
+/// The state at the top of a detail screen: glyph, word and reason. At
+/// accessibility sizes the glyph sits inline so the word keeps the full width.
+struct MonitoringStateHeader: View {
+    let style: StatusStyle
+    var reason: String?
+
+    @Environment(\.dynamicTypeSize) private var typeSize
+
+    var body: some View {
+        let wordColor: Color = style.tone.isProblem ? style.tone.word : .primary
+        Group {
+            if typeSize.isAccessibilitySize {
+                VStack(alignment: .leading, spacing: Spacing.xs) {
+                    Text("\(Text(Image(systemName: style.symbol)).foregroundStyle(style.tone.glyph)) \(Text(style.word.capitalized).foregroundStyle(wordColor))")
+                        .textRole(.detailHeader)
+                    if let reason { Text(reason).textRole(.rowReason(style.tone.isProblem ? style.tone.word : .secondary)) }
+                }
+            } else {
+                HStack(alignment: .firstTextBaseline, spacing: Spacing.m) {
+                    StatusGlyph(style: style)
+                    VStack(alignment: .leading, spacing: Spacing.xxs) {
+                        Text(style.word.capitalized).textRole(.detailHeader).foregroundStyle(wordColor)
+                        if let reason { Text(reason).textRole(.rowReason(style.tone.isProblem ? style.tone.word : .secondary)) }
+                    }
+                }
+            }
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(.isHeader)
+    }
+}
