@@ -66,8 +66,9 @@ public enum TasksFixtures {
     }
 
     static func reveal(_ request: DemoRequest) -> DemoResponse {
+        // The server's refusal for a bearer token without secrets:reveal (decideSecretReveal).
         guard request.identity == .session else {
-            return .error(status: 403, code: "step_up_required", message: "step-up is available only to a signed-in session")
+            return .error(status: 403, code: "secret_reveal_scope_required", message: "this API token cannot reveal secrets: that needs a token carrying the secrets:reveal scope, which no other scope implies and which a full administrator grants from an interactive session after step-up")
         }
         guard let task = task(request) else { return notFound }
         guard (request.bodyStrings["step_up_grant"] ?? "").isEmpty == false else {
