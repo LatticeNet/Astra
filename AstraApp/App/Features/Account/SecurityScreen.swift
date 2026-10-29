@@ -43,8 +43,8 @@ struct SecurityScreen: View {
                 Label("Needs a signed-in session", systemImage: "person.badge.key")
             } description: {
                 Text(session.sessionExpired
-                     ? "The session expired. Your two-factor state and passkeys are read on a signed-in session, which the server never grants an API token. Sign in again to see them."
-                     : "Your two-factor state and passkeys are read on a signed-in session, which the server never grants an API token. Sign in with your password and authenticator code to see them.")
+                     ? "The session expired. The server shows two-factor state and passkeys only to a signed-in session, never to an API token. Sign in again to see them."
+                     : "The server shows two-factor state and passkeys only to a signed-in session, never to an API token. Sign in with your password and authenticator code to see them.")
             } actions: {
                 NavigationLink(value: SettingsRoute.page(.session)) {
                     Text("Sign in for reveals")

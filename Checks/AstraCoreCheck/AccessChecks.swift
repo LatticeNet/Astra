@@ -253,6 +253,13 @@ private func checkAccessSSO() throws {
     try expect(AccessSSO.notices(workspace).isEmpty, "a sound provider has no notice")
     try expectEqual(AccessSSO.notices(lab).count, 2, "skip and missing secret")
     try expect(AccessSSO.notices(skipping)[0].hasPrefix("Skips the authenticator code: anyone"), "enabled skip states its consequence")
+    try expect(AccessSSO.notices(lab).contains { $0.contains("public client") }, "a missing secret is a public-client setup, not a broken one")
+
+    let posix = Locale(identifier: "en_US")
+    let lastYear = Date(timeIntervalSince1970: 1_758_553_260) // 2025-09-22T15:01:00Z
+    let thisYear = Date(timeIntervalSince1970: 1_790_000_000) // 2026-09-21
+    try expect(AccessTime.dateTime(lastYear, now: thisYear, mode: .utc, locale: posix).contains("2025"), "a date in another year names the year")
+    try expectEqual(AccessTime.dateTime(thisYear, now: thisYear, mode: .utc, locale: posix), TimeDisplay.dateTime(thisYear, mode: .utc, locale: posix), "a date this year reads as TimeDisplay does")
     try expectEqual(AccessSSO.domains(workspace), "Any verified email domain", "no domain list")
     try expectEqual(AccessSSO.sorted([lab, skipping, workspace]).map(\.id), ["c", "a", "b"], "enabled first, then by title")
 }

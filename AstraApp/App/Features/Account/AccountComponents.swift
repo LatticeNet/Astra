@@ -37,10 +37,10 @@ extension StatusStyle {
     static func accountProvider(_ provider: AccessSSOProvider) -> StatusStyle {
         guard provider.enabled else { return StatusStyle(word: "off", symbol: "minus.circle", tone: .quiet) }
         if provider.skipLocalTOTP {
-            return StatusStyle(word: "skips the code", symbol: "exclamationmark.triangle.fill", tone: .warn)
+            return StatusStyle(word: "skips the code", symbol: "lock.open.trianglebadge.exclamationmark.fill", tone: .warn)
         }
         if !provider.hasSecret {
-            return StatusStyle(word: "no secret", symbol: "exclamationmark.triangle.fill", tone: .warn)
+            return StatusStyle(word: "no secret", symbol: "key.slash.fill", tone: .warn)
         }
         return StatusStyle(word: "enabled", symbol: "checkmark.circle.fill", tone: .ok)
     }
@@ -69,7 +69,7 @@ struct AccountTokenRow: View {
 
     var body: some View {
         let style = StatusStyle.accountToken(token)
-        var parts = [AccessTokens.detail(token)]
+        var parts = [AccessTokens.detail(token).accountLowercased]
         let risks = AccessScopes.risks(token.scopes).map(\.scope).filter { $0 != "*" }
         if !risks.isEmpty, !token.isRevoked { parts.append("holds \(risks.joined(separator: " and "))") }
         if let revoked = token.revokedAt {
@@ -95,7 +95,7 @@ struct AccountUserRow: View {
 
     var body: some View {
         let style = StatusStyle.accountUser(user)
-        var parts = [AccessUsers.role(user), user.hasPassword ? "password" : "SSO only"]
+        var parts = [AccessUsers.role(user).accountLowercased, user.hasPassword ? "password" : "SSO only"]
         if AccessAllowlist.isConfined(user.serverAllowlist) { parts.append(AccessAllowlist.summary(user.serverAllowlist).lowercased()) }
         let spoken = ["User \(user.displayName)", style.word] + (isSelf ? ["your account"] : []) + parts
         return StatusRow(
@@ -206,8 +206,9 @@ struct AccountTimeRow: View {
     @Environment(\.locale) private var locale
 
     var body: some View {
-        DetailRow(label: label, value: TimeDisplay.dateTime(date, mode: mode, locale: locale),
-                  secondary: TimeDisplay.otherZone(date, mode: mode, locale: locale), copyable: false)
+        let now = Date()
+        DetailRow(label: label, value: AccessTime.dateTime(date, now: now, mode: mode, locale: locale),
+                  secondary: AccessTime.dateTime(date, now: now, mode: mode.other, locale: locale), copyable: false)
     }
 }
 
@@ -275,20 +276,27 @@ struct AccountActionButton: View {
     let action: () -> Void
 
     var body: some View {
+        // Colored explicitly, as FleetActionRow is: the system does not grey
+        // a nested title, so a blocked row looked enabled.
+        let tint: Color = blocker != nil ? .secondary : (role == .destructive ? Color.statusFailText : Color.accentText)
         Button(role: role, action: action) {
-            Label {
+            HStack(alignment: .firstTextBaseline, spacing: Spacing.m) {
+                Image(systemName: systemImage)
+                    .foregroundStyle(tint)
+                    .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: Spacing.xxs) {
-                    Text(title)
+                    Text(title).foregroundStyle(tint)
                     if let line = blocker ?? note {
                         Text(line).textRole(.footnote).fixedSize(horizontal: false, vertical: true)
                     }
                 }
-            } icon: {
-                Image(systemName: systemImage)
+                Spacer(minLength: 0)
             }
             .frame(minHeight: Spacing.minimumTarget, alignment: .leading)
+            .contentShape(Rectangle())
         }
         .disabled(blocker != nil)
+        .accessibilityHint(blocker.map { "Unavailable. \($0)" } ?? "")
     }
 }
 
@@ -323,5 +331,11 @@ extension String {
     var accountCapitalized: String {
         guard let first else { return self }
         return first.uppercased() + dropFirst()
+    }
+
+    /// "Full administrator" to "full administrator", for the middle of a line.
+    var accountLowercased: String {
+        guard let first else { return self }
+        return first.lowercased() + dropFirst()
     }
 }

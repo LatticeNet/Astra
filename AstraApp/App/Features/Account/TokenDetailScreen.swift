@@ -59,11 +59,31 @@ struct TokenDetailScreen: View {
             if !risks.isEmpty {
                 Section {
                     ForEach(risks, id: \.scope) { risk in
-                        AccountNoticeRow(text: "\(risk.scope): \(risk.sentence)")
+                        AccountNoticeRow(text: "\(risk.scope == "*" ? "Full administrator" : risk.scope): \(risk.sentence)")
                     }
                 } header: {
-                    Text("Easy to miss").accessibilityAddTraits(.isHeader)
+                    Text("Sensitive scopes").accessibilityAddTraits(.isHeader)
                 }
+            }
+
+            // Actions sit above the scope list, which runs to 30 rows, so the
+            // leak response is reachable without a long scroll.
+            Section {
+                if !token.isRevoked {
+                    AccountActionButton(
+                        title: "Revoke token", systemImage: "xmark.circle",
+                        note: isOwn ? AccessIntents.ownTokenWarning : "Anything calling the API with it gets 401 from now on. One-way.",
+                        blocker: missing, role: .destructive
+                    ) { revoke(token) }
+                }
+                AccountActionButton(
+                    title: "Delete token", systemImage: "trash",
+                    note: "Removes it from the list. Audit history is kept.",
+                    blocker: missing ?? AccessTokens.deleteBlocker(token), role: .destructive
+                ) { delete(token) }
+                WebLinkRow(title: "Manage tokens on web", path: .tokens)
+            } header: {
+                Text("Actions").accessibilityAddTraits(.isHeader)
             }
 
             Section {
@@ -89,27 +109,10 @@ struct TokenDetailScreen: View {
                 DetailRow(label: "Token ID", value: token.id, monospaced: true)
             } header: {
                 Text("Details").accessibilityAddTraits(.isHeader)
-            }
-
-            Section {
-                if !token.isRevoked {
-                    AccountActionButton(
-                        title: "Revoke token", systemImage: "xmark.circle",
-                        note: isOwn ? AccessIntents.ownTokenWarning : "Anything calling the API with it gets 401 from now on. One-way.",
-                        blocker: missing, role: .destructive
-                    ) { revoke(token) }
-                }
-                AccountActionButton(
-                    title: "Delete token", systemImage: "trash",
-                    note: "Removes it from the list. Audit history is kept.",
-                    blocker: missing ?? AccessTokens.deleteBlocker(token), role: .destructive
-                ) { delete(token) }
-                WebLinkRow(title: "Manage tokens on web", path: .tokens)
-            } header: {
-                Text("Actions").accessibilityAddTraits(.isHeader)
             } footer: {
                 FreshnessFooter(state: store.tokens, interval: Polling.standard.interval(lowPower: false))
             }
+
         }
         .listStyle(.insetGrouped)
         .refreshable { await store.refreshTokens() }

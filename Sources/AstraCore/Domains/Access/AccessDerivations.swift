@@ -25,7 +25,7 @@ public enum AccessScopes {
     /// The scopes ScopeSummary warns about, each with what it permits
     /// through the API (F-05), plus the two that make a token a superuser.
     public static let warnings: [(scope: String, sentence: String)] = [
-        ("*", "Every scope: this token can do anything an administrator can, including minting tokens and managing users."),
+        ("*", "This token can do anything an administrator can, including minting tokens and managing users."),
         ("token:admin", "This token can mint other tokens that outlive it, and revoke any token."),
         ("user:admin", "This token can create operator accounts and change their scopes."),
         ("plugin:admin", "This token can install, enable and invoke plugins, which run code on the control plane."),
@@ -268,7 +268,7 @@ public enum AccessSSO {
                 : "Skips the authenticator code once enabled.")
         }
         if !provider.hasSecret {
-            notices.append("No client secret is stored, so sign-in through it fails until one is set on the web.")
+            notices.append("No client secret is stored. Sign-in works only if the provider accepts Lattice as a public client.")
         }
         return notices
     }
@@ -320,6 +320,23 @@ public enum AccessPasskeys {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, trimmed != current else { return nil }
         return trimmed
+    }
+}
+
+public enum AccessTime {
+    /// `TimeDisplay.dateTime` with the year added when the date falls in
+    /// another year, since token and account age is a security judgment and
+    /// "Sep 22" alone reads as last month.
+    public static func dateTime(_ date: Date, now: Date, mode: TimeZoneMode, locale: Locale) -> String {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = mode.timeZone
+        guard calendar.component(.year, from: date) != calendar.component(.year, from: now) else {
+            return TimeDisplay.dateTime(date, mode: mode, locale: locale)
+        }
+        var style = Date.FormatStyle.dateTime.locale(locale)
+        style.timeZone = mode.timeZone
+        let text = date.formatted(style.year().month(.abbreviated).day().hour().minute())
+        return mode == .utc ? text + " UTC" : text
     }
 }
 
