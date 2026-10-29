@@ -14,11 +14,14 @@ struct EvidenceScreen: View {
     @Environment(ActionRunner.self) private var runner
     @Environment(Router.self) private var router
     @Environment(NetworkMonitor.self) private var network
+    @Environment(SessionStore.self) private var session
 
     @SceneStorage(EvidenceScreen.queryKey) private var query = ""
-    @State private var captureTarget: EvidenceCoverageRow?
     @State private var showQuiet = false
     @State private var showEnded = false
+    @State private var idle = EvidenceListIdle()
+    /// Node rows in the order last applied; a poll's reorder waits for a still list.
+    @State private var heldOrder: [String] = []
 
     var body: some View {
         content
@@ -37,24 +40,29 @@ struct EvidenceScreen: View {
                     }
                 }
             }
-            .confirmationDialog(
-                captureTarget.map { "Capture on \($0.name) for how long?" } ?? "",
-                isPresented: Binding(get: { captureTarget != nil }, set: { if !$0 { captureTarget = nil } }),
-                titleVisibility: .visible,
-                presenting: captureTarget
-            ) { row in
-                ForEach(EvidenceCapturePreset.allCases, id: \.self) { preset in
-                    Button(preset.title) { start(row, preset: preset) }
-                }
-                Button("Cancel", role: .cancel) { captureTarget = nil }
-            } message: { row in
-                Text("Records connection metadata for users on \(row.name), then stops by itself.")
-            }
             .polling(.standard, version: changes.version([.evidence])) {
                 await nodes.refreshIfOlder(than: 15)
                 return await store.refreshOverview()
             }
+            .onChange(of: liveOrder) { _, order in if idle.isIdle || heldOrder.isEmpty { heldOrder = order } }
+            .onChange(of: idle.settled) { heldOrder = liveOrder }
+            .task(id: nextExpiry) {
+                // A capture ends on the server at its deadline; read it then
+                // rather than show "running" at 0:00 until the next poll.
+                guard let nextExpiry else { return }
+                try? await Task.sleep(for: .seconds(max(0, nextExpiry.timeIntervalSinceNow) + 0.5))
+                guard !Task.isCancelled else { return }
+                await store.refreshOverview()
+            }
     }
+
+    private var liveOrder: [String] { (store.coverage(nodes: nodes, now: Date()) ?? []).map(\.id) }
+
+    private var nextExpiry: Date? {
+        (store.sessions.value ?? []).filter { $0.isActive(now: Date()) }.compactMap(\.expiresAt).min()
+    }
+
+    private var confined: Bool { session.tokenScopes?.isConfined ?? false }
 
     @ViewBuilder
     private var content: some View {
@@ -73,7 +81,7 @@ struct EvidenceScreen: View {
 
     private var list: some View {
         let now = Date()
-        let rows = store.coverage(nodes: nodes, now: now) ?? []
+        let rows = EvidenceListIdle.ordered(store.coverage(nodes: nodes, now: now) ?? [], by: heldOrder)
         let text = query.trimmingCharacters(in: .whitespaces).lowercased()
         let matching = rows.filter { text.isEmpty || $0.name.lowercased().contains(text) || $0.state.word.contains(text) }
         let attention = matching.filter(\.needsAttention)
@@ -106,6 +114,7 @@ struct EvidenceScreen: View {
             }
         }
         .listStyle(.insetGrouped)
+        .onScrollPhaseChange { _, phase in idle.note(phase) }
         .refreshable { await store.refreshOverview() }
     }
 
@@ -118,9 +127,8 @@ struct EvidenceScreen: View {
                     title: "Connection tracing is not enabled on this server",
                     reason: "No connection record can be kept and no capture can start. Raw log sources still ship lines."
                 )
-            } else {
-                let summary = EvidenceCoverage.summary(rows)
-                Text(headline(summary))
+            } else if !rows.isEmpty {
+                Text(headline(rows))
                     .textRole(.verdict)
                     .frame(minHeight: Spacing.minimumTarget, alignment: .leading)
                     .accessibilityAddTraits(.isHeader)
@@ -150,24 +158,27 @@ struct EvidenceScreen: View {
         return text
     }
 
-    private func headline(_ summary: (recording: Int, needsAttention: Int, total: Int)) -> String {
+    /// "2 of 35 nodes recording, 3 more ready.", in the rows' own words.
+    private func headline(_ rows: [EvidenceCoverageRow]) -> String {
+        let summary = EvidenceCoverage.summary(rows)
         if summary.total == 0 { return "No node to collect from." }
-        let nodesWord = summary.total == 1 ? "node" : "nodes"
-        var text = "\(summary.recording) of \(summary.total) \(nodesWord) recording."
+        let nodesWord = (confined ? "visible " : "") + (summary.total == 1 ? "node" : "nodes")
+        let underCapture = rows.filter { if case .recording = $0.state { true } else { false } }.count
+        let ready = summary.recording - underCapture
+        var text = "\(underCapture) of \(summary.total) \(nodesWord) recording"
+        text += ready > 0 ? ", \(ready) more ready." : "."
         if summary.needsAttention > 0 {
             text += summary.needsAttention == 1 ? " 1 asked to record is not." : " \(summary.needsAttention) asked to record are not."
         }
         return text
     }
 
-    /// "Trace store 60 records, encrypted": each fragment only once it was read.
+    /// "Trace store 60 records, encrypted": the count only once it was read.
     private var proofLine: String? {
         guard let stats = store.traceStats.value else { return nil }
-        var parts: [String] = []
-        if let records = stats.records { parts.append(records == 1 ? "Trace store 1 record" : "Trace store \(records.formatted()) records") }
-        parts.append(stats.cipherEnabled ? "encrypted" : "not encrypted")
-        let line = parts.joined(separator: ", ")
-        return line.prefix(1).uppercased() + line.dropFirst()
+        let cipher = stats.cipherEnabled ? "encrypted" : "not encrypted"
+        guard let records = stats.records else { return "Trace store \(cipher)" }
+        return "Trace store \(records == 1 ? "1 record" : "\(records.formatted()) records"), \(cipher)"
     }
 
     @ViewBuilder
@@ -182,18 +193,32 @@ struct EvidenceScreen: View {
                 ForEach(running) { captureRow($0) }
                 if !ended.isEmpty {
                     DisclosureGroup(isExpanded: $showEnded) {
-                        ForEach(ended.prefix(5)) { captureRow($0) }
+                        ForEach(ended.prefix(Self.endedShown)) { captureRow($0) }
                     } label: {
-                        Text(ended.count == 1 ? "1 ended capture" : "\(ended.count) ended captures")
+                        Text(endedLabel(ended.count))
                             .frame(minHeight: Spacing.minimumTarget)
                     }
                 }
             } header: {
                 Text(running.isEmpty ? "Captures" : running.count == 1 ? "1 capture running" : "\(running.count) captures running").accessibilityAddTraits(.isHeader)
             } footer: {
-                Text("A capture raises the log level on its nodes while it runs and stops by itself. It never restarts sing-box. Swipe a node to start one.")
+                Text("A capture raises the log level on its nodes while it runs and stops by itself. It never restarts sing-box. \(startHint)")
             }
         }
+    }
+
+    private static let endedShown = 5
+
+    private func endedLabel(_ count: Int) -> String {
+        if count == 1 { return "1 ended capture" }
+        return count > Self.endedShown ? "Last \(Self.endedShown) of \(count) ended captures" : "\(count) ended captures"
+    }
+
+    /// How to start a capture, or why this token cannot.
+    private var startHint: String {
+        let rows = store.coverage(nodes: nodes, now: Date()) ?? []
+        if rows.isEmpty { return "" }
+        return rows.contains { store.canAdmin(nodeID: $0.nodeID) } ? "Swipe a node to start one." : "Starting one needs \(EvidenceCapture.adminScope)."
     }
 
     private func captureRow(_ session: EvidenceTraceSession) -> some View {
@@ -205,8 +230,8 @@ struct EvidenceScreen: View {
         }
         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
             if active, blocked == nil {
+                // Stopping is reversible and keeps the records, so no destructive color.
                 Button("Stop", systemImage: "stop.circle") { stop(session) }
-                    .tint(Color.destructiveFill)
             }
         }
         .contextMenu {
@@ -214,7 +239,7 @@ struct EvidenceScreen: View {
             Button("Copy name", systemImage: "doc.on.doc") { EvidenceCopy.copy(session.name) }
             if active {
                 Divider()
-                EvidenceGatedButton(title: "Stop capture", systemImage: "stop.circle", blocked: blocked, role: .destructive) { stop(session) }
+                EvidenceGatedButton(title: "Stop capture", systemImage: "stop.circle", blocked: blocked) { stop(session) }
             }
         }
     }
@@ -258,9 +283,13 @@ struct EvidenceScreen: View {
             EvidenceNodeRow(row: row)
         }
         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+            // One button per preset, so the runner's T2 dialog is the only one.
             if blocked == nil {
-                Button("Capture", systemImage: "record.circle") { captureTarget = row }
-                    .tint(Color.accentFill)
+                ForEach(EvidenceCapturePreset.allCases.reversed(), id: \.self) { preset in
+                    Button(preset.title, systemImage: "record.circle") { start(row, preset: preset) }
+                        .tint(Color.accentFill)
+                        .accessibilityLabel("Capture \(preset.title)")
+                }
             }
         }
         .contextMenu {
@@ -268,7 +297,17 @@ struct EvidenceScreen: View {
             Button("Raw logs", systemImage: "doc.plaintext") { router.push(.evidence(.logs(nodeID: row.nodeID))) }
             Button("Open node", systemImage: "server.rack") { router.push(.fleet(.node(id: row.nodeID))) }
             Divider()
-            EvidenceGatedButton(title: "Start capture", systemImage: "record.circle", blocked: blocked) { captureTarget = row }
+            if blocked == nil {
+                Menu {
+                    ForEach(EvidenceCapturePreset.allCases, id: \.self) { preset in
+                        Button(preset.title) { start(row, preset: preset) }
+                    }
+                } label: {
+                    Label("Start capture", systemImage: "record.circle")
+                }
+            } else {
+                EvidenceGatedButton(title: "Start capture", systemImage: "record.circle", blocked: blocked) {}
+            }
         }
         .accessibilityActions {
             Button("Raw logs") { router.push(.evidence(.logs(nodeID: row.nodeID))) }
@@ -336,13 +375,8 @@ struct EvidenceScreen: View {
     }
 
     private func start(_ row: EvidenceCoverageRow, preset: EvidenceCapturePreset) {
-        captureTarget = nil
         let intent = EvidenceIntents.startCapture(nodeID: row.nodeID, nodeName: row.name, preset: preset, now: Date())
-        // The chooser must be gone before the runner's dialog can present.
-        Task {
-            try? await Task.sleep(for: .milliseconds(350))
-            await runner.run(intent)
-        }
+        Task { await runner.run(intent) }
     }
 
     private func stop(_ session: EvidenceTraceSession) {
