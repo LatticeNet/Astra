@@ -6,12 +6,14 @@ import SwiftUI
 /// this token cannot read.
 struct UpcomingScreen: View {
     static let kindKey = "fleet.upcoming.kind"
+    static let queryKey = "fleet.upcoming.query"
 
     @Environment(InventoryStore.self) private var store
     @Environment(ChangeLog.self) private var changes
     @Environment(Router.self) private var router
     @Environment(\.locale) private var locale
     @SceneStorage(UpcomingScreen.kindKey) private var kindRaw = UpcomingScreen.allKinds
+    @SceneStorage(UpcomingScreen.queryKey) private var query = ""
 
     static let allKinds = "All"
 
@@ -25,7 +27,10 @@ struct UpcomingScreen: View {
         }
         .navigationTitle("Upcoming")
         .navigationBarTitleDisplayMode(.inline)
-        .modifier(InventoryFilterSubtitle(text: kind.map { "Showing \($0.inventoryPlural) only" }))
+        .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .automatic), prompt: "Filter upcoming")
+        .textInputAutocapitalization(.never)
+        .autocorrectionDisabled()
+        .modifier(InventoryFilterSubtitle(text: subtitle))
         .refreshable { await store.refresh() }
         .polling(.standard, version: changes.version([.upcoming, .machines])) { await store.refresh(fromPoll: true) }
         .toolbar {
@@ -48,10 +53,20 @@ struct UpcomingScreen: View {
         }
     }
 
+    private var trimmedQuery: String { query.trimmingCharacters(in: .whitespaces) }
+
+    /// The kind filter and an active query, so a filtered list never reads as complete.
+    private var subtitle: String? {
+        let parts = [kind.map { "Showing \($0.inventoryPlural) only" }, trimmedQuery.isEmpty ? nil : "Filtered: \(trimmedQuery)"].compactMap { $0 }
+        return parts.isEmpty ? nil : parts.joined(separator: ", ")
+    }
+
     @ViewBuilder
     private func content(_ response: ExpiringResponse) -> some View {
         let today = InventoryUpcoming.today(response, now: Date())
-        let items = InventoryUpcoming.filter(response.items, kind: kind)
+        let compiled = trimmedQuery.isEmpty ? nil : InventoryUpcomingQuery.compile(trimmedQuery)
+        let kindItems = InventoryUpcoming.filter(response.items, kind: kind)
+        let items: [ExpiringItem] = if case .success(let query)? = compiled { LatticeQueryEngine.apply(query, to: kindItems, now: Date()) } else { kindItems }
         let groups = InventoryUpcoming.groupByWeek(items, today: today)
         let hidden = InventoryUpcoming.hiddenKinds(response)
         List {
@@ -60,11 +75,25 @@ struct UpcomingScreen: View {
                     FilterStateRow(text: "Showing \(kind?.inventoryPlural ?? "") only.") { kindRaw = Self.allKinds }
                 }
                 InventoryRefreshError(state: store.expiring, noun: "upcoming dates") { Task { await store.refreshUpcoming() } }
+                if case .failure(let error)? = compiled {
+                    Label {
+                        Text(InventoryUpcomingQuery.message(error)).foregroundStyle(Color.statusWarnText)
+                    } icon: {
+                        Image(systemName: "exclamationmark.magnifyingglass").foregroundStyle(Color.statusWarnFill)
+                    }
+                    .frame(minHeight: Spacing.minimumTarget)
+                }
                 summary(items)
             } footer: {
                 hiddenNote(hidden)
             }
-            if items.isEmpty {
+            if items.isEmpty, !trimmedQuery.isEmpty {
+                Section {
+                    ContentUnavailableView.search(text: trimmedQuery)
+                } footer: {
+                    footer(hidden: hidden, last: true)
+                }
+            } else if items.isEmpty {
                 Section {
                     ContentUnavailableView {
                         Label(kind == nil ? "Nothing runs out in the next \(InventoryUpcoming.withinDays) days" : "No \(kind?.inventoryPlural ?? "items") run out in the next \(InventoryUpcoming.withinDays) days",

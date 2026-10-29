@@ -1110,3 +1110,47 @@ public enum InventoryDeleteReport {
     /// The answer when the profile is already gone: nothing to delete.
     public static let gone = DryRunReport(lines: [DetailLine(label: "Profile", value: "Already deleted", group: group)], blocking: true, fingerprint: "gone")
 }
+
+// MARK: Upcoming query
+
+/// The Upcoming search (section 5.0): `kind:`, `state:`, `due_in:`, `cost:`
+/// and free text over the title, the subtitle and the kind.
+public enum InventoryUpcomingQuery {
+    public static var fields: [LatticeQueryField<ExpiringItem>] {
+        [
+            LatticeQueryField(
+                key: "kind", aliases: ["type"], type: .enumeration,
+                values: InventoryUpcomingKind.allCases.map(\.rawValue),
+                valueAliases: ["machine": "machine_renewal", "machines": "machine_renewal", "renewal": "machine_renewal",
+                               "vpn": "vpn_user", "user": "vpn_user", "cert": "tls_certificate", "certificate": "tls_certificate",
+                               "tls": "tls_certificate", "shares": "share"],
+                get: { .string($0.kind) }
+            ),
+            LatticeQueryField(key: "state", type: .enumeration, values: ["overdue", "due", "upcoming", "auto"],
+                              get: { .string(InventoryUpcoming.isOverdue($0) ? "overdue" : $0.state) }),
+            LatticeQueryField(key: "title", aliases: ["name"], type: .string, get: { .string($0.title) }),
+            LatticeQueryField(key: "subtitle", type: .string, get: { $0.subtitle.isEmpty ? .none : .string($0.subtitle) }),
+            LatticeQueryField(key: "due_in", aliases: ["days"], type: .duration, get: { .number(Double($0.days) * 86_400) }),
+            LatticeQueryField(key: "cost", aliases: ["price"], type: .number, get: { $0.costCents > 0 ? .number(Double($0.costCents) / 100) : .none }),
+            LatticeQueryField(key: "currency", type: .string, get: { $0.currency.isEmpty ? .none : .string($0.currency) }),
+        ]
+    }
+
+    public static func text(_ item: ExpiringItem) -> [String] {
+        [item.title, item.subtitle, InventoryUpcomingKind(rawValue: item.kind)?.title ?? item.kind].filter { !$0.isEmpty }
+    }
+
+    public static func compile(_ source: String) -> Result<LatticeCompiledQuery<ExpiringItem>, LatticeQueryError> {
+        LatticeQueryEngine.compile(source, fields: fields, text: { text($0) })
+    }
+
+    public static func message(_ error: LatticeQueryError) -> String {
+        let field = error.params["field"] ?? ""
+        let hint = error.params["suggestion"].flatMap { $0.isEmpty ? nil : " Did you mean \($0)?" } ?? ""
+        switch error.code {
+        case .unknownField: return "Upcoming items have no field \"\(field)\".\(hint)"
+        case .unknownSort: return "Upcoming items cannot sort by \"\(field)\".\(hint)"
+        default: return "This query cannot be read at character \(error.start + 1)."
+        }
+    }
+}

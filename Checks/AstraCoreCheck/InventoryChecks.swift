@@ -398,6 +398,19 @@ private func checkInventoryUpcoming() throws {
     try expectEqual(groups.map { $0.items.map(\.title) }, [["edge-tyo-1"], ["core-lon-1", "relay-fra-1"], ["alice", "family"], ["tls-api.example.org"]], "rows by due date")
     try expectEqual(groups[1].totals.map(\.currency), ["EUR", "USD"], "totals per currency, by code")
     try expect(!InventoryUpcoming.isOverdue(items[2]), "an auto-roll row is never overdue")
+    func search(_ query: String) throws -> [String] {
+        switch InventoryUpcomingQuery.compile(query) {
+        case .success(let compiled): return LatticeQueryEngine.apply(compiled, to: items, now: Date()).map(\.title)
+        case .failure(let error): throw CheckFailure.failed("upcoming query \(query) failed: \(error)")
+        }
+    }
+    try expectEqual(try search("kind:vpn"), ["alice"], "kind: takes a short alias")
+    try expectEqual(try search("state:overdue"), ["edge-tyo-1"], "state:overdue leaves out the auto-roll row")
+    try expectEqual(try search("due_in<0d"), ["edge-tyo-1", "core-lon-1"], "due_in counts days")
+    try expectEqual(try search("family"), ["family"], "free text over the title")
+    try expectEqual(try search("certificate"), ["tls-api.example.org"], "free text over the kind")
+    guard case .failure(let upcomingError) = InventoryUpcomingQuery.compile("knd:share") else { throw CheckFailure.failed("an unknown upcoming field must fail") }
+    try expect(InventoryUpcomingQuery.message(upcomingError).contains("kind"), "unknown field sentence suggests kind: \(InventoryUpcomingQuery.message(upcomingError))")
     try expectEqual(InventoryUpcoming.filter(items, kind: .machineRenewal).count, 3, "kind filter")
     try expectEqual(InventoryUpcoming.filter(items, kind: nil).count, 6, "All shows every row")
     try expectEqual(InventoryUpcoming.headerCounts(items).due, 5, "rows not overdue")
