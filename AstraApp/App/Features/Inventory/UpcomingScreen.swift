@@ -154,11 +154,14 @@ struct UpcomingScreen: View {
     @ViewBuilder
     private func hiddenNote(_ hidden: [String]) -> some View {
         if !hidden.isEmpty {
-            let names = hidden.map { InventoryUpcomingKind(rawValue: $0)?.inventoryPlural ?? $0.replacingOccurrences(of: "_", with: " ") }
-            let scopes = hidden.compactMap { InventoryUpcomingKind(rawValue: $0)?.readScope }
+            // Each kind names its own scope: no admin scope implies read (section 6.12).
+            let names = hidden.map { raw in
+                guard let kind = InventoryUpcomingKind(rawValue: raw) else { return raw.replacingOccurrences(of: "_", with: " ") }
+                return "\(kind.inventoryPlural) (needs \(kind.readScope))"
+            }
             let allowlist = store.isConfined ? " VPN users and shares also need a token without a node allowlist." : ""
             Label {
-                Text("Hidden from this token: \(names.joined(separator: ", "))." + (scopes.isEmpty ? "" : " Needs \(scopes.joined(separator: " or ")).") + allowlist)
+                Text("Hidden from this token: \(names.joined(separator: ", "))." + allowlist)
             } icon: {
                 Image(systemName: "eye.slash").foregroundStyle(Color.statusQuiet)
             }

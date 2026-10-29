@@ -91,7 +91,7 @@ final class InventoryStore {
     @discardableResult
     func refreshUpcoming() async -> Bool {
         if let missing = session.missing(Self.upcomingRequirement), !missing.isEmpty {
-            expiring = .denied(scope: "inventory:read, proxy:read or monitor:read")
+            expiring = .denied(scope: "any of inventory:read, proxy:read, proxy:admin or monitor:read")
             return true
         }
         guard let client = session.client else { return false }
