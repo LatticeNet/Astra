@@ -16,6 +16,8 @@ final class FleetNodeDetailModel {
     var capabilities: ResourceState<[NodeCapabilityEffective]> = .idle
     var beacon: ResourceState<FleetBeaconView> = .idle
     var queued: ResourceState<[LatticeTask]> = .idle
+    /// The node's machine profile; nil inside the value means none is recorded.
+    var machine: ResourceState<MachineProfile?> = .idle
     var history: ResourceState<FleetMetricsQuery> = .idle
     var historyRange: FleetMetricsRange = .oneDay
     var audit: ResourceState<[AuditEvent]> = .idle
@@ -23,10 +25,14 @@ final class FleetNodeDetailModel {
     var approvals: ResourceState<[Approval]> = .idle
     /// Agent versions across the fleet, for "n behind".
     var fleetVersions: [String?] = []
+    /// Hands each node list read to the Fleet store, so a node opened by a
+    /// link names its paths, groups and sub-screens without a second read.
+    @ObservationIgnored private let share: @MainActor ([FleetNodeRecord]) -> Void
 
-    init(nodeID: String, session: SessionStore) {
+    init(nodeID: String, session: SessionStore, share: @escaping @MainActor ([FleetNodeRecord]) -> Void = { _ in }) {
         self.nodeID = nodeID
         self.session = session
+        self.share = share
     }
 
     var node: LatticeNode? { record.value?.node }
@@ -62,6 +68,7 @@ final class FleetNodeDetailModel {
         do {
             let records = try await client.fleetFetchNodeRecords()
             fleetVersions = records.map(\.node.agentVersion)
+            share(records)
             if let found = records.first(where: { $0.id == id }) {
                 record = .loaded(found, at: Date())
             } else {
@@ -82,6 +89,11 @@ final class FleetNodeDetailModel {
         let id = nodeID
         let before = (paths.reloading, network.reloading, sshGuard.reloading, capabilities.reloading, beacon.reloading, queued.reloading)
         (paths, network, sshGuard, capabilities, beacon, queued) = before
+        let machineBefore = machine.reloading
+        machine = machineBefore
+        async let m = fetch(scopes: ["inventory:read"], surface: "Machines", previous: machineBefore) { client in
+            try await client.listMachines().first { $0.nodeID == id }
+        }
         async let p = fetch(scopes: ["monitor:read"], surface: "Paths", previous: before.0) { try await $0.fetchPaths(window: .oneHour) }
         async let n = fetch(scopes: ["node:read"], surface: "Effective network", previous: before.1) { try await $0.fleetNodeNetwork(nodeID: id, rules: false) }
         async let g = fetch(scopes: ["sshguard:read", "network:plan"], surface: "SSH Guard", previous: before.2) { try await $0.fetchSSHGuardStatus(nodeID: id) }
@@ -97,6 +109,7 @@ final class FleetNodeDetailModel {
         capabilities = await c
         beacon = await b
         queued = await q
+        machine = await m
         await h
     }
 
@@ -143,6 +156,7 @@ struct NodeDetailScreen: View {
     var tab: NodeDetailTab = .overview
 
     @Environment(SessionStore.self) private var session
+    @Environment(FleetStore.self) private var store
     @Environment(ChangeLog.self) private var changes
     @Environment(Router.self) private var router
     @Environment(\.verticalSizeClass) private var verticalSizeClass
@@ -164,7 +178,7 @@ struct NodeDetailScreen: View {
         .task {
             if model == nil {
                 selected = tab
-                model = FleetNodeDetailModel(nodeID: id, session: session)
+                model = FleetNodeDetailModel(nodeID: id, session: session) { [store] records in store.adopt(records) }
             }
         }
     }
@@ -274,27 +288,30 @@ struct FleetNodeHeader: View {
         let style = StatusStyle.node(honesty)
         let behind = FleetAgentVersion.newer(than: node.agentVersion, in: fleetVersions)
         Section {
-            FleetHonestyRow(
-                style: style,
-                headline: headline(node),
-                detail: detail(node),
-                reason: honesty == .degraded || honesty == .offline ? (node.statusReason.isEmpty ? nil : node.statusReason) : nil,
-                behind: behind
-            )
+            // Ages keep moving while polls fail, so a stale header never reads "seen 14s ago".
+            TimelineView(.periodic(from: .now, by: FleetAge.tick)) { context in
+                FleetHonestyRow(
+                    style: style,
+                    headline: headline(node, now: context.date),
+                    detail: detail(node, now: context.date),
+                    reason: honesty == .degraded || honesty == .offline ? (node.statusReason.isEmpty ? nil : node.statusReason) : nil,
+                    behind: behind
+                )
+            }
             if let ip = node.publicIP, !ip.isEmpty { DetailRow(label: "Public IP", value: ip, monospaced: true) }
         }
     }
 
     /// "seen 15s ago at 02:40, agent 0.3.10, Tokyo, JP, Northwind Cloud", or
     /// "seen 2d ago, Oct 27 at 03:52, ..." once the clock alone is ambiguous.
-    private func detail(_ node: LatticeNode) -> String {
+    private func detail(_ node: LatticeNode, now: Date) -> String {
         var parts: [String] = []
         if let seen = node.lastSeen {
             // The date form already reads "Oct 27 at 03:52", so it follows a comma, not "at".
-            let when = Date().timeIntervalSince(seen) > 20 * 3_600
+            let when = now.timeIntervalSince(seen) > 20 * 3_600
                 ? ", " + TimeDisplay.dateTime(seen, mode: mode, locale: locale)
                 : " at " + TimeDisplay.clock(seen, mode: mode, locale: locale)
-            parts.append("seen \(FleetAge.short(seen) ?? "") ago\(when)")
+            parts.append("seen \(FleetAge.short(seen, now: now) ?? "") ago\(when)")
         }
         if let agent = node.agentVersion, !agent.isEmpty { parts.append("agent \(agent)") }
         let place = [node.geo?.city, node.geo?.country, record.facts.provider.isEmpty ? nil : record.facts.provider]
@@ -303,8 +320,8 @@ struct FleetNodeHeader: View {
         return parts.joined(separator: ", ")
     }
 
-    private func headline(_ node: LatticeNode) -> String {
-        let since = node.statusSince.flatMap { FleetAge.short($0) }
+    private func headline(_ node: LatticeNode, now: Date) -> String {
+        let since = node.statusSince.flatMap { FleetAge.short($0, now: now) }
         switch node.honesty {
         case .online: return since.map { "Online for \($0)" } ?? "Online"
         case .degraded: return since.map { "Degraded for \($0)" } ?? "Degraded"

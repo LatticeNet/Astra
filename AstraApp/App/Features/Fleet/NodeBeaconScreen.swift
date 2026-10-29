@@ -35,6 +35,8 @@ struct NodeBeaconScreen: View {
         }
         .navigationTitle(node.name)
         .navigationSubtitle("Beacon")
+        // Opened by a link, the nodes list may not be loaded yet; the title, path and group names need it.
+        .task { if store.nodes.value == nil { _ = await store.refresh() } }
         .navigationBarTitleDisplayMode(.inline)
         .refreshable { await load() }
         .polling(.standard, version: changes.version([.paths, .approvals, .nodes])) { await load() }
@@ -85,7 +87,9 @@ struct NodeBeaconScreen: View {
                     DetailRow(label: "Responder", value: agent.responder ? "Supported" : "Not supported by this agent", copyable: false)
                     if !agent.state.isEmpty { DetailRow(label: "Socket", value: agent.state.replacingOccurrences(of: "_", with: " "), copyable: false) }
                     if let auth = beacon.lastAuthAt ?? agent.lastAuthAt {
-                        DetailRow(label: "Last seen by a source", value: "\(FleetAge.short(auth) ?? "") ago", copyable: false)
+                        TimelineView(.periodic(from: .now, by: FleetAge.tick)) { context in
+                            DetailRow(label: "Last seen by a source", value: "\(FleetAge.short(auth, now: context.date) ?? "") ago", copyable: false)
+                        }
                     }
                     if !agent.error.isEmpty {
                         Text(agent.error).textRole(.code).foregroundStyle(Color.statusFailText)

@@ -592,6 +592,11 @@ private func checkFleetLogic() throws {
     let derived = try capability(#"{"capability":"vpn","enforced":true,"allowed":true,"source":"derived","state":""}"#)
     try expectEqual(FleetCapabilityState.word(derived), "In scope", "derived allowance reads in scope")
 
+    let renews = Date().addingTimeInterval(12 * 86_400 + 3_600)
+    let machine = MachineProfile(id: "m1", nodeID: "n1", vendor: "Northwind Cloud", priceCents: 900, currency: "EUR", renewalCycleRaw: "monthly", nextRenewal: renews)
+    let line = FleetMachineLine.detail(machine)
+    try expect(line.hasPrefix("Northwind Cloud, ") && line.contains("a month") && line.hasSuffix("renews in 12 days"), "machine row line: \(line)")
+
     try expectEqual(FleetAgentVersion.newer(than: "0.3.8", in: ["0.3.10", "0.3.9", "0.3.9", "0.3.8", nil]), 2, "two newer versions")
     try expectEqual(FleetAgentVersion.newer(than: "0.3.10", in: ["0.3.10", "0.3.9"]), 0, "newest is not behind")
     try expectEqual(FleetAgentVersion.newest(in: ["0.3.9", "0.3.10", "0.3.7"]), "0.3.10", "semantic newest, not lexical")

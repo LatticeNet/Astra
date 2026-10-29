@@ -58,6 +58,8 @@ struct NodeCapabilitiesScreen: View {
         }
         .navigationTitle(node.name)
         .navigationSubtitle("Capabilities")
+        // Opened by a link, the nodes list may not be loaded yet; the title, path and group names need it.
+        .task { if store.nodes.value == nil { _ = await store.refresh() } }
         .navigationBarTitleDisplayMode(.inline)
         .refreshable { await load() }
         .polling(.standard, version: changes.version([.gates, .nodes])) { await load() }

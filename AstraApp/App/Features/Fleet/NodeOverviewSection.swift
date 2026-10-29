@@ -95,9 +95,10 @@ struct NodeOverviewSection: View {
         case .idle:
             EmptyView()
         default:
-            if let list = model.incidents.value, !list.isEmpty {
+            let list = model.incidents.value ?? []
+            if !list.isEmpty || FleetLoad.hasProblem(model.incidents) {
                 Section("Open incidents") {
-                    FleetRefreshError(state: model.incidents, noun: "incidents") { Task { await model.refreshCore() } }
+                    FleetSectionError(state: model.incidents, noun: "incidents") { Task { await model.refreshCore() } }
                     ForEach(list) { incident in
                         NavigationLink(value: AppRoute.monitoring(.incident(id: incident.id))) {
                             IncidentRow(incident: incident, canAdmin: store.can("monitor:admin")) { snoozing = $0 }
@@ -155,7 +156,9 @@ struct NodeOverviewSection: View {
                 .padding(.vertical, Spacing.xs)
             case .offline:
                 Label {
-                    Text("Last reported \(FleetAge.short(node.lastSeen) ?? "a while") ago. Live numbers are hidden until it reports again.")
+                    TimelineView(.periodic(from: .now, by: FleetAge.tick)) { context in
+                        Text("Last reported \(FleetAge.short(node.lastSeen, now: context.date) ?? "a while") ago. Live numbers are hidden until it reports again.")
+                    }
                 } icon: {
                     Image(systemName: "xmark.octagon.fill").foregroundStyle(Color.statusFailFill)
                 }
@@ -191,7 +194,9 @@ struct NodeOverviewSection: View {
             default:
                 if let query = model.history.value {
                     FleetMetricChart(metric: .cpu, series: query.series(named: FleetMetric.cpu.rawValue),
-                                     step: TimeInterval(max(query.stepSeconds, 1)), range: model.historyRange)
+                                     step: TimeInterval(max(query.stepSeconds, 1)), range: model.historyRange,
+                                     reporting: model.record.value.map { FleetNodeReporting.isReporting($0.node.honesty) } ?? true,
+                                     lastSeen: model.record.value?.node.lastSeen)
                 } else if case .failed(let error, nil, _) = model.history {
                     ErrorRow(message: "Could not load history: \(error.localizedDescription)") { Task { await model.refreshHistory() } }
                 } else {
@@ -263,34 +268,61 @@ struct NodeOverviewSection: View {
     private func related(_ record: FleetNodeRecord) -> some View {
         Section {
             NavigationLink(value: AppRoute.fleet(.nodeNetwork(id: record.id))) {
-                FleetRelatedRow(title: "Effective network", symbol: "arrow.left.arrow.right", detail: networkDetail)
+                FleetRelatedRow(title: "Effective network", symbol: "arrow.left.arrow.right", detail: networkDetail, style: failure(model.network))
             }
             switch model.sshGuard {
             case .denied(let scope):
                 FleetRelatedRow(title: "SSH Guard", symbol: "lock.shield", detail: "Needs \(scope)")
             default:
                 NavigationLink(value: AppRoute.sshGuard(.node(id: record.id))) {
-                    FleetRelatedRow(title: "SSH Guard", symbol: "lock.shield", detail: sshGuardDetail, style: sshGuardStyle)
+                    FleetRelatedRow(title: "SSH Guard", symbol: "lock.shield", detail: sshGuardDetail, style: failure(model.sshGuard) ?? sshGuardStyle)
                 }
             }
             NavigationLink(value: AppRoute.fleet(.nodeCapabilities(id: record.id))) {
-                FleetRelatedRow(title: "Capabilities", symbol: "checkmark.shield", detail: capabilitiesDetail)
+                FleetRelatedRow(title: "Capabilities", symbol: "checkmark.shield", detail: capabilitiesDetail, style: failure(model.capabilities))
             }
-            Button {
-                router.select(tab: .fleet, scope: FleetScope.machines.rawValue, query: record.node.displayName)
-            } label: {
-                HStack {
-                    FleetRelatedRow(title: "Machine", symbol: "shippingbox", detail: "Vendor, cost and renewal")
-                    Image(systemName: AppTab.fleet.symbol).foregroundStyle(.secondary).accessibilityHidden(true)
-                    Text("Opens in Machines").font(.footnote).foregroundStyle(.secondary)
-                }
-            }
-            .tint(.primary)
+            machine
             NavigationLink(value: AppRoute.fleet(.nodeBeacon(id: record.id))) {
-                FleetRelatedRow(title: "Beacon", symbol: "dot.radiowaves.left.and.right", detail: beaconDetail)
+                FleetRelatedRow(title: "Beacon", symbol: "dot.radiowaves.left.and.right", detail: beaconDetail, style: beaconFailure)
             }
         } header: {
             Text("Related")
+        }
+    }
+
+    /// The row style for a read that failed with nothing earlier: never "Loading" forever.
+    private func failure<T>(_ state: ResourceState<T>) -> StatusStyle? {
+        FleetLoad.failedEmpty(state) ? StatusStyle(word: "could not load", symbol: "exclamationmark.triangle.fill", tone: .fail) : nil
+    }
+
+    private func pending<T>(_ state: ResourceState<T>) -> String {
+        FleetLoad.failedEmpty(state) ? "Could not load" : "Loading"
+    }
+
+    private var beaconFailure: StatusStyle? {
+        if case .failed(.notFound, _, _) = model.beacon { return nil }
+        return failure(model.beacon)
+    }
+
+    @ViewBuilder
+    private var machine: some View {
+        switch model.machine {
+        case .denied(let scope):
+            FleetRelatedRow(title: "Machine", symbol: "shippingbox", detail: "Needs \(scope)")
+        case .failed(.notFound, nil, _):
+            FleetRelatedRow(title: "Machine", symbol: "shippingbox", detail: "No machine inventory on this server")
+        default:
+            if let found = model.machine.value {
+                if let profile = found {
+                    NavigationLink(value: AppRoute.inventory(.machine(id: profile.id))) {
+                        FleetRelatedRow(title: "Machine", symbol: "shippingbox", detail: FleetMachineLine.detail(profile))
+                    }
+                } else {
+                    FleetRelatedRow(title: "Machine", symbol: "shippingbox", detail: "No machine profile")
+                }
+            } else {
+                FleetRelatedRow(title: "Machine", symbol: "shippingbox", detail: pending(model.machine), style: failure(model.machine))
+            }
         }
     }
 
@@ -298,7 +330,8 @@ struct NodeOverviewSection: View {
         switch model.network {
         case .denied(let scope): return "Needs \(scope)"
         default:
-            guard let view = model.network.value, let outbound = view.outbound else { return "Loading" }
+            guard let view = model.network.value else { return pending(model.network) }
+            guard let outbound = view.outbound else { return "Outbound not reported" }
             if outbound.section.isRefused { return "Needs \(outbound.section.scope)" }
             let rules = outbound.ruleCount == 1 ? "1 rule" : "\(outbound.ruleCount) rules"
             return "\(outbound.effectiveTitle), \(rules)"
@@ -306,7 +339,7 @@ struct NodeOverviewSection: View {
     }
 
     private var sshGuardDetail: String {
-        guard let status = model.sshGuard.value else { return "Loading" }
+        guard let status = model.sshGuard.value else { return pending(model.sshGuard) }
         let posture = StatusStyle.posture(SSHGuardPostureState(rawValue: status.posture.state) ?? .unknown).word
         let coverage = StatusStyle.coverage(SSHGuardBoard.coverage(for: status, scope: status.enrolled ? .enrolled : .undecided, now: Date())).word
         return "\(posture), \(coverage)"
@@ -321,7 +354,7 @@ struct NodeOverviewSection: View {
         switch model.capabilities {
         case .denied(let scope): return "Needs \(scope)"
         default:
-            guard let caps = model.capabilities.value else { return "Loading" }
+            guard let caps = model.capabilities.value else { return pending(model.capabilities) }
             let admitted = caps.filter { $0.enforced && $0.allowed }.count
             let excluded = caps.filter { $0.state == "excluded" }.count
             return "\(admitted) admitted, \(excluded) excluded"
@@ -333,7 +366,7 @@ struct NodeOverviewSection: View {
         case .denied(let scope): return "Needs \(scope)"
         case .failed(.notFound, _, _): return "No beacon on this node"
         default:
-            guard let beacon = model.beacon.value else { return "Loading" }
+            guard let beacon = model.beacon.value else { return pending(model.beacon) }
             return beacon.isEnabled ? "\(beacon.stateWord.prefix(1).uppercased() + beacon.stateWord.dropFirst()), epoch \(beacon.epoch)" : "Off"
         }
     }
@@ -350,6 +383,10 @@ struct NodeOverviewSection: View {
             }
         } else if case .denied(let scope) = model.queued {
             Section("Queued tasks") { ScopeDeniedRow(scope: scope) }
+        } else if FleetLoad.hasProblem(model.queued) {
+            Section("Queued tasks") {
+                FleetSectionError(state: model.queued, noun: "queued tasks") { Task { await model.refreshOverview() } }
+            }
         }
     }
 }
@@ -373,9 +410,9 @@ struct FleetRelatedRow: View {
             }
             VStack(alignment: .leading, spacing: Spacing.xxs) {
                 Text(title)
+                // The role sets the color, so a problem uses the reason role rather than a later foregroundStyle.
                 Text(detail)
-                    .textRole(.rowDetail)
-                    .foregroundStyle(style?.tone.isProblem == true ? style!.tone.word : .secondary)
+                    .textRole(style.map { $0.tone.isProblem ? .rowReason($0.tone.word) : .rowDetail } ?? .rowDetail)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }

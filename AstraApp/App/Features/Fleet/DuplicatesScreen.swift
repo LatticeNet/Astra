@@ -19,12 +19,14 @@ struct DuplicatesScreen: View {
                         ForEach(group.nodeIDs, id: \.self) { id in
                             if let record = byID[id] {
                                 NavigationLink(value: AppRoute.fleet(.node(id: id))) {
-                                    StatusRow(
-                                        style: StatusStyle.node(record.node.honesty),
-                                        title: record.node.displayName,
-                                        detail: detail(record.node),
-                                        titleIsIdentifier: false
-                                    )
+                                    TimelineView(.periodic(from: .now, by: FleetAge.tick)) { context in
+                                        StatusRow(
+                                            style: StatusStyle.node(record.node.honesty),
+                                            title: record.node.displayName,
+                                            detail: detail(record.node, now: context.date),
+                                            titleIsIdentifier: false
+                                        )
+                                    }
                                 }
                                 .fleetNodeMenu(record)
                             } else {
@@ -51,9 +53,9 @@ struct DuplicatesScreen: View {
         .polling(.standard, version: changes.version(.nodes)) { await store.refresh(fromPoll: true) }
     }
 
-    private func detail(_ node: LatticeNode) -> String {
+    private func detail(_ node: LatticeNode, now: Date) -> String {
         var parts: [String] = []
-        if let seen = node.lastSeen { parts.append("seen \(FleetAge.short(seen) ?? "") ago") } else { parts.append("never seen") }
+        if let seen = node.lastSeen { parts.append("seen \(FleetAge.short(seen, now: now) ?? "") ago") } else { parts.append("never seen") }
         let addresses = [node.publicIP, node.internalIP.isEmpty ? nil : node.internalIP].compactMap { $0 }.filter { !$0.isEmpty }
         if !addresses.isEmpty { parts.append(addresses.joined(separator: ", ")) }
         return parts.joined(separator: ", ")

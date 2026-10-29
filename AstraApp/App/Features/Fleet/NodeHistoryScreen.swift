@@ -9,6 +9,9 @@ struct FleetMetricChart: View {
     let series: FleetMetricSeries?
     let step: TimeInterval
     let range: FleetMetricsRange
+    /// False for an offline or disabled node: its last sample is not "now" (4.2).
+    var reporting = true
+    var lastSeen: Date?
 
     @ScaledMetric(relativeTo: .body) private var chartHeight = ChartStyle.height
     @Environment(\.dynamicTypeSize) private var typeSize
@@ -26,7 +29,7 @@ struct FleetMetricChart: View {
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             if points.isEmpty {
-                Text("No samples in this range")
+                Text(!reporting && lastSeen != nil ? "No data since \(when(lastSeen!)): node not reporting" : "No samples in this range")
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, minHeight: Spacing.minimumTarget, alignment: .leading)
             } else {
@@ -48,7 +51,12 @@ struct FleetMetricChart: View {
         guard let last = points.last else { return "\(metric.title): no samples, \(rangeWords)" }
         let average = points.map(\.value).reduce(0, +) / Double(points.count)
         let peak = points.map(\.value).max() ?? last.value
-        return "\(metric.title) \(format(last.value)) now, average \(format(average)), peak \(format(peak)), \(rangeWords)"
+        let latest = reporting ? "\(format(last.value)) now" : "last \(format(last.value)) at \(when(last.date))"
+        return "\(metric.title) \(latest), average \(format(average)), peak \(format(peak)), \(rangeWords)"
+    }
+
+    private func when(_ date: Date) -> String {
+        Calendar.current.isDateInToday(date) ? TimeDisplay.clock(date, mode: mode, locale: locale) : TimeDisplay.dateTime(date, mode: mode, locale: locale)
     }
 
     private var rangeWords: String {
@@ -168,6 +176,12 @@ struct NodeHistoryScreen: View {
 
     private var range: FleetMetricsRange { FleetMetricsRange(rawValue: rangeRaw) ?? .oneDay }
 
+    /// Unknown until the nodes list loads; then online and degraded nodes report.
+    private var reporting: Bool {
+        guard let honesty = store.record(id: nodeID)?.node.honesty else { return true }
+        return FleetNodeReporting.isReporting(honesty)
+    }
+
     var body: some View {
         FleetListState(state: metrics, noun: "history", retry: { Task { await load() } }) { query in
             List {
@@ -177,10 +191,12 @@ struct NodeHistoryScreen: View {
                     Text("Status")
                 }
                 FleetRefreshError(state: metrics, noun: "history") { Task { await load() } }
+                FleetRefreshError(state: status, noun: "status history") { Task { await load() } }
                 ForEach(FleetMetric.allCases, id: \.self) { metric in
                     Section(metric.title) {
                         FleetMetricChart(metric: metric, series: query.series(named: metric.rawValue),
-                                         step: TimeInterval(max(query.stepSeconds, 1)), range: range)
+                                         step: TimeInterval(max(query.stepSeconds, 1)), range: range,
+                                         reporting: reporting, lastSeen: store.record(id: nodeID)?.node.lastSeen)
                     }
                 }
                 Section {
@@ -229,9 +245,15 @@ struct NodeHistoryScreen: View {
                 .padding(.vertical, Spacing.xs)
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel(statusSummary(history))
+            } else {
+                Text("No status history for this node in this range")
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, minHeight: Spacing.minimumTarget, alignment: .leading)
             }
         case .denied(let scope):
             ScopeDeniedRow(scope: scope)
+        case .failed, .companionBehind:
+            FleetSectionError(state: status, noun: "status history") { Task { await load() } }
         default:
             LoadingRows(label: "Loading status history", count: 1)
         }

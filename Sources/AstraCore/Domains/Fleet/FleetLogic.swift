@@ -365,6 +365,36 @@ public enum FleetCapabilityState {
     public static func admits(_ capability: NodeCapabilityEffective) -> Bool { capability.allowed }
 }
 
+/// Whether a node's latest numbers are current. Offline, disabled and never
+/// reported nodes hide live metrics (section 4.2).
+public enum FleetNodeReporting {
+    public static func isReporting(_ honesty: NodeHonesty) -> Bool {
+        honesty == .online || honesty == .degraded
+    }
+}
+
+/// The NodeDetail Machine row (M2-03): vendor, monthly cost, renewal countdown.
+public enum FleetMachineLine {
+    public static func detail(_ profile: MachineProfile, now: Date = Date()) -> String {
+        var parts: [String] = []
+        let vendor = profile.vendor.trimmingCharacters(in: .whitespaces)
+        parts.append(vendor.isEmpty ? "No vendor" : vendor)
+        if let monthly = profile.monthlyCost {
+            let code = profile.currency.isEmpty ? "USD" : profile.currency.uppercased()
+            parts.append("\(monthly.formatted(.currency(code: code))) a month")
+        }
+        if let days = profile.daysUntilRenewal(now: now) {
+            switch days {
+            case ..<0: parts.append(days == -1 ? "renewal 1 day overdue" : "renewal \(-days) days overdue")
+            case 0: parts.append("renews today")
+            case 1: parts.append("renews in 1 day")
+            default: parts.append("renews in \(days) days")
+            }
+        }
+        return parts.joined(separator: ", ")
+    }
+}
+
 /// One sentence for a query the engine refused, shown under the search
 /// field so a typo never reads as an empty fleet.
 public enum FleetQueryMessage {

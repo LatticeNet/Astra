@@ -56,11 +56,12 @@ struct NodeActivitySection: View {
                 denied
                 let items = timeline
                 Section {
-                    FleetRefreshError(state: model.audit, noun: "audit events") { Task { await model.refreshActivity() } }
-                    FleetRefreshError(state: model.tasks, noun: "tasks") { Task { await model.refreshActivity() } }
-                    if loading {
+                    FleetSectionError(state: model.audit, noun: "audit events") { Task { await model.refreshActivity() } }
+                    FleetSectionError(state: model.tasks, noun: "tasks") { Task { await model.refreshActivity() } }
+                    FleetSectionError(state: model.approvals, noun: "approvals") { Task { await model.refreshActivity() } }
+                    if items.isEmpty, anyWaiting {
                         LoadingRows(label: "Loading activity", count: 3)
-                    } else if items.isEmpty {
+                    } else if items.isEmpty, !anyFailedEmpty {
                         ContentUnavailableView(text.isEmpty ? "No activity for this node" : "No matches", systemImage: "clock.arrow.circlepath")
                     }
                     ForEach(items) { item in row(item) }
@@ -79,19 +80,19 @@ struct NodeActivitySection: View {
         }
     }
 
-    private var loading: Bool {
-        model.audit.value == nil && model.tasks.value == nil && model.approvals.value == nil
-            && !isDenied(model.audit) && !isDenied(model.tasks) && !isDenied(model.approvals)
+    /// Some source has not answered yet, so an empty timeline is not yet "no activity".
+    private var anyWaiting: Bool {
+        FleetLoad.isWaiting(model.audit) || FleetLoad.isWaiting(model.tasks) || FleetLoad.isWaiting(model.approvals)
+    }
+
+    /// A source that failed with nothing to show: "No activity" would then be a guess.
+    private var anyFailedEmpty: Bool {
+        FleetLoad.failedEmpty(model.audit) || FleetLoad.failedEmpty(model.tasks) || FleetLoad.failedEmpty(model.approvals)
     }
 
     private func deniedScope<T>(_ state: ResourceState<T>) -> String? {
         if case .denied(let scope) = state { return scope }
         return nil
-    }
-
-    private func isDenied<T>(_ state: ResourceState<T>) -> Bool {
-        if case .denied = state { return true }
-        return false
     }
 
     @ViewBuilder

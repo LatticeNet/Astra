@@ -73,6 +73,15 @@ final class FleetStore {
         }
     }
 
+    /// Takes a node list another Fleet read already fetched, when this store
+    /// has none yet, and loads the group names it needs to label them.
+    func adopt(_ records: [FleetNodeRecord]) {
+        guard nodes.value == nil, !nodes.isLoading else { return }
+        nodes = .loaded(records, at: Date())
+        guard groups == nil, let client = session.client else { return }
+        Task { groups = await groupsIfReadable(client) ?? groups }
+    }
+
     private func groupsIfReadable(_ client: LatticeClient) async -> FleetGroupsResponse? {
         guard can("group:read") else { return nil }
         return try? await client.fleetGroups()

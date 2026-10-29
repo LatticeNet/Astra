@@ -192,8 +192,57 @@ struct FleetRefreshError<Value: Sendable>: View {
     }
 }
 
+/// The error row for a secondary section: "Could not load" when the first
+/// read failed, "Could not refresh" when earlier data stays. A section that
+/// failed is never left on placeholders or blank, which would read as healthy.
+struct FleetSectionError<Value: Sendable>: View {
+    let state: ResourceState<Value>
+    let noun: String
+    let retry: () -> Void
+
+    var body: some View {
+        if case .failed(let error, let last, _) = state {
+            ErrorRow(message: "Could not \(last == nil ? "load" : "refresh") \(noun): \(error.localizedDescription)", retry: retry)
+        } else if case .companionBehind(let surface) = state {
+            CompanionBehindRow(surface: surface)
+        }
+    }
+}
+
+/// How a secondary read stands, for sections and one-line summaries.
+enum FleetLoad {
+    /// Still waiting for a first answer: idle, or loading with nothing earlier.
+    static func isWaiting<T>(_ state: ResourceState<T>) -> Bool {
+        switch state {
+        case .idle: true
+        case .loading(let previous, _): previous == nil
+        default: false
+        }
+    }
+
+    /// True when the last read failed or the server is behind, with or without earlier data.
+    static func hasProblem<T>(_ state: ResourceState<T>) -> Bool {
+        switch state {
+        case .failed, .companionBehind: true
+        default: false
+        }
+    }
+
+    /// True when the read answered with an error or an unreadable body and nothing earlier stays.
+    static func failedEmpty<T>(_ state: ResourceState<T>) -> Bool {
+        switch state {
+        case .failed(_, let last, _): last == nil
+        case .companionBehind: true
+        default: false
+        }
+    }
+}
+
 /// The relative age in the short form rows use ("12 s", "3 h").
 enum FleetAge {
+    /// How often a visible age re-renders without new data.
+    static let tick: TimeInterval = 5
+
     static func short(_ date: Date?, now: Date = Date()) -> String? {
         date.map { RelativeDateFormatter.shortDuration(now.timeIntervalSince($0)) }
     }
