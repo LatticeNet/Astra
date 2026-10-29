@@ -270,6 +270,12 @@ public enum DemoWorld {
         return node
     }
 
+    /// The node allowlist of the Confined token scenario: the 12 nodes in
+    /// Asia and Oceania.
+    public static var confinedNodeIDs: [String] {
+        nodes.filter { ["tyo", "sin", "hkg", "syd"].contains($0.region) }.map(\.id)
+    }
+
     /// The server's reason for a reporting node (deriveNodeStatus, node_status.go).
     public static func onlineReason(lastSeen: String) -> String {
         "Reporting; last report at {{now\(lastSeen)}}."

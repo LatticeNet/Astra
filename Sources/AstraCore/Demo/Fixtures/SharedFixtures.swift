@@ -34,13 +34,14 @@ public enum SharedFixtures {
     /// `/api/me` for a demo identity: the Operator preset on the token
     /// (Triage in Limited token) and `*` on the session.
     static func me(identity: DemoIdentity, scenario: DemoScenario) -> DemoJSON {
-        let scopes = DemoTransport.scopes(for: identity, scenario: scenario).scopes
+        let scopeSet = DemoTransport.scopes(for: identity, scenario: scenario)
+        let scopes = scopeSet.scopes
         return .object([
             "actor_id": .string(DemoWorld.actorID),
             "username": .string(DemoWorld.username),
             "token_id": identity == .pat ? "tok_demo0001phone" : "",
             "scopes": .strings(scopes),
-            "server_allowlist": [],
+            "server_allowlist": .strings(scopeSet.serverAllowlist),
             "csrf_token": identity == .session ? "csrf_demo_notasecret" : "",
             "totp_enabled": true,
             "mfa_required": false,

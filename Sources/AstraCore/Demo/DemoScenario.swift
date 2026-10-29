@@ -13,6 +13,8 @@ public enum DemoScenario: Sendable, Hashable {
     case offline
     /// `/api/me` answers the Triage preset.
     case limitedToken
+    /// The Operator preset confined by a node allowlist (`DemoWorld.confinedNodeIDs`).
+    case confinedToken
     /// No reveal session client.
     case noSession
     /// 403 `forbidden` for a path prefix after the first load.
@@ -24,7 +26,7 @@ public enum DemoScenario: Sendable, Hashable {
 
     public static let allCases: [DemoScenario] = [
         .normal, .quiet, .failing(prefix: nil), .stale, .offline, .limitedToken,
-        .noSession, .forbidden(prefix: nil), .empty, .companionBehind(prefix: nil),
+        .confinedToken, .noSession, .forbidden(prefix: nil), .empty, .companionBehind(prefix: nil),
     ]
 
     /// Parses a launch argument value: "failing", "failing:/api/monitors".
@@ -38,6 +40,7 @@ public enum DemoScenario: Sendable, Hashable {
         case "stale": self = .stale
         case "offline": self = .offline
         case "limited", "limitedtoken", "limited-token": self = .limitedToken
+        case "confined", "confinedtoken", "confined-token": self = .confinedToken
         case "nosession", "no-session": self = .noSession
         case "forbidden": self = .forbidden(prefix: prefix)
         case "empty": self = .empty
@@ -55,6 +58,7 @@ public enum DemoScenario: Sendable, Hashable {
         case .stale: "stale"
         case .offline: "offline"
         case .limitedToken: "limited-token"
+        case .confinedToken: "confined-token"
         case .noSession: "no-session"
         case .forbidden(let prefix): prefix.map { "forbidden:\($0)" } ?? "forbidden"
         case .empty: "empty"
@@ -71,6 +75,7 @@ public enum DemoScenario: Sendable, Hashable {
         case .stale: "Stale"
         case .offline: "Offline"
         case .limitedToken: "Limited token"
+        case .confinedToken: "Confined token"
         case .noSession: "No session"
         case .forbidden: "Forbidden"
         case .empty: "Empty"

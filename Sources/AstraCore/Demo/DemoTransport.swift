@@ -31,7 +31,12 @@ public struct DemoTransport: HTTPTransport {
     public static func scopes(for identity: DemoIdentity, scenario: DemoScenario) -> ScopeSet {
         switch identity {
         case .session: ScopeSet(scopes: ["*"])
-        case .pat: ScopeSet(scopes: scenario == .limitedToken ? TokenPresets.triage.scopes : TokenPresets.operator.scopes)
+        case .pat:
+            switch scenario {
+            case .limitedToken: ScopeSet(scopes: TokenPresets.triage.scopes)
+            case .confinedToken: ScopeSet(scopes: TokenPresets.operator.scopes, serverAllowlist: DemoWorld.confinedNodeIDs)
+            default: ScopeSet(scopes: TokenPresets.operator.scopes)
+            }
         }
     }
 

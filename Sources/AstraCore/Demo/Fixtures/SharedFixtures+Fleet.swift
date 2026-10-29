@@ -18,7 +18,9 @@ extension SharedFixtures {
     static func currentNodes(request: DemoRequest, state: DemoState) async -> [DemoWorldNode] {
         let disabled = await state.members(of: "node.disabled")
         let enabled = await state.members(of: "node.enabled")
-        return DemoWorld.nodes.map { node in
+        // The server lists only the nodes a confined credential may see.
+        let scopes = DemoTransport.scopes(for: request.identity, scenario: request.scenario)
+        return DemoWorld.nodes.filter { scopes.allows("node:read", nodeID: $0.id) }.map { node in
             var node = node
             if request.scenario == .quiet {
                 node.status = "online"

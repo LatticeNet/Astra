@@ -205,6 +205,12 @@ private func checkScenarios() async throws {
     try expectEqual(refused.status, 400, "unknown incident state is a 400")
     try expect(refused.body.contains(#"unknown state \"active\""#), "with the server's message")
 
+    let confined = demoClient(scenario: .confinedToken)
+    let confinedIdentity = try await confined.fetchIdentity()
+    try expectEqual(confinedIdentity.serverAllowlist.count, 12, "Confined token reports its node allowlist")
+    try expect(confinedIdentity.scopeSet.isConfined, "Confined token reads as confined")
+    try expectEqual(Set(try await confined.fetchNodes().map(\.id)), Set(DemoWorld.confinedNodeIDs), "Confined token lists only its nodes")
+
     let limited = demoClient(scenario: .limitedToken)
     try expectEqual(Set(try await limited.fetchIdentity().scopes), Set(TokenPresets.triage.scopes), "Limited token reports Triage")
     try expectEqual(try await limited.listHumanPendingApprovals().count, 0, "Triage lists no approvals")
