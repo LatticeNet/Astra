@@ -135,9 +135,14 @@ private func checkSharedFixturesDecode() async throws {
     try expectEqual(geo.filter(\.hasCoordinate).count, 30, "home lab nodes have no map location")
 
     let pending = try await client.listHumanPendingApprovals()
-    try expectEqual(pending.count, 9, "pending approvals visible to the Operator preset")
+    try expectEqual(pending.count, 8, "pending approvals visible to the Operator preset")
+    // The listing retires a stale agent update before it answers, so the stale
+    // row is rejected with neither decider and reads stale, never failed.
+    let retired = try await client.fetchApproval(id: "approval_d1008")
+    try expectEqual(retired.status, "rejected", "the stale agent update is served retired")
+    try expectEqual(retired.displayState, .stale, "a retired stale agent update reads stale")
     let counts = try await client.countApprovals()
-    try expectEqual(counts.pending, 9, "approval counts")
+    try expectEqual(counts.pending, 8, "approval counts")
     for approval in pending {
         let loaded = try await client.fetchApproval(id: approval.id)
         let verified = (try? loaded.reviewedPlanSHA256()) != nil
@@ -145,7 +150,7 @@ private func checkSharedFixturesDecode() async throws {
     }
     let page = try await client.listApprovals(query: ApprovalQuery(status: "applied", limit: 10))
     try expect(page.approvals.contains { $0.isAutoApprovedLineMeta }, "history holds an automatic line-metadata approval")
-    try expectEqual(BadgeCount.compute(approvals: pending, incidents: try await client.listIncidents().incidents, now: now), 9 + 3, "badge: nine approvals and three open warning or critical incidents")
+    try expectEqual(BadgeCount.compute(approvals: pending, incidents: try await client.listIncidents().incidents, now: now), 8 + 3, "badge: eight approvals and three open warning or critical incidents")
 
     let incidents = try await client.listIncidents()
     try expectEqual(incidents.incidents.count, SharedFixtures.incidents.count, "every incident decodes")

@@ -492,7 +492,11 @@ public extension Approval {
         case "pending": return isStale ? .stale : .needsYou
         case "approved": return waiting?.blocked == true ? .waiting : .applying
         case "applied": return .applied
-        case "rejected": return rejectedBy.isEmpty ? .failed : .rejected
+        case "rejected":
+            if !rejectedBy.isEmpty { return .rejected }
+            // The listing retires a stale agent update as rejected with neither
+            // decider (rejectAgentUpdateApprovalWithReason, server_agent_update.go).
+            return isStale && approvedBy.isEmpty ? .stale : .failed
         case "dismissed": return .dismissed
         default: return .applying
         }

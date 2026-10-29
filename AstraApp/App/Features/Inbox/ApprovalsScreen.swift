@@ -33,9 +33,7 @@ struct InboxApprovalFilter: Equatable {
     var isEmpty: Bool { statuses.isEmpty && plugins.isEmpty && nodes.isEmpty && ids.isEmpty && words.isEmpty }
 
     func matches(_ approval: Approval, nodeName: String) -> Bool {
-        // A stale retirement is stale, not failed: nobody approved it.
-        let state = ApprovalsTransition.isStaleRetirement(approval) ? .stale : approval.displayState
-        let word = StatusStyle.approval(state).word.lowercased()
+        let word = StatusStyle.approval(approval.displayState).word.lowercased()
         if !statuses.isEmpty, !statuses.contains(where: { $0 == approval.status.lowercased() || $0 == word || ($0 == "needs" && approval.displayState == .needsYou) }) { return false }
         let pluginName = ApprovalVisibility.displayName(plugin: approval.plugin).lowercased()
         if !plugins.isEmpty, !plugins.contains(where: { approval.plugin.lowercased().contains($0) || pluginName.contains($0) }) { return false }

@@ -737,9 +737,7 @@ struct InboxReviewHeader: View {
     @Environment(\.locale) private var locale
 
     var body: some View {
-        // Shared's displayState reads a stale retirement as "failed"; nobody
-        // approved it, so Review names it stale.
-        let style = StatusStyle.approval(ApprovalsTransition.isStaleRetirement(approval) ? .stale : approval.displayState)
+        let style = StatusStyle.approval(approval.displayState)
         InboxCard {
             VStack(alignment: .leading, spacing: Spacing.m) {
                 HStack(spacing: Spacing.s) {

@@ -95,7 +95,7 @@ extension SharedFixtures {
         ),
         {
             var approval = DemoApproval(
-                id: "approval_d1008", plugin: "agentupdate", action: "update-agent", node: "edge-lon-1", status: "pending",
+                id: "approval_d1008", plugin: "agentupdate", action: "update-agent", node: "edge-lon-1", status: "rejected",
                 plan: DemoPlans.agentUpdate(node: "edge-lon-1", arch: "amd64", mode: "auto"), planSHA256: "76f120e166fa98f2041593797a6874a063a19de651dc09b8d0cfb415ce400ab5", createdAt: "-3d", updatedAt: "-1d"
             )
             approval.actorID = "lattice-server"
