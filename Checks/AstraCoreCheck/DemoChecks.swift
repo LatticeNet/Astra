@@ -280,6 +280,14 @@ private func checkScenarios() async throws {
 private func checkSessionWrites() async throws {
     let state = DemoState()
     let client = demoClient(state: state)
+
+    // The waiting record follows what the approval asked for, as the server's does.
+    let reviewed = try await client.fetchApproval(id: "approval_d1005")
+    let approvedOnly = try await client.approveReviewed(reviewed, queueApply: false)
+    try expectEqual(approvedOnly.waiting?.code, "not_queued", "approve without queueing waits as not queued")
+    try expectEqual(approvedOnly.waiting?.blocked, true, "a not queued approval is blocked")
+    let applying = try await client.approveReviewed(try await client.fetchApproval(id: "approval_d1004"), queueApply: true)
+    try expectEqual(applying.waiting?.code, "task_running", "approve and apply on a reporting node runs the task")
     let acked = try await client.acknowledgeIncident(id: "inc_d01")
     try expectEqual(acked.state, "acknowledged", "acknowledging answers the acknowledged incident")
     let reread = try await client.listIncidents().incidents.first { $0.id == "inc_d01" }

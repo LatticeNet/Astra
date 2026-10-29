@@ -252,14 +252,43 @@ extension SharedFixtures {
             }
         }
         if approval.status == "approved", approval.waiting == nil {
-            approval.waiting = .object([
-                "code": "task_running",
-                "reason": .string("the apply task is running on \(approval.node)"),
-                "blocked": false,
-                "task_status": "leased",
-            ])
+            let queued = await state.value(for: "approval.queued.\(approval.id)") != "0"
+            approval.waiting = waitingRecord(for: approval, queued: queued)
         }
         return approval
+    }
+
+    /// The server's waiting record for an approval approved this session
+    /// (approvalWaitingFor, server_approval_waiting.go): the node's state
+    /// first, then whether an apply was queued.
+    static func waitingRecord(for approval: DemoApproval, queued: Bool) -> DemoJSON {
+        let node = DemoWorld.nodes.first { $0.name == approval.node || $0.id == approval.node }
+        let label = node?.name ?? approval.node
+        let since = node.map { $0.statusSince.isEmpty ? "" : " since {{now\($0.statusSince)}}" } ?? ""
+        let blocked: (code: String, reason: String)? = switch node?.status {
+        case "disabled": ("node_disabled", "Waiting for \(label), disabled\(since). A disabled node is refused work until it is enabled again.")
+        case "never_reported": ("node_never_reported", "Waiting for \(label), which has never reported\(node.map { $0.statusSince.isEmpty ? "" : " since it was enrolled at {{now\($0.statusSince)}}" } ?? ""). No agent has ever contacted the control plane from that node.")
+        case "offline": ("node_offline", "Waiting for \(label), offline\(since). The change is dispatched when the agent reports again.")
+        default: queued ? nil : ("not_queued", "Approved without queueing an apply, and nothing has queued one since. \(label) will not receive this change on its own.")
+        }
+        if let blocked {
+            return .object([
+                "code": .string(blocked.code),
+                "reason": .string(blocked.reason),
+                "blocked": true,
+                "node_id": node.map { .string($0.id) },
+                "node_name": .string(label),
+                "node_status": node.map { .string($0.status) },
+            ])
+        }
+        let task = "task_\(approval.id.replacingOccurrences(of: "approval_", with: ""))apply"
+        return .object([
+            "code": "task_running",
+            "reason": .string("The apply task \(task) is running on \(label) right now."),
+            "blocked": false,
+            "task_id": .string(task),
+            "task_status": "leased",
+        ])
     }
 
     static func listBody(_ rows: [DemoApproval], query: [String: String]) -> String {

@@ -202,6 +202,7 @@ public enum ApprovalsFixtures {
             guard sent.lowercased() == PlanHasher.sha256Hex(approval.plan) else {
                 return .error(status: 409, code: "approval_stale", message: "plan changed since review; re-review before approving")
             }
+            await state.setValue(request.bodyStrings["queue_apply"] == "0" ? "0" : "1", for: "approval.queued.\(base.id)")
             await record("approved", by: actor, id: base.id, state: state)
         case .reject:
             guard approval.status == "pending" else { return view(approval) }
