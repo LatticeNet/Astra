@@ -26,7 +26,9 @@ struct ChecksScreen: View {
         .navigationSubtitle(query.isEmpty ? "" : query)
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
-                Button("New check on web", systemImage: "plus") { router.openOnWeb(.monitoring(view: "checks")) }
+                // The console builds checks; the symbol says the button leaves the app.
+                Button("New check on web", systemImage: "safari") { router.openOnWeb(.monitoring(view: "checks")) }
+                    .accessibilityHint("Opens the console in the browser")
             }
         }
         .onAppear(perform: consumeQuery)

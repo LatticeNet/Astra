@@ -52,7 +52,8 @@ struct MaintenanceStartSheet: View {
                 } header: {
                     Text("Name").accessibilityAddTraits(.isHeader)
                 } footer: {
-                    Text("\(name.utf8.count) of \(MonitoringMaintenance.nameLimit) characters")
+                    // The server limits the name in bytes; a non-Latin letter takes two or three.
+                    Text("\(name.utf8.count) of \(MonitoringMaintenance.nameLimit) bytes")
                 }
                 Section {
                     Picker("Duration", selection: $preset) {

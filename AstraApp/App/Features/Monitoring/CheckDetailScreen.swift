@@ -83,6 +83,10 @@ struct CheckDetailScreen: View {
         return List {
             MonitoringRefreshError(state: store.monitors, noun: "the check") { Task { await store.refreshChecks() } }
             Section {
+                // The title truncates a long generated name; the full name leads the content (5.0).
+                Text(monitor.displayName)
+                    .textRole(.detailHeader)
+                    .accessibilityAddTraits(.isHeader)
                 MonitoringStateHeader(style: style)
             }
             if monitor.isGenerated { generatedSection(monitor) }

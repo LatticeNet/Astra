@@ -61,7 +61,10 @@ struct PathCharts: View {
         }
         parts.append("last \(series.window)")
         let gaps = series.buckets.filter { $0.n == 0 && $0.expected > 0 }.count
-        if gaps > 0 { parts.append(gaps == 1 ? "1 step without data" : "\(gaps) steps without data") }
+        if gaps > 0 {
+            let missing = TimeDisplay.duration(TimeInterval(gaps * series.stepSeconds), locale: Locale.current)
+            parts.append("data missing for \(missing)")
+        }
         return parts.joined(separator: ", ")
     }
 
