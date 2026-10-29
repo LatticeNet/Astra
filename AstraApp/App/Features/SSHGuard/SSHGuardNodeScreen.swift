@@ -213,7 +213,11 @@ struct SSHGuardNodeScreen: View {
                       accessibilityPhrase: "Posture, \(posture.word)")
             let stage = SSHGuardNodeWords.stage(row)
             let word = SSHGuardRowWords.coverage(row, word: coverage.word)
-            StatusRow(style: row.stageIsHistory ? StatusStyle(word: word, symbol: "clock.arrow.circlepath", tone: .quiet) : StatusStyle(word: word, symbol: coverage.symbol, tone: coverage.tone),
+            // History and a window awaiting the server's word are not failures yet.
+            let style = row.stageIsHistory ? StatusStyle(word: word, symbol: "clock.arrow.circlepath", tone: .quiet)
+                : row.awaitingRevertReport ? StatusStyle(word: word, symbol: "hourglass", tone: .warn)
+                : StatusStyle(word: word, symbol: coverage.symbol, tone: coverage.tone)
+            StatusRow(style: style,
                       title: "Coverage", detail: stage,
                       accessibilityPhrase: "Coverage, \(word), \(stage)")
         }
