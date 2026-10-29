@@ -134,7 +134,7 @@ struct IncidentDetailScreen: View {
                 }
                 subjectRow(incident, pathKey: pathKey)
                 if let opened = incident.openedAt ?? incident.since {
-                    DetailRow(label: "Opened", value: TimeDisplay.dateTime(opened, mode: mode, locale: locale),
+                    DetailRow(label: incident.state == "pending" ? "Failing since" : "Opened", value: TimeDisplay.dateTime(opened, mode: mode, locale: locale),
                               secondary: TimeDisplay.otherZone(opened, mode: mode, locale: locale), copyable: false)
                     DetailRow(label: "Duration", value: TimeDisplay.duration((incident.resolvedAt ?? Date()).timeIntervalSince(opened), locale: locale), copyable: false)
                 }

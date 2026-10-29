@@ -93,10 +93,10 @@ struct PathCharts: View {
                         .accessibilityHidden(true)
                 }
             }
-            if let last = previous.last?.last {
-                PointMark(x: .value("Time", last.t), y: .value("Previous p50", last.value))
+            if let first = previous.first?.first {
+                PointMark(x: .value("Time", first.t), y: .value("Previous p50", first.value))
                     .symbolSize(0)
-                    .annotation(position: .trailing, alignment: .leading) { label("previous") }
+                    .annotation(position: .bottom, alignment: .leading) { label("previous") }
                     .accessibilityHidden(true)
             }
             ForEach(Array(p50.enumerated()), id: \.offset) { index, segment in
