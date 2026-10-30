@@ -7,7 +7,7 @@ struct InboxAttentionItem: Identifiable, Hashable {
         case route(AppRoute)
         /// A scoped tab root. A layer forces the Audit view and a query
         /// replaces whatever search was left there.
-        case select(AppTab, scope: String?, query: String?, auditLayer: AuditLayer? = nil)
+        case select(AppTab, scope: String?, query: String?, auditLayer: AuditLayer? = nil, auditRange: TimeRangeSelection? = nil)
         case review(String)
         /// Fleet > Machines > Upcoming.
         case upcoming
@@ -120,7 +120,7 @@ struct InboxAttentionItem: Identifiable, Hashable {
             items.append(InboxAttentionItem(
                 id: "audit:recent", style: StatusStyle(word: "", symbol: "list.bullet.rectangle", tone: .quiet),
                 title: "Recent changes", detail: count == 1 ? "1 change in the last hour" : "\(count) changes in the last hour",
-                target: .select(.activity, scope: ActivityScope.audit.rawValue, query: "", auditLayer: .changes),
+                target: .select(.activity, scope: ActivityScope.audit.rawValue, query: "", auditLayer: .changes, auditRange: .lastHour),
                 phrase: "Recent changes, \(count) in the last hour"
             ))
         }
@@ -187,8 +187,8 @@ struct InboxAttentionRow: View {
         switch item.target {
         case .route(let route):
             NavigationLink(value: route) { content }
-        case .select(let tab, let scope, let query, let auditLayer):
-            Button { router.select(tab: tab, scope: scope, query: query, auditLayer: auditLayer) } label: {
+        case .select(let tab, let scope, let query, let auditLayer, let auditRange):
+            Button { router.select(tab: tab, scope: scope, query: query, auditLayer: auditLayer, auditRange: auditRange) } label: {
                 HStack(spacing: Spacing.s) {
                     content
                     Image(systemName: tab.symbol).foregroundStyle(.secondary).accessibilityHidden(true)

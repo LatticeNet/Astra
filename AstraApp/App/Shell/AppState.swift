@@ -42,6 +42,9 @@ final class AppState {
     /// An audit layer a module asked for (Terminal's trail needs All, where
     /// reaper and agent closes are), consumed once by the Audit scope.
     var auditLayer: AuditLayer?
+    /// A time range that link asked for, consumed with the layer, so a count
+    /// for the last hour opens on the last hour.
+    var auditRange: TimeRangeSelection?
     /// Search text a count button or link asked for, keyed by scope name,
     /// consumed once by that scope root's `.searchable`.
     var pendingQuery: [String: String] = [:]

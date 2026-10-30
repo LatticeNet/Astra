@@ -368,6 +368,10 @@ struct AuditScreen: View {
             layer = linked
             appState.auditLayer = nil
         }
+        if let linked = appState.auditRange {
+            rangeBinding.wrappedValue = linked
+            appState.auditRange = nil
+        }
     }
 
     private func applyLaunchLayer() {
