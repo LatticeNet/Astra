@@ -632,6 +632,8 @@ private func checkVPNDemo() async throws {
     guard case .finished(.done) = revoked else { throw CheckFailure.failed("demo revoke, got \(revoked)") }
     let afterRevoke = try await client().vpnLinkStatus(userID: "vu_alice")
     try expect(!afterRevoke.issued, "the revoked link is gone")
+    try expectEqual(try await client().vpnListUsers().user(id: "vu_alice")?.link, nil, "the list drops a revoked link")
+    try expectEqual(try await client().vpnGetUser(id: "vu_alice").link, nil, "get drops a revoked link")
     do {
         _ = try await VPNIntents.revealLink(userID: "vu_alice", email: "alice@example.org", origin: nil).perform(client(.session), grant)
         throw CheckFailure.failed("revealing a revoked link must fail")

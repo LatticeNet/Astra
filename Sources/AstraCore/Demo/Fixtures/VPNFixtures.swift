@@ -21,12 +21,12 @@ public enum VPNFixtures {
     public static var routes: [DemoRoute] {
         [
             DemoRoute(method: "POST", pathPattern: "/api/plugins/call", bodyMatch: ["service": VPNService.users, "method": "list"],
-                      body: usersListBody) { request, _ in
+                      body: usersListBody) { request, state in
                 if case .empty = request.scenario { return .json(#"{"users":[],"count":0}"#) }
-                return .json(usersListBody)
+                return .json(await usersList(state: state))
             }.requiring(VPNIntents.readScope),
-            DemoRoute(method: "POST", pathPattern: "/api/plugins/call", bodyMatch: ["service": VPNService.users, "method": "get"]) { request, _ in
-                userGet(request)
+            DemoRoute(method: "POST", pathPattern: "/api/plugins/call", bodyMatch: ["service": VPNService.users, "method": "get"]) { request, state in
+                await userGet(request, state: state)
             }.requiring(VPNIntents.readScope),
             DemoRoute(method: "POST", pathPattern: "/api/plugins/call", bodyMatch: ["service": VPNService.lines, "method": "list"],
                       body: linesListBody) { request, _ in
@@ -393,7 +393,19 @@ public enum VPNFixtures {
         "count": .number(Double(users.count)),
     ]).text
 
-    private static func userGet(_ request: DemoRequest) -> DemoResponse {
+    /// The list as it stands after the demo's rotations and revocations:
+    /// a revoked link drops out of the summary, as the server's list does.
+    private static func usersList(state: DemoState) async -> String {
+        var rows: [DemoJSON] = []
+        for user in users { rows.append(await recordedView(user, state: state)) }
+        return DemoJSON.object(["users": .array(rows), "count": .number(Double(users.count))]).text
+    }
+
+    private static func recordedView(_ user: User, state: DemoState) async -> DemoJSON {
+        userView(user, usage: true, rotated: await state.contains(user.id, in: rotatedSet), revoked: await state.contains(user.id, in: revokedSet))
+    }
+
+    private static func userGet(_ request: DemoRequest, state: DemoState) async -> DemoResponse {
         let payload = request.bodyObject()?["payload"] as? [String: Any]
         let id = payload?["id"] as? String ?? ""
         guard let user = user(id) else {
@@ -401,7 +413,7 @@ public enum VPNFixtures {
             // generic 502 message (`apiErrorMessage`), as the server does.
             return .error(status: 502, code: "bad_gateway", message: "upstream service error")
         }
-        return .json(DemoJSON.object(["user": userView(user, usage: true)]).text)
+        return .json(DemoJSON.object(["user": await recordedView(user, state: state)]).text)
     }
 
     /// The legacy proxy users the identities were derived from, as
