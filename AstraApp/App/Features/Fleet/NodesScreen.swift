@@ -73,6 +73,10 @@ struct NodesScreen: View {
         } else {
             List(selection: $selection) {
                 Section {
+                    if !trimmed.isEmpty {
+                        FilterStateRow(text: filterSentence(trimmed, compiled: compiled)) { query = "" }
+                            .selectionDisabled()
+                    }
                     if store.held != nil {
                         PendingUpdatesRow(count: store.heldCount) { store.showHeld() }
                     }
@@ -131,6 +135,13 @@ struct NodesScreen: View {
             .onScrollPhaseChange { _, _ in store.noteInteraction() }
             .background(FleetTouchProbe { store.noteInteraction() })
         }
+    }
+
+    /// A query that does not compile leaves every node in the list, so the
+    /// row must not claim a filter is applied.
+    private func filterSentence(_ trimmed: String, compiled: Result<LatticeCompiledQuery<FleetNodeRecord>, LatticeQueryError>?) -> String {
+        if case .failure? = compiled { return "Showing all nodes: the filter could not be applied" }
+        return "Showing nodes matching \(trimmed)"
     }
 
     private var groupNameLookup: @Sendable (String) -> String? {
