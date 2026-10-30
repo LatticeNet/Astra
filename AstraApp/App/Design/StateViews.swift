@@ -1,29 +1,5 @@
 import SwiftUI
 
-/// The placeholder every module screen shows until its module is built.
-struct StubScreen: View {
-    let title: String
-    /// The screen id from section 2.3 ("M2-03").
-    let screenID: String
-    /// Scope roots leave the title to their tab ("Fleet").
-    var showsTitle = true
-
-    var body: some View {
-        let content = WholeScreenState {
-            ContentUnavailableView {
-                Label("Not built yet", systemImage: "hammer")
-            } description: {
-                Text("\(title) (\(screenID)) arrives with its module.")
-            }
-        }
-        if showsTitle {
-            content.navigationTitle(title)
-        } else {
-            content
-        }
-    }
-}
-
 /// Hosts a whole-screen state. When it fits it sits centered as before; when
 /// it does not (a short screen at accessibility sizes) it scrolls, so its
 /// actions stay reachable and the large title collapses as it does over a

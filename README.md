@@ -2,7 +2,7 @@
 
 The Xcode project and target stay `Astra`. The installed display name is `Lattice`. It is the iPhone client for the same Lattice control plane as the web console: triage, decide, investigate and make targeted changes away from a desk. Long-form authoring, credentials shown once and plugin UIs too rich for a phone open the exact console route instead ("Open on web").
 
-Status: the v3 foundation (shell, design system, write and reveal gates, sessions, onboarding and Settings) is in place, and the module screens arrive module by module in the order of section 9.3. Until a module lands, its screens show "Not built yet".
+Status: every module of section 9.3 has landed on the foundation (shell, design system, write and reveal gates, sessions, onboarding and Settings), so each screen of the screen map is built and reads from the live server or the demo fleet.
 
 The v3 design specification is [docs/design/astra-v3-design.md](docs/design/astra-v3-design.md). How the code is organized: [docs/architecture.md](docs/architecture.md) and [docs/project-structure.md](docs/project-structure.md).
 

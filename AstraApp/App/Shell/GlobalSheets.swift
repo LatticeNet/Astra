@@ -53,25 +53,3 @@ struct GlobalSheetView: View {
         }
     }
 }
-
-/// The close button and stack every placeholder sheet uses until its module
-/// builds the real one.
-struct StubSheet: View {
-    let title: String
-    let screenID: String
-    @Environment(\.dismiss) private var dismiss
-
-    var body: some View {
-        NavigationStack {
-            StubScreen(title: title, screenID: screenID)
-                .navigationBarTitleDisplayMode(.inline)
-                .toolbar {
-                    ToolbarItem(placement: .cancellationAction) {
-                        Button(role: .close) { dismiss() }
-                    }
-                }
-                .actionHost(inSheet: true)
-        }
-        .presentationDragIndicator(.visible)
-    }
-}
