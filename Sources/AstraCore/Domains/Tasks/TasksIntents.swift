@@ -91,7 +91,7 @@ public enum TasksIntents {
                 succeeded.append(node)
             } catch {
                 let api = LatticeAPIError(error)
-                if WriteFlow.answerLostAfterSending(api) {
+                if WriteFlow.mayHaveLanded(api) {
                     lost.append(ObjectFailure(object: node, reason: "Could not confirm the rerun. Check the task list before trying again."))
                 } else {
                     refused.append(ObjectFailure(object: node, reason: api.localizedDescription))

@@ -91,7 +91,7 @@ public enum FleetIntents {
                 succeeded.append(node)
             } catch {
                 let api = LatticeAPIError(error)
-                if WriteFlow.answerLostAfterSending(api) {
+                if WriteFlow.mayHaveLanded(api) {
                     lost.append(node)
                 } else {
                     failed.append(ObjectFailure(object: node, reason: api.localizedDescription))
@@ -135,6 +135,11 @@ public enum FleetIntents {
             tier: .t3, verb: "Rotate token for", object: node, scopes: ["node:admin"],
             consequence: "\(node.name) stops reporting and receives no plans until the new token is installed on the host. You cannot do that from this iPhone.",
             affected: [node],
+            // The server swaps the token before saving it, so a failed answer
+            // may already have killed the old one; the new one is not shown.
+            verify: { _ in
+                "The old token for \(node.name) may already be dead, and the new one was not shown. If \(node.name) stops reporting, rotate it again to get a token you can install."
+            },
             changes: [.nodes],
             perform: { client, _ in
                 let answer = try await client.rotateNodeToken(nodeID: node.id)

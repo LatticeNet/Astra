@@ -121,7 +121,7 @@ public enum AgentUpdatesPlanning {
                 filedNodes.append(node)
             } catch {
                 let api = LatticeAPIError(error)
-                if WriteFlow.answerLostAfterSending(api) {
+                if WriteFlow.mayHaveLanded(api) {
                     lost.append(node)
                 } else {
                     refused.append(ObjectFailure(object: node, reason: api.localizedDescription))

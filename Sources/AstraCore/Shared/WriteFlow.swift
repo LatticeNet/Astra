@@ -81,10 +81,11 @@ public struct WriteFlow: Sendable {
         }
     }
 
-    /// The outcome for an error thrown by `perform`. A lost answer becomes
-    /// `.unknown` with the intent's verification sentence; it is never retried.
+    /// The outcome for an error thrown by `perform`. A write that may have
+    /// landed becomes `.unknown` with the intent's verification sentence; it
+    /// is never retried.
     func outcome(after error: LatticeAPIError) async -> WriteOutcome {
-        if Self.answerLostAfterSending(error) {
+        if Self.mayHaveLanded(error) {
             guard let verify = intent.verify else {
                 return .unknown("Could not confirm \(intent.title). Check its state before trying again.")
             }
@@ -125,21 +126,25 @@ public struct WriteFlow: Sendable {
         }
     }
 
-    /// True when the request left the phone but its answer did not come back:
-    /// a lost connection or timeout, or a proxy that gave up waiting for the
-    /// server. The write may already have been applied, so it is verified,
-    /// never refused or retried. A 502 or 503 that carries a Lattice envelope
-    /// code is the server's own refusal.
-    public static func answerLostAfterSending(_ error: LatticeAPIError) -> Bool {
+    /// True when the request left the phone and the write may already have
+    /// been applied: a lost connection or timeout, a proxy that gave up, a
+    /// 5xx (the server can fail after changing state, as a token rotation
+    /// whose save fails does), or a 2xx whose body could not be read (a
+    /// companion behind the server). Such a write is verified, never refused
+    /// or retried. A 502 or 503 that carries a Lattice envelope code is the
+    /// server quoting an upstream refusal or a disabled feature, so it stays
+    /// a refusal with the server's words.
+    public static func mayHaveLanded(_ error: LatticeAPIError) -> Bool {
         switch error {
         case .transport(let code):
             !failedBeforeSending(code)
         case .server(let status, let code, _):
             switch status {
-            case 504, 522, 524: true
             case 502, 503: code == nil
-            default: false
+            default: status >= 500
             }
+        case .invalidResponse:
+            true
         default:
             false
         }

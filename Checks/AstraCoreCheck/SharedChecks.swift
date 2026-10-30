@@ -513,8 +513,8 @@ private struct ConfirmingAuthenticator: WriteAuthenticator {
 }
 
 /// A proxy timeout after the request was sent may hide an applied write, so
-/// the runner verifies instead of reporting a refusal (6.7). A 502 that
-/// carries a Lattice envelope is the server's own refusal.
+/// the runner verifies instead of reporting a refusal (6.7). A 4xx, or a 502
+/// that carries a Lattice envelope, is the server's own refusal.
 private func checkGatewayTimeoutIsUnknown() async throws {
     let client = LatticeClient(baseURL: URL(string: "https://lattice.example.com")!, transport: MockTransport(responses: [:]))
     func intent(throwing error: LatticeAPIError) -> WriteIntent {
@@ -536,9 +536,22 @@ private func checkGatewayTimeoutIsUnknown() async throws {
         }
         try expectEqual(message, "Could not confirm. edge-tyo-3 is now enabled.", "HTTP \(status) runs verify")
     }
+    // The server can fail after changing state (a token rotation whose save
+    // fails answers 500), and a 2xx body that cannot be read still landed.
+    for error in [
+        LatticeAPIError.server(status: 500, code: "internal_error", message: "save failed"),
+        .server(status: 502, code: nil, message: ""),
+        .invalidResponse,
+    ] {
+        let result = await WriteFlow(intent: intent(throwing: error), client: client, authenticator: ConfirmingAuthenticator()).commit(choices: ConfirmChoices())
+        guard case .finished(.unknown(let message)) = result else {
+            throw CheckFailure.failed("\(error) after sending must be unknown, got \(result)")
+        }
+        try expectEqual(message, "Could not confirm. edge-tyo-3 is now enabled.", "\(error) runs verify")
+    }
     let refusal = await WriteFlow(intent: intent(throwing: .server(status: 502, code: "bad_gateway", message: "agent artifact upstream failed")), client: client, authenticator: ConfirmingAuthenticator()).commit(choices: ConfirmChoices())
     guard case .finished(.refused) = refusal else {
-        throw CheckFailure.failed("a Lattice 502 envelope is a refusal")
+        throw CheckFailure.failed("a Lattice 502 envelope quotes an upstream refusal")
     }
 }
 
