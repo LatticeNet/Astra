@@ -44,6 +44,14 @@ final class RevealFlowModel {
         self.intent = intent
     }
 
+    /// The value is delivered once (section 6.13): after the value step
+    /// clears, the model keeps only what the cleared screen still shows.
+    func clearValue() {
+        if case .value(let secret) = step, !secret.value.isEmpty {
+            step = .value(secret.cleared)
+        }
+    }
+
     func start(session: SessionStore, stepUp: StepUpCoordinator) async {
         await session.loadKeptSessionIfNeeded()
         guard session.revealClient != nil else {
@@ -180,7 +188,7 @@ private struct RevealFlowContent: View {
         case .code:
             codeStep
         case .value(let secret):
-            SecretRevealStep(secret: secret, shareable: pending.intent.shareable, subject: pending.intent.object.name, onClose: close)
+            SecretRevealStep(secret: secret, shareable: pending.intent.shareable, subject: pending.intent.object.name, onClose: close, onClear: model.clearValue)
         case .failed(let message):
             ContentUnavailableView {
                 Label("Not revealed", systemImage: "exclamationmark.triangle")

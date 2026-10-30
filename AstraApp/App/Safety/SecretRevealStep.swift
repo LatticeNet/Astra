@@ -15,6 +15,9 @@ struct SecretRevealStep: View {
     /// not already name it ("Subscription link" for alice@example.com).
     let subject: String?
     let onClose: () -> Void
+    /// Tells the owner to drop its copy too, so "Cleared" is true of the
+    /// whole sheet and not only of this view.
+    let onClear: () -> Void
 
     @State private var value: String?
     @State private var shown = false
@@ -23,12 +26,13 @@ struct SecretRevealStep: View {
     @State private var safariURL: URL?
     @Environment(\.scenePhase) private var scenePhase
 
-    init(secret: RevealedSecret, shareable: Bool, subject: String? = nil, onClose: @escaping () -> Void) {
+    init(secret: RevealedSecret, shareable: Bool, subject: String? = nil, onClose: @escaping () -> Void, onClear: @escaping () -> Void) {
         self.secret = secret
         self.shareable = shareable
         self.subject = subject.flatMap { $0.isEmpty || secret.title.contains($0) ? nil : $0 }
         self.onClose = onClose
-        _value = State(initialValue: secret.value)
+        self.onClear = onClear
+        _value = State(initialValue: secret.value.isEmpty ? nil : secret.value)
     }
 
     var body: some View {
@@ -132,6 +136,7 @@ struct SecretRevealStep: View {
     private func clear() {
         value = nil
         shown = false
+        onClear()
     }
 }
 
@@ -186,5 +191,15 @@ private struct SceneCaptureObserver: UIViewRepresentable {
             let active = traitCollection.sceneCaptureState == .active
             DispatchQueue.main.async { [onChange] in onChange?(active) }
         }
+    }
+}
+
+extension RevealedSecret {
+    /// The same secret with its value dropped: what a sheet keeps once the
+    /// value step has cleared, so title, kind and follow-up still render.
+    var cleared: RevealedSecret {
+        var copy = self
+        copy.value = ""
+        return copy
     }
 }

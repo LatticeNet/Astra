@@ -193,10 +193,24 @@ final class ConfirmFlowModel {
         finish(outcome)
     }
 
+    /// A one-time value never leaves the sheet (section 6.13): the runner,
+    /// and so every caller of `run`, gets the outcome without it.
     private func finish(_ outcome: WriteOutcome?) {
         guard !finished else { return }
         finished = true
-        onFinish?(outcome)
+        clearSecret()
+        if case .done(let message, _) = outcome {
+            onFinish?(.done(message, secret: nil))
+        } else {
+            onFinish?(outcome)
+        }
+    }
+
+    /// Drops the one-time value once the value step has cleared it.
+    func clearSecret() {
+        if case .done(let message, let secret?) = outcome, !secret.value.isEmpty {
+            outcome = .done(message, secret: secret.cleared)
+        }
     }
 
     /// Set by the view to the runner's completion.
@@ -475,7 +489,7 @@ private struct ConfirmResultView: View {
     var body: some View {
         Group {
             if case .done(_, let secret?) = model.outcome {
-                SecretRevealStep(secret: secret, shareable: false, onClose: model.complete)
+                SecretRevealStep(secret: secret, shareable: false, onClose: model.complete, onClear: model.clearSecret)
             } else {
                 List {
                     if let outcome = model.outcome { sections(outcome) }
