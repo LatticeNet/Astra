@@ -15,7 +15,8 @@ struct StatusRow: View {
     /// full, for a reason that is the only place a fix is named.
     var reasonLineLimit: Int? = 2
     var trailing: String?
-    /// Ids, hashes and IPs truncate in the middle; names never do.
+    /// Ids, hashes, host names and IPs wrap at their own separators, never
+    /// at an inserted hyphen, and truncate in the middle; names never do.
     var titleIsIdentifier = false
     /// The vocabulary phrase ("fra-2, offline for 12 minutes"); defaults to title and word.
     var accessibilityPhrase: String?
@@ -68,6 +69,7 @@ struct StatusRow: View {
 
     @ViewBuilder
     private func titleLine(accessible: Bool) -> some View {
+        let title = titleIsIdentifier ? DetailRow.breakable(self.title) : self.title
         if accessible {
             Text("\(Text.glyph(style)) \(title)")
                 .textRole(.rowTitle)

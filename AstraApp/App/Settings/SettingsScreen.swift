@@ -97,8 +97,9 @@ private struct SettingsRow: View {
     let title: String
     let symbol: String
     var value: String?
-    /// A host name wraps by character, never with an inserted hyphen, which
-    /// is a legal host name character and would show a different host (4.5).
+    /// A host name wraps at its own separators, never at an inserted hyphen,
+    /// which is a legal host name character and would show a different host
+    /// (4.5). This holds at every text size.
     var titleIsIdentifier = false
 
     @Environment(\.dynamicTypeSize) private var typeSize
@@ -109,11 +110,13 @@ private struct SettingsRow: View {
             : AnyLayout(HStackLayout(spacing: Spacing.m))
         layout {
             // At accessibility sizes the icon would squeeze the title into hyphenated fragments.
+            let shown = titleIsIdentifier ? DetailRow.breakable(title) : title
             if typeSize.isAccessibilitySize {
-                Text(titleIsIdentifier ? DetailRow.breakable(title) : title)
+                Text(shown)
                     .accessibilityLabel(title)
             } else {
-                Label(title, systemImage: symbol)
+                Label(shown, systemImage: symbol)
+                    .accessibilityLabel(title)
                 Spacer(minLength: Spacing.s)
             }
             if let value {

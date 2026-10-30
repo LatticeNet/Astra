@@ -196,7 +196,9 @@ struct NetworkingDDNSRowView: View {
         let style = StatusStyle.networkingDDNS(row.health)
         let lastRun = row.profile.lastRunAt.map { "ran \(TimeDisplay.relative($0, now: .now, locale: locale))" } ?? "never ran"
         let detail = "\(row.recordText), \(row.nodeName), \(lastRun)"
-        StatusRow(style: style, title: row.name, detail: detail, reason: row.reason,
+        // Host names and node ids break at their separators, never at an inserted hyphen.
+        let shown = "\(IdentifierText.breakable(row.recordText)), \(IdentifierText.breakable(row.nodeName)), \(lastRun)"
+        StatusRow(style: style, title: row.name, detail: shown, reason: row.reason, titleIsIdentifier: true,
                   accessibilityPhrase: "\(row.name), \(style.word), \(detail)")
     }
 }

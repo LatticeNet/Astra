@@ -120,7 +120,7 @@ struct NetworkingDNSRow: View {
         let health = deployment.health(now: now)
         let style = StatusStyle.networkingDNS(health)
         let detail = detailText
-        StatusRow(style: style, title: deployment.displayName, detail: detail, reason: health.reason,
+        StatusRow(style: style, title: deployment.displayName, detail: IdentifierText.breakable(detail), reason: health.reason,
                   accessibilityPhrase: "\(deployment.displayName), \(style.word), \(detail)")
     }
 
