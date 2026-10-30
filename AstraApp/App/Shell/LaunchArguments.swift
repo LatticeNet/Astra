@@ -238,6 +238,20 @@ enum FoundationDemoIntents: DemoHooks {
                     return .filed(approvalIDs: ["apr-demo-0101"], refused: [], notes: [])
                 }
             )
+        case "sample.planBlocked":
+            // A beacon plan: no acceptance flag exists, so findings end on web.
+            return WriteIntent(
+                tier: .plan, verb: "Plan beacon for", object: node, scopes: ["monitor:admin", "node:admin", "network:plan"],
+                consequence: "Files a beacon plan for edge-tyo-3. Nothing changes until the plan is approved.",
+                affected: [node],
+                changes: [.approvals],
+                perform: { _, _ in
+                    try await Task.sleep(for: .milliseconds(300))
+                    throw LatticeAPIError.conflict(code: "conflict", message: "plan blocked by lint findings", findings: [
+                        "Port 7443 is already bound by another service on edge-tyo-3.",
+                    ])
+                }
+            )
         case "sample.bulk":
             let nodes = ["edge-tyo-3", "edge-sgp-1", "relay-fra-2"].map { (name: String) in ObjectRef(kind: "node", id: "n-\(name)", name: name) }
             return WriteIntent(

@@ -418,7 +418,8 @@ private struct ConfirmStepView: View {
                 }
                 .tint(Color.accentText)
                 .accessibilityHint("Moves to the text field")
-            } else if let reason {
+            } else if let reason, !(model.isStuckOnFindings && model.webPath != nil) {
+                // A stuck plan's footer already says why; Open on web is the way on.
                 Text(reason).textRole(.footnote).multilineTextAlignment(.center)
             }
             if model.isStuckOnFindings, let path = model.webPath {
