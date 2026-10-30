@@ -198,7 +198,7 @@ struct NetworkingDDNSRowView: View {
         let detail = "\(row.recordText), \(row.nodeName), \(lastRun)"
         // Host names and node ids break at their separators, never at an inserted hyphen.
         let shown = "\(IdentifierText.breakable(row.recordText)), \(IdentifierText.breakable(row.nodeName)), \(lastRun)"
-        StatusRow(style: style, title: row.name, detail: shown, reason: row.reason, titleIsIdentifier: true,
+        StatusRow(style: style, title: row.name, detail: shown, reason: row.reason,
                   accessibilityPhrase: "\(row.name), \(style.word), \(detail)")
     }
 }
