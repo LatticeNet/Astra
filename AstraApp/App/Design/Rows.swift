@@ -205,6 +205,7 @@ struct WebLinkRow: View {
     let path: LatticeConsolePath
     @Environment(Router.self) private var router
     @Environment(\.dynamicTypeSize) private var typeSize
+    @ScaledMetric(relativeTo: .body) private var glyphWidth: CGFloat = 28
 
     var body: some View {
         Button {
@@ -219,8 +220,9 @@ struct WebLinkRow: View {
         .accessibilityHint("Opens the console in your browser")
     }
 
-    // Like StatusRow: at accessibility sizes the glyph runs inline with the
-    // title and the path takes the full width instead of starting indented.
+    // Like StatusRow: a scaled glyph column at default sizes; at accessibility
+    // sizes the glyph runs inline with the title and the path takes the full
+    // width instead of starting indented.
     @ViewBuilder
     private var label: some View {
         if typeSize.isAccessibilitySize {
@@ -230,9 +232,10 @@ struct WebLinkRow: View {
                 Text(path.display).textRole(.footnote)
             }
         } else {
-            HStack(spacing: Spacing.m) {
+            HStack(alignment: .firstTextBaseline, spacing: Spacing.m) {
                 Image(systemName: "safari")
                     .foregroundStyle(Color.accentText)
+                    .frame(width: glyphWidth)
                 VStack(alignment: .leading, spacing: Spacing.xxs) {
                     Text(title).foregroundStyle(Color.accentText)
                     Text(path.display).textRole(.footnote).lineLimit(2)
