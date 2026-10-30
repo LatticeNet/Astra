@@ -4,6 +4,79 @@ import SwiftUI
 // models and render the vocabulary of section 4.2; modules add navigation,
 // context menus and list-level dialogs around them.
 
+/// The trailing accessory of a row that switches tab, segment or sheet
+/// instead of pushing (section 2.4): the words, then the target's symbol, in
+/// place of a chevron. At accessibility sizes the symbol goes and the words
+/// take a line of their own (see `OpensInRow`).
+struct OpensInAccessory: View {
+    let text: String
+    let symbol: String
+
+    @Environment(\.dynamicTypeSize) private var typeSize
+
+    init(text: String, symbol: String) {
+        self.text = text
+        self.symbol = symbol
+    }
+
+    init(tab: AppTab) {
+        self.init(text: "Opens in \(tab.title)", symbol: tab.symbol)
+    }
+
+    /// A Monitor segment: the segment's name, with the Monitor tab's symbol.
+    init(segment: MonitorSegment) {
+        self.init(text: "Opens in \(segment.title)", symbol: AppTab.monitor.symbol)
+    }
+
+    /// The Settings sheet, marked with the symbol of the button that opens it.
+    static let settings = OpensInAccessory(text: "Opens in Settings", symbol: "person.crop.circle")
+
+    var body: some View {
+        Group {
+            if typeSize.isAccessibilitySize {
+                Text(text).font(TextRole.footnote.font)
+            } else {
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: Spacing.xs) {
+                        Text(text)
+                        Image(systemName: symbol)
+                    }
+                    Image(systemName: symbol)
+                }
+                .font(.subheadline)
+            }
+        }
+        .foregroundStyle(.secondary)
+        .accessibilityHidden(true)
+    }
+}
+
+/// A row that switches tab or segment: the content, then the accessory, and
+/// at accessibility sizes the accessory's words under the content. The words
+/// become the hint, since the accessory itself is hidden.
+struct OpensInRow<Content: View>: View {
+    let accessory: OpensInAccessory
+    @ViewBuilder let content: Content
+
+    @Environment(\.dynamicTypeSize) private var typeSize
+
+    var body: some View {
+        let layout = typeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: Spacing.xxs))
+            : AnyLayout(HStackLayout(alignment: .center, spacing: Spacing.s))
+        layout {
+            // The content keeps its width first; the accessory drops its words
+            // and keeps the symbol when the row is tight.
+            content.layoutPriority(1)
+            if !typeSize.isAccessibilitySize { Spacer(minLength: Spacing.s) }
+            accessory
+        }
+        .frame(maxWidth: .infinity, minHeight: Spacing.minimumTarget, alignment: .leading)
+        .contentShape(Rectangle())
+        .accessibilityHint(accessory.text)
+    }
+}
+
 /// An incident with its T1 swipes. Acknowledge runs at once (the label states
 /// the consequence); Snooze needs a choice, so it calls `onSnooze` and the
 /// list shows its one confirmation dialog (section 4.5).

@@ -243,13 +243,9 @@ struct ChannelDetailScreen: View {
                     Button {
                         router.select(tab: .activity, scope: ActivityScope.sent.rawValue, query: "channel_id:\(id)")
                     } label: {
-                        HStack {
+                        OpensInRow(accessory: OpensInAccessory(tab: .activity)) {
                             Text("All deliveries through this channel")
-                            Spacer(minLength: Spacing.s)
-                            Text("Opens in Activity").textRole(.footnote)
-                            Image(systemName: AppTab.activity.symbol).foregroundStyle(.secondary).accessibilityHidden(true)
                         }
-                        .frame(minHeight: Spacing.minimumTarget)
                     }
                 } else {
                     LoadingRows(label: "Loading deliveries", count: 2)

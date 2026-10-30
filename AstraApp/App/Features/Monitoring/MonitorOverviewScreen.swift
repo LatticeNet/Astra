@@ -9,7 +9,6 @@ struct MonitorOverviewScreen: View {
     @Environment(NodeDirectory.self) private var nodes
     @Environment(Router.self) private var router
     @Environment(\.timeZoneMode) private var mode
-    @Environment(\.dynamicTypeSize) private var typeSize
     @Environment(\.locale) private var locale
 
     @Environment(NetworkMonitor.self) private var network
@@ -204,21 +203,16 @@ struct MonitorOverviewScreen: View {
         )
     }
 
-    /// A verdict that opens its segment, with the target segment's symbol in place of a chevron (2.4).
+    /// A verdict that opens its segment, with "Opens in" and the Monitor
+    /// symbol in place of a chevron (2.4).
     private func verdictButton(title: String, style: StatusStyle, detail: String?, segment: MonitorSegment, query: String?) -> some View {
         Button {
             router.select(tab: .monitor, scope: segment.rawValue, query: query)
         } label: {
-            HStack(alignment: .firstTextBaseline) {
+            OpensInRow(accessory: OpensInAccessory(segment: segment)) {
                 StatusRow(style: style, title: title, detail: detail, accessibilityPhrase: "\(title), \(style.word)")
-                if !typeSize.isAccessibilitySize {
-                    Text(segment.title)
-                        .textRole(.footnote)
-                        .accessibilityHidden(true)
-                }
             }
         }
         .tint(.primary)
-        .accessibilityHint("Opens \(segment.title)")
     }
 }

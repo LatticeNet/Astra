@@ -206,13 +206,9 @@ struct NodeOverviewSection: View {
                         Button {
                             router.select(tab: .monitor, scope: MonitorSegment.paths.rawValue, query: "source:\(record.node.displayName)")
                         } label: {
-                            HStack {
+                            OpensInRow(accessory: OpensInAccessory(tab: .monitor)) {
                                 Text(total == 1 ? "All paths (1)" : "All paths (\(total))")
-                                Spacer()
-                                Image(systemName: AppTab.monitor.symbol).foregroundStyle(.secondary).accessibilityHidden(true)
-                                Text("Opens in Monitor").font(.footnote).foregroundStyle(.secondary)
                             }
-                            .frame(minHeight: Spacing.minimumTarget)
                         }
                         .tint(.primary)
                     }

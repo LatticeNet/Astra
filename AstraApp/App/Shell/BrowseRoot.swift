@@ -20,7 +20,7 @@ struct BrowseRoot: View {
             }
         }
         .navigationTitle("Browse")
-        .searchable(text: $query, prompt: "Pages, nodes, incidents")
+        .searchable(text: $query, prompt: "Search pages, nodes, incidents")
         .autocorrectionDisabled()
         .textInputAutocapitalization(.never)
         .task(id: query) { await search() }
@@ -155,7 +155,7 @@ struct DirectoryRow: View {
                 onOpen()
                 router.select(tab: tab, scope: scope, query: query)
             } label: {
-                label(trailing: (tab.symbol, "Opens in \(tab.title)"))
+                label(trailing: OpensInAccessory(tab: tab))
             }
             .tint(.primary)
         case .open(let route, let tab, let scope):
@@ -163,7 +163,7 @@ struct DirectoryRow: View {
                 onOpen()
                 router.open(route, in: tab, scope: scope)
             } label: {
-                label(trailing: (tab.symbol, "Opens in \(tab.title)"))
+                label(trailing: OpensInAccessory(tab: tab))
             }
             .tint(.primary)
         case .settings(let path):
@@ -171,7 +171,7 @@ struct DirectoryRow: View {
                 onOpen()
                 router.openSettings(path)
             } label: {
-                label(trailing: ("gearshape", "Opens in Settings"))
+                label(trailing: .settings)
             }
             .tint(.primary)
         case .web(let path):
@@ -179,7 +179,7 @@ struct DirectoryRow: View {
                 onOpen()
                 router.openOnWeb(path)
             } label: {
-                label(trailing: ("safari", "Open on web"))
+                label(trailing: OpensInAccessory(text: "Open on web", symbol: "safari"))
             }
             .tint(.primary)
             .accessibilityHint("Opens the console in your browser")
@@ -188,7 +188,7 @@ struct DirectoryRow: View {
                 onOpen()
                 router.present(.review(target))
             } label: {
-                label(trailing: ("checkmark.seal", "Opens the review"))
+                label(trailing: OpensInAccessory(text: "Opens the review", symbol: "checkmark.seal"))
             }
             .tint(.primary)
         }
@@ -197,7 +197,7 @@ struct DirectoryRow: View {
     @Environment(\.dynamicTypeSize) private var typeSize
 
     @ViewBuilder
-    private func label(trailing: (symbol: String, text: String)?) -> some View {
+    private func label(trailing: OpensInAccessory?) -> some View {
         if typeSize.isAccessibilitySize {
             // No icons at accessibility sizes: the title gets the full width,
             // and where the row opens is a line of its own.
@@ -208,10 +208,11 @@ struct DirectoryRow: View {
                     Text(entry.title)
                 }
                 if let subtitleLine { subtitleLine.textRole(.footnote) }
-                if let trailing { Text(trailing.text).textRole(.footnote) }
+                if let trailing { trailing }
             }
             .frame(maxWidth: .infinity, minHeight: Spacing.minimumTarget, alignment: .leading)
             .accessibilityElement(children: .combine)
+            .accessibilityHint(trailing.map { Text($0.text) } ?? Text(verbatim: ""))
         } else {
             HStack(spacing: Spacing.m) {
                 Label {
@@ -230,18 +231,7 @@ struct DirectoryRow: View {
                     }
                 }
                 Spacer(minLength: Spacing.s)
-                if let trailing {
-                    ViewThatFits(in: .horizontal) {
-                        HStack(spacing: Spacing.xs) {
-                            Text(trailing.text)
-                            Image(systemName: trailing.symbol)
-                        }
-                        Image(systemName: trailing.symbol)
-                    }
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .accessibilityHidden(true)
-                }
+                if let trailing { trailing }
             }
             .frame(minHeight: Spacing.minimumTarget)
             .accessibilityElement(children: .combine)
