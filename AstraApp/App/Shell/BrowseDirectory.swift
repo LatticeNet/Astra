@@ -7,6 +7,8 @@ enum DirectoryTarget: Hashable, Sendable {
     case tab(AppTab, scope: String?, query: String? = nil)
     case settings([SettingsRoute])
     case web(LatticeConsolePath)
+    /// A palette action that presents Review; it never decides anything itself.
+    case review(ReviewTarget)
 }
 
 /// One page of the Browse directory.

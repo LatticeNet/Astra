@@ -10,7 +10,7 @@ enum InboxSearch: SearchProvider {
         let text = query.source.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty, let rows = await pending(context: context) else { return [] }
         let filter = InboxApprovalFilter(text)
-        return rows
+        return systemAction(text, rows: rows, context: context) + rows
             .filter { filter.matches($0, nodeName: context.nodes.name(for: $0.nodeID)) }
             .map { approval in
                 SearchResult(
@@ -22,6 +22,30 @@ enum InboxSearch: SearchProvider {
                     target: .tab(.activity, scope: ActivityScope.approvals.rawValue, query: "id:\(approval.id)")
                 )
             }
+    }
+
+    /// Words that find the palette's batch row, as the console's
+    /// "Approve system events" entry is found by its label.
+    private static let systemTerms = ["review", "system", "server", "plans", "approve", "approvals", "events", "batch"]
+
+    /// The console palette's batch action (section 3.3): one row that opens
+    /// BatchReviewSheet over every server-filed pending plan. The sheet
+    /// re-reads each plan and binds the decision to the hashes it shows.
+    @MainActor
+    private static func systemAction(_ text: String, rows: [Approval], context: SearchContext) -> [SearchResult] {
+        let words = text.lowercased().split(whereSeparator: \.isWhitespace)
+        guard words.allSatisfy({ word in systemTerms.contains { $0.hasPrefix(word) } }),
+              context.session.missing(ScopeRequirement("network:apply")) == nil else { return [] }
+        let system = ApprovalEvents.pendingSystem(rows)
+        guard !system.isEmpty else { return [] }
+        return [SearchResult(
+            kind: "Actions",
+            id: "action:review-system-plans",
+            title: system.count == 1 ? "Review 1 system plan" : "Review \(system.count) system plans",
+            detail: "Filed by lattice-server",
+            target: .review(.batch(groupKey: ApprovalEvents.systemWriter, ids: system.map(\.id))),
+            symbol: "checklist"
+        )]
     }
 
     @MainActor

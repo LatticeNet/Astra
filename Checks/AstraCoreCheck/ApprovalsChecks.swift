@@ -5,6 +5,7 @@ public func checkApprovals() async throws {
     try await checkDecisionBodies()
     try await checkApprovalDecoding()
     try checkApprovalGrouping()
+    try checkPendingSystem()
     try checkApprovalTitles()
     try checkDecisionEligibility()
     try checkTransitionVerification()
@@ -279,6 +280,20 @@ private func item(_ id: String, plugin: String = "agentupdate", action: String =
 
 private func agentPlan(_ current: String, _ target: String, _ node: String = "edge-1") -> String {
     ["# lattice agent update plan", "node_name: \(node)", "current_version: \(current)", "target_version: \(target)", "artifact_url: https://dl.example.invalid/agent"].joined(separator: "\n")
+}
+
+private func checkPendingSystem() throws {
+    let rows = [
+        Approval(id: "sys", plugin: "agentupdate", status: "pending", actorID: " lattice-server "),
+        Approval(id: "human", plugin: "agentupdate", status: "pending", actorID: "admin"),
+        Approval(id: "done", plugin: "agentupdate", status: "approved", actorID: "lattice-server"),
+        Approval(id: "stale", plugin: "agentupdate", status: "pending", staleCode: "agent_update_policy_changed", actorID: "lattice-server"),
+        Approval(id: "replan", plugin: "agentupdate", status: "pending", reason: "Re-plan before approving", actorID: "lattice-server"),
+        Approval(id: "linemeta", plugin: "singbox-linemeta", status: "pending", actorID: "lattice-server"),
+        Approval(id: "nft", plugin: "nftpolicy", status: "pending", reason: "replan later", actorID: "lattice-server"),
+    ]
+    let ids = ApprovalEvents.pendingSystem(rows).map(\.id)
+    try check(ids == ["sys", "nft"], "pending system plans are server-filed, pending, human and not stale agent updates: \(ids)")
 }
 
 private func checkApprovalGrouping() throws {

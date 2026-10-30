@@ -79,6 +79,22 @@ public enum ApprovalEvents {
         return writer.isEmpty ? unknownWriter : writer
     }
 
+    /// Port of `filterPendingSystemApprovals` and `isActionablePendingApproval`
+    /// (`commandPaletteModel.ts`, `lib/api`): human-pending plans the server
+    /// filed itself, minus agent updates whose policy moved since planning.
+    /// These back the palette's "Review system plans" batch row.
+    public static func pendingSystem(_ approvals: [Approval]) -> [Approval] {
+        approvals.filter { $0.isHumanPending && writer($0) == systemWriter && !isStaleAgentUpdate($0) }
+    }
+
+    /// Port of `isStaleAgentUpdateApprovalView`.
+    public static func isStaleAgentUpdate(_ approval: Approval) -> Bool {
+        guard approval.plugin == "agentupdate" else { return false }
+        if approval.isStale { return true }
+        let reason = approval.reason.lowercased()
+        return reason.contains("re-plan") || reason.contains("replan") || (reason.contains("policy changed") && reason.contains("approval"))
+    }
+
     /// The part of an action before the first ":".
     public static func actionPrefix(_ action: String) -> String {
         guard let colon = action.firstIndex(of: ":") else { return action.trimmingCharacters(in: .whitespaces) }

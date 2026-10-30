@@ -16,6 +16,8 @@ struct SearchResult: Identifiable, Hashable, Sendable {
     var detail: String?
     var style: StatusStyle?
     let target: DirectoryTarget
+    /// The accent symbol of a result without a state, such as an action.
+    var symbol: String?
 }
 
 /// A module's contribution to Browse search (section 8.5). Each provider

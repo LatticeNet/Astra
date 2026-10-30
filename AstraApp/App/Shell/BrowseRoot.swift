@@ -175,6 +175,14 @@ struct DirectoryRow: View {
             }
             .tint(.primary)
             .accessibilityHint("Opens the console in your browser")
+        case .review(let target):
+            Button {
+                onOpen()
+                router.present(.review(target))
+            } label: {
+                label(trailing: ("checkmark.seal", "Opens the review"))
+            }
+            .tint(.primary)
         }
     }
 
@@ -252,7 +260,7 @@ struct SearchResultRow: View {
 
     var body: some View {
         DirectoryRow(
-            entry: DirectoryEntry(id: result.id, title: result.title, symbol: result.style?.symbol ?? "circle", target: result.target),
+            entry: DirectoryEntry(id: result.id, title: result.title, symbol: result.style?.symbol ?? result.symbol ?? "circle", target: result.target),
             subtitle: result.detail,
             status: result.style
         )
