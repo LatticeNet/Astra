@@ -208,3 +208,18 @@ Agents cannot tap, swipe or rotate a simulator, and they cannot run VoiceOver, V
 - Lines (Browse > VPN > Lines): the rotor jumps between Needs attention, Running and Service not proven; a line whose chain drifted reads "chain drifted" with the route error; the context menu offers Open, Copy ID, Open node, Open chain and Open on web.
 - Line (from a line row, or from a chain hop in Monitor > Paths > Chains): the chain section lists each hop and, between hops, the path state from one node to the next, which opens PathDetail; a hop no check covers reads "not measured"; without monitor:read the path rows say what is hidden. Bound identities open their identity.
 - Voice Control "Show names": More, Reveal subscription link, Reveal credentials, Rotate subscription link, Revoke subscription link, Retry and every web row have names.
+
+## M14 App Intents
+
+- Shortcuts action list: in the Shortcuts app, Add Action, search "Lattice" lists exactly two actions, Open Node and Review Approval, with the navy tile; the App Shortcuts section under Lattice shows the same two with the phrases "Open a node in Lattice" and "Review an approval in Lattice". No action approves, rejects or dismisses.
+- Open Node: the Node parameter lists the fleet worst state first, each row with its honesty word and symbol; typing "Frankfurt" narrows it to the Frankfurt nodes and "fra 2" to relay-fra-2; running it opens Fleet on that node's Overview, and an open sheet is dismissed first.
+- Review Approval: the Approval parameter lists only approvals that need a person, newest first, each with the node, "needs you" and its age, and no seal; running it opens Review over the current tab, and nothing is decided until Face ID in Review.
+- Siri: "Open a node in Lattice" asks "Which node?" and opens the chosen node; "Review an approval in Lattice" asks "Which approval?". On a locked iPhone Siri asks to unlock before it lists or opens anything.
+- Siri by name: "Open a node in Lattice", answer "relay fra 2", and Lattice opens relay-fra-2.
+- Pickers never stand empty for a reason: in Airplane Mode the Node picker reads "Could not load nodes. No connection." and the Approval picker "Could not load approvals. No connection."; signed out, both read "Lattice is not connected to a server. Open Lattice to sign in."; with a Triage token (no network:plan) the Approval picker reads "Hidden: this token lacks network:plan, so it cannot list approvals."
+- With "Require Face ID to open" on, the Node and Approval pickers list nothing and read "Lattice is locked. Open Lattice to choose, or turn off Require Face ID to open."; a saved shortcut still runs and the lock covers the screen it opens.
+- Cold launch: force-quit Lattice while another tab is selected, run Open Node, and the app lands on that node in Fleet; do the same for Review Approval with a Review left open before the quit, and Review shows the shortcut's approval.
+- A saved shortcut whose node or approval no longer exists still opens the screen, which then shows the server's answer ("Not found, or not visible to this token" for an approval).
+- While a confirmation or decision is in progress, running either shortcut waits and opens after it finishes; during the welcome flow it opens after connecting.
+- With "Require Face ID to open" on and the lock interval passed, either shortcut shows the lock before the screen.
+- VoiceOver in the Shortcuts parameter picker reads each node as name, state, place, and each approval as title, node, state, age.
