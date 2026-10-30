@@ -49,15 +49,20 @@ final class VPNStore {
         return isConfined ? ScopeRequirement.unconfinedPhrase : nil
     }
 
-    /// Reveals run on the session, so only its scopes gate them; without a
-    /// session the reveal flow offers to sign in.
+    /// Reveals run on the session, so only its scopes and allowlist gate
+    /// them; without a session the reveal flow offers to sign in. A confined
+    /// session is refused after the code is spent, so it is gated here.
     var revealLinkMissing: String? {
-        missing(ScopeRequirement(VPNIntents.linkScope), on: .session, named: "vpncore:admin or proxy:admin")
+        if let scope = missing(ScopeRequirement(VPNIntents.linkScope), on: .session, named: "vpncore:admin or proxy:admin") { return scope }
+        return isSessionConfined ? ScopeRequirement.unconfinedPhrase : nil
     }
 
     var credentialsMissing: String? {
-        missing(ScopeRequirement(VPNIntents.credentialsScope), on: .session, named: VPNIntents.credentialsScope)
+        if let scope = missing(ScopeRequirement(VPNIntents.credentialsScope), on: .session, named: VPNIntents.credentialsScope) { return scope }
+        return isSessionConfined ? ScopeRequirement.unconfinedPhrase : nil
     }
+
+    private var isSessionConfined: Bool { session.sessionIdentity?.scopeSet.isConfined ?? false }
 
     var hasRevealSession: Bool { session.revealClient != nil }
 
