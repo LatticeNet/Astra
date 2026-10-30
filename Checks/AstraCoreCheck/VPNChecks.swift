@@ -315,6 +315,8 @@ private func checkVPNFetchLine(_ status: VPNLinkStatus, now: Date, age: (TimeInt
     try expectEqual(line.text, "Fetched 3 hours ago by Shadowrocket, got the servers", "fetch sentence")
     let late = VPNLinkWords.fetch(status, now: now.addingTimeInterval(30 * 3_600), age: age)
     try expectEqual(late.freshness, .stale, "past twice the refresh period is stale")
+    try expect(late.text.hasSuffix(". Overdue: clients refresh every \(status.link?.updateIntervalHours ?? 0) hours"), "a stale fetch says it is overdue in words: \(late.text)")
+    try expect(!line.text.contains("Overdue"), "a fresh fetch is not overdue")
 }
 
 // MARK: Line derivations

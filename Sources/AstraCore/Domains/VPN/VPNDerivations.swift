@@ -453,7 +453,8 @@ public enum VPNLinkWords {
                          text: status.issued ? "Not fetched since the server last started" : "Never fetched")
         }
         let elapsed = max(0, now.timeIntervalSince(fetch.at))
-        let interval = Double(status.link?.updateIntervalHours ?? 2) * 3_600
+        let hours = status.link?.updateIntervalHours ?? 2
+        let interval = Double(hours) * 3_600
         let freshness: Fetch.Freshness = elapsed <= interval * 2 ? .fresh : .stale
         let got = switch fetch.answer {
         case "nodes": "got the servers"
@@ -462,7 +463,8 @@ public enum VPNLinkWords {
         default: "got an answer"
         }
         return Fetch(freshness: freshness, healthy: freshness == .fresh && fetch.answer == "nodes",
-                     text: "Fetched \(age(elapsed)) ago by \(clientFamily(fetch.uaClass)), \(got)")
+                     text: "Fetched \(age(elapsed)) ago by \(clientFamily(fetch.uaClass)), \(got)"
+                        + (freshness == .stale ? ". Overdue: clients refresh every \(hours == 1 ? "hour" : "\(hours) hours")" : ""))
     }
 
     /// `userinfoText`: the Subscription-Userinfo header in words, what the

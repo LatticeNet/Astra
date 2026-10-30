@@ -157,7 +157,11 @@ struct VPNUserDetailScreen: View {
                 Label {
                     Text(fetch.text).foregroundStyle(fetch.healthy || fetch.freshness == .never ? Color.secondary : Color.statusWarnText)
                 } icon: {
-                    Image(systemName: fetch.freshness == .never ? "iphone.slash" : "iphone")
+                    Image(systemName: switch fetch.freshness {
+                    case .never: "iphone.slash"
+                    case .stale: "clock.badge.exclamationmark"
+                    case .fresh: "iphone"
+                    })
                         .foregroundStyle(fetch.healthy || fetch.freshness == .never ? Color.statusQuiet : Color.statusWarnFill)
                 }
                 .frame(minHeight: Spacing.minimumTarget)
