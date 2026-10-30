@@ -15,6 +15,8 @@ final class FleetNodeDetailModel {
     var sshGuard: ResourceState<SSHGuardNodeStatus> = .idle
     var capabilities: ResourceState<[NodeCapabilityEffective]> = .idle
     var beacon: ResourceState<FleetBeaconView> = .idle
+    /// This node's auto-update policy; a loaded nil means it has none.
+    var agentPolicy: ResourceState<AgentUpdatesPolicy?> = .idle
     var queued: ResourceState<[LatticeTask]> = .idle
     /// The node's machine profile; nil inside the value means none is recorded.
     var machine: ResourceState<MachineProfile?> = .idle
@@ -140,12 +142,16 @@ final class FleetNodeDetailModel {
 
     func refreshSettings() async {
         let id = nodeID
-        let before = (capabilities.reloading, beacon.reloading)
-        (capabilities, beacon) = before
+        let before = (capabilities.reloading, beacon.reloading, agentPolicy.reloading)
+        (capabilities, beacon, agentPolicy) = before
         async let c = fetch(scopes: ["node:read"], surface: "Capabilities", previous: before.0) { try await $0.fetchNodeCapabilities(nodeID: id) }
         async let b = fetch(scopes: ["monitor:read"], surface: "Beacon", previous: before.1) { try await $0.fleetBeacon(nodeID: id) }
+        async let p = fetch(scopes: ["node:read"], surface: "Auto-update policy", previous: before.2) {
+            try await $0.agentUpdatesPolicies().first { $0.nodeID == id }
+        }
         capabilities = await c
         beacon = await b
+        agentPolicy = await p
     }
 }
 

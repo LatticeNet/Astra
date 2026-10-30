@@ -393,6 +393,9 @@ public struct LatticeConsolePath: Hashable, Sendable {
     public static func agentUpdates(nodeName: String) -> Self {
         Self("/platform/agent-updates", ["view": "nodes", "q": nodeName])
     }
+    /// Opens the node's policy editor (edit when one exists, a prefilled
+    /// create otherwise) for an admin; others land on the page.
+    public static func agentUpdatePolicy(nodeID: String) -> Self { Self("/platform/agent-updates", ["node": nodeID]) }
     public static func plugin(id: String) -> Self { Self("/platform/plugins", ["open": id]) }
     public static func share(id: String) -> Self {
         Self("/platform/publishing", ["view": "routes", "origin": "share", "open": id])

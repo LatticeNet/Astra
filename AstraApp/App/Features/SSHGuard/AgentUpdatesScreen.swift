@@ -180,7 +180,11 @@ struct AgentUpdatesScreen: View {
                 }
             }
             Section {
-                WebLinkRow(title: "Policies on web", path: LatticeConsolePath(path: "/platform/agent-updates", query: [URLQueryItem(name: "view", value: "nodes")]))
+                if let nodeFilter {
+                    WebLinkRow(title: "Auto-update policy on web", path: .agentUpdatePolicy(nodeID: nodeFilter))
+                } else {
+                    WebLinkRow(title: "Policies on web", path: LatticeConsolePath(path: "/platform/agent-updates", query: [URLQueryItem(name: "view", value: "nodes")]))
+                }
             } footer: {
                 FreshnessFooter(loadedAt: store.loadedAt, isUpdating: store.nodes.isLoading && store.nodes.value != nil,
                                 lastAttemptFailed: store.anyFailed, interval: Polling.standard.interval(lowPower: false))
@@ -252,6 +256,9 @@ struct AgentUpdatesScreen: View {
             Divider()
             Button("Open node", systemImage: "server.rack") { router.push(.fleet(.node(id: row.nodeID))) }
             Button("Copy link", systemImage: "link") { SSHGuardCopy.copy(SSHGuardCopy.agentUpdatesLink(row.nodeID)) }
+            Button(row.policy == nil ? "Set policy on web" : "Edit policy on web", systemImage: "slider.horizontal.3") {
+                router.openOnWeb(.agentUpdatePolicy(nodeID: row.nodeID))
+            }
             Button("Open on web", systemImage: "safari") { router.openOnWeb(.agentUpdates(nodeName: row.name)) }
         } preview: {
             SSHGuardAgentGlance(row: row, style: style, detail: detail, target: target)

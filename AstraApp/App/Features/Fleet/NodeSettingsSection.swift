@@ -169,12 +169,36 @@ struct NodeSettingsSection: View {
             FleetActionRow(title: "Force plan", systemImage: "doc.badge.ellipsis", missing: missing) {
                 Task { await runner.run(FleetIntents.planAgentUpdate(ref, force: true)) }
             }
-            WebLinkRow(title: "Auto-update policy on web", path: .agentUpdates(nodeName: record.node.displayName))
+            policyRow
+            WebLinkRow(title: "Auto-update policy on web", path: .agentUpdatePolicy(nodeID: record.id))
         } header: {
             Text("Agent update")
         } footer: {
             Text("Plans file an approval; nothing changes until someone approves it.")
         }
+    }
+
+    /// The policy is edited on the web (parity matrix W); here it is read.
+    @ViewBuilder
+    private var policyRow: some View {
+        switch model.agentPolicy {
+        case .denied(let scope):
+            ScopeDeniedRow(scope: scope)
+        case .companionBehind:
+            DetailRow(label: "Auto-update policy", value: "Not on this server", copyable: false)
+        case .failed(_, nil, _):
+            DetailRow(label: "Auto-update policy", value: "Could not load", copyable: false)
+        default:
+            DetailRow(label: "Auto-update policy", value: model.agentPolicy.value.map(Self.policySummary) ?? "Loading", copyable: false)
+        }
+    }
+
+    /// "Automatic, target latest", "Manual, target 0.4.1", "Policy off" or "No policy".
+    static func policySummary(_ policy: AgentUpdatesPolicy?) -> String {
+        let state = AgentUpdatesPolicyState.of(policy)
+        guard let policy, state == .manual || state == .auto else { return state.word.prefix(1).uppercased() + state.word.dropFirst() }
+        let target = policy.targetVersion.isEmpty ? "latest" : policy.targetVersion
+        return "\(state == .auto ? "Automatic" : "Manual"), target \(target)"
     }
 
     // MARK: Beacon
