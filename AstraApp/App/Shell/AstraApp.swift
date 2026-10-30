@@ -57,7 +57,7 @@ final class AppServices {
         stores = StoreRegistry(session: session, changes: changes)
 
         if launch.demo, let auth = launch.auth {
-            runner.authenticator = IntentAuth(mode: .stub(auth))
+            runner.demoAuthenticator = IntentAuth(mode: .stub(auth))
         }
         runner.openFiled = { [router] ids, refused in
             if ids.count == 1, refused.isEmpty {

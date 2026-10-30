@@ -41,7 +41,12 @@ final class ActionRunner {
     private(set) var pendingConfirm: PendingConfirm?
     private(set) var pendingReveal: PendingReveal?
     private(set) var haptic: HapticPulse?
-    var authenticator = IntentAuth.device
+    /// The `-AstraAuth` stub. It is read per call and only while the session
+    /// is in demo, so leaving demo puts Face ID back on every gate.
+    var demoAuthenticator: IntentAuth?
+    var authenticator: IntentAuth {
+        session.isDemo ? (demoAuthenticator ?? .device) : .device
+    }
     /// Opens filed approvals in Review (one) or BatchReview (several); set by the shell.
     @ObservationIgnored var openFiled: ((_ approvalIDs: [String], _ refused: [ObjectFailure]) -> Void)?
 
