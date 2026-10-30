@@ -163,13 +163,13 @@ struct NodeSettingsSection: View {
             NavigationLink(value: AppRoute.sshGuard(.agentUpdates(view: "nodes", nodeID: record.id))) {
                 FleetRelatedRow(title: "Agent updates", symbol: "arrow.down.circle", detail: "Running \(record.node.agentVersion ?? "no agent yet")")
             }
+            policyRow
             FleetActionRow(title: "Plan update", systemImage: "doc.badge.plus", missing: missing) {
                 Task { await runner.run(FleetIntents.planAgentUpdate(ref, force: false)) }
             }
             FleetActionRow(title: "Force plan", systemImage: "doc.badge.ellipsis", missing: missing) {
                 Task { await runner.run(FleetIntents.planAgentUpdate(ref, force: true)) }
             }
-            policyRow
             WebLinkRow(title: "Auto-update policy on web", path: .agentUpdatePolicy(nodeID: record.id))
         } header: {
             Text("Agent update")
