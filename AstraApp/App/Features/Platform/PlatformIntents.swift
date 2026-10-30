@@ -30,8 +30,15 @@ enum PlatformIntents {
             perform: { client, _ in
                 do {
                     let result = try await client.platformSetPluginStatus(id: pluginID, status: status)
+                    // The status change landed even though the runtime did
+                    // not start, so this is partial, not a refusal (section 6.7).
                     if activate, result.runtime?.state == "failed" {
-                        return .refused(.validation(result.runtime?.message ?? "runtime failed"), "\(name) is active but its runtime failed: \(result.runtime?.message ?? "no message")")
+                        let reason = result.runtime?.message ?? "Runtime failed to start"
+                        return .partial(
+                            succeeded: [ref],
+                            failed: [ObjectFailure(object: ref, reason: reason)],
+                            message: "\(name) is active but its runtime failed: \(reason)"
+                        )
                     }
                     return .done(activate ? "Activated \(name)" : "Disabled \(name)")
                 } catch LatticeAPIError.conflict(_, let message, _) {
