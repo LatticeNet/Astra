@@ -397,7 +397,9 @@ public enum VPNFixtures {
         let payload = request.bodyObject()?["payload"] as? [String: Any]
         let id = payload?["id"] as? String ?? ""
         guard let user = user(id) else {
-            return .error(status: 502, code: "bad_gateway", message: "vpn-core/users get: user \"\(id)\" not found")
+            // The gateway hides the service's "not found" text behind the
+            // generic 502 message (`apiErrorMessage`), as the server does.
+            return .error(status: 502, code: "bad_gateway", message: "upstream service error")
         }
         return .json(DemoJSON.object(["user": userView(user, usage: true)]).text)
     }

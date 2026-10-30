@@ -419,12 +419,21 @@ private func checkVPNRequests() async throws {
     }
 
     let get = vpnClient([call: (200, json(#"{"user":{"id":"vu_a","email":"a@example.org","enabled":true,"credentials":[],"bindings":[],"migrated":false}}"#))])
-    _ = try await get.0.vpnGetUser(id: "vu_a")
+    let fetched = try await get.0.vpnGetUser(id: "vu_a")
     let getBody = try bodyObject(await get.1.lastBody)
     try expectEqual(getBody["method"] as? String, "get", "get method")
     try expectEqual((getBody["payload"] as? [String: Any])?["id"] as? String, "vu_a", "get payload {id}")
-    try expect(LatticeClient.vpnUserMissing(.server(status: 502, code: nil, message: "vpn-core/users get: user \"x\" not found")), "502 not found is a missing user")
-    try expect(!LatticeClient.vpnUserMissing(.server(status: 502, code: nil, message: "upstream timeout")), "other 502s are failures")
+    // The gateway answers an unknown id with the generic 502 text, so only a
+    // list read without the id makes it missing.
+    let upstream = LatticeAPIError.server(status: 502, code: "bad_gateway", message: "upstream service error")
+    let held = VPNUserListing(users: [fetched], source: .vpnCore)
+    let empty = VPNUserListing(users: [], source: .vpnCore)
+    try expect(LatticeClient.vpnUserGetAmbiguous(upstream), "a 502 from get is ambiguous")
+    try expect(LatticeClient.vpnUserMissing(upstream, listing: empty, id: "vu_a"), "502 and a list without the id is missing")
+    try expect(!LatticeClient.vpnUserMissing(upstream, listing: held, id: "vu_a"), "502 while the list holds the id is a failure")
+    try expect(!LatticeClient.vpnUserMissing(upstream, listing: nil, id: "vu_a"), "502 with no list read is a failure")
+    try expect(!LatticeClient.vpnUserMissing(.server(status: 500, code: nil, message: "internal"), listing: empty, id: "vu_a"), "a 500 is never missing")
+    try expect(!LatticeClient.vpnUserMissing(.forbidden(code: "capability_denied", message: "forbidden"), listing: empty, id: "vu_a"), "a refusal is never missing")
 
     let lines = vpnClient([call: (200, json(vpnLinesJSON))])
     let groups = try await lines.0.vpnListLines()
@@ -573,7 +582,11 @@ private func checkVPNDemo() async throws {
         _ = try await client().vpnGetUser(id: VPNFixtures.missingUserID)
         throw CheckFailure.failed("an unknown identity must throw")
     } catch let error as LatticeAPIError {
-        try expect(LatticeClient.vpnUserMissing(error), "unknown identity reads as missing: \(error)")
+        guard case .server(502, _, let message) = error else { throw CheckFailure.failed("unknown identity answers 502, got \(error)") }
+        try expect(message.hasPrefix("upstream service error"), "the server's generic 502 text, never the service's: \(message)")
+        let listing = try await client().vpnListUsers()
+        try expect(LatticeClient.vpnUserMissing(error, listing: listing, id: VPNFixtures.missingUserID), "the list confirms the unknown identity is missing")
+        try expect(!LatticeClient.vpnUserMissing(error, listing: listing, id: "vu_bob"), "a listed identity is never missing")
     }
 
     // Each link headline the screens show.

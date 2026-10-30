@@ -43,14 +43,23 @@ public extension LatticeClient {
         }
     }
 
-    /// True when vpn-core `get` refused an id it does not hold: the plugin
-    /// gateway answers that 502 with the service's "not found" text.
-    static func vpnUserMissing(_ error: LatticeAPIError) -> Bool {
+    /// True when a vpn-core `get` failure may mean the id is gone. The
+    /// gateway answers an unknown id with a plain 502 "upstream service
+    /// error", the same body as any other upstream failure, so this alone
+    /// never proves absence; `vpnUserMissing(_:listing:id:)` does.
+    static func vpnUserGetAmbiguous(_ error: LatticeAPIError) -> Bool {
         switch error {
         case .notFound: true
-        case .server(let status, _, let message): status == 502 && message.localizedCaseInsensitiveContains("not found")
+        case .server(let status, _, _): status == 502
         default: false
         }
+    }
+
+    /// True when `get` failed in a way that may mean absence and a list read
+    /// after it holds no such id. A list that did not load proves nothing.
+    static func vpnUserMissing(_ error: LatticeAPIError, listing: VPNUserListing?, id: String) -> Bool {
+        guard vpnUserGetAmbiguous(error), let listing else { return false }
+        return listing.user(id: id) == nil
     }
 
     // MARK: Identity link

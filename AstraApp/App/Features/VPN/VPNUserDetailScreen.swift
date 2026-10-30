@@ -498,10 +498,17 @@ final class VPNUserDetailModel {
                 return true
             }
             let apiError = LatticeAPIError(error)
-            if LatticeClient.vpnUserMissing(apiError) {
-                notFound = true
-                user = .idle
-                return true
+            if LatticeClient.vpnUserGetAmbiguous(apiError) {
+                // A fresh list read decides whether the id is gone; it also
+                // drops a deleted identity from the users list.
+                let listed = await store.refreshUsers()
+                let listing: VPNUserListing? = if listed, case .loaded(let value, _) = store.users { value } else { nil }
+                if LatticeClient.vpnUserMissing(apiError, listing: listing, id: id) {
+                    notFound = true
+                    user = .idle
+                    link = .idle
+                    return true
+                }
             }
             if case .invalidResponse = apiError { session.markCompanionBehind(VPNStore.usersSurface) }
             if case .forbidden = apiError { session.noteForbidden() }
