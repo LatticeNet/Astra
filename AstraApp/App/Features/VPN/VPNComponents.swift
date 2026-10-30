@@ -99,16 +99,8 @@ struct VPNActionRow: View {
 
     var body: some View {
         Button(role: role, action: action) {
-            Label {
-                VStack(alignment: .leading, spacing: Spacing.xxs) {
-                    Text(title).foregroundStyle(tint)
-                    if let line = reason ?? note {
-                        Text(line).textRole(.footnote)
-                    }
-                }
-            } icon: {
-                Image(systemName: systemImage).foregroundStyle(tint)
-            }
+            VPNGlyphLabel(title: title, titleColor: tint, detail: reason ?? note, detailRole: .footnote,
+                          systemImage: systemImage, glyphColor: tint)
             .frame(maxWidth: .infinity, minHeight: Spacing.minimumTarget, alignment: .leading)
             .contentShape(Rectangle())
         }
@@ -147,18 +139,65 @@ struct VPNLinkRow: View {
     let systemImage: String
 
     var body: some View {
-        Label {
+        VPNGlyphLabel(title: title, titleRole: .rowTitle, detail: detail, systemImage: systemImage, glyphColor: .accentText)
+            .frame(minHeight: Spacing.minimumTarget)
+            .accessibilityElement(children: .combine)
+    }
+}
+
+/// A leading symbol beside a title and a second line, laid out the way
+/// StatusRow is (section 4.5): a scaled glyph column at default sizes; at
+/// accessibility sizes the glyph runs inline with the title and the second
+/// line takes the full width, so it never starts indented under the glyph.
+struct VPNGlyphLabel: View {
+    let title: String
+    /// nil keeps the body font.
+    var titleRole: TextRole?
+    var titleColor: Color?
+    var detail: String?
+    var detailRole: TextRole = .rowDetail
+    let systemImage: String
+    var glyphColor: Color
+
+    @Environment(\.dynamicTypeSize) private var typeSize
+    @ScaledMetric(relativeTo: .body) private var glyphWidth: CGFloat = 28
+
+    var body: some View {
+        let detail = detail?.isEmpty == false ? detail : nil
+        layout(detail: detail)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel([title, detail].compactMap { $0 }.joined(separator: ", "))
+    }
+
+    @ViewBuilder
+    private func layout(detail: String?) -> some View {
+        if typeSize.isAccessibilitySize {
             VStack(alignment: .leading, spacing: Spacing.xxs) {
-                Text(title).textRole(.rowTitle)
-                if let detail, !detail.isEmpty {
-                    Text(detail).textRole(.rowDetail)
+                styledTitle(Text("\(Text(Image(systemName: systemImage)).foregroundStyle(glyphColor)) \(Text(title))"))
+                if let detail { Text(detail).textRole(detailRole) }
+            }
+        } else {
+            HStack(alignment: .firstTextBaseline, spacing: Spacing.m) {
+                Image(systemName: systemImage)
+                    .foregroundStyle(glyphColor)
+                    .frame(width: glyphWidth)
+                    .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: Spacing.xxs) {
+                    styledTitle(Text(title))
+                    if let detail { Text(detail).textRole(detailRole) }
                 }
             }
-        } icon: {
-            Image(systemName: systemImage).foregroundStyle(Color.accentText)
         }
-        .frame(minHeight: Spacing.minimumTarget)
-        .accessibilityElement(children: .combine)
+    }
+
+    @ViewBuilder
+    private func styledTitle(_ text: Text) -> some View {
+        let colored = titleColor.map { text.foregroundStyle($0) } ?? text
+        if let titleRole {
+            colored.textRole(titleRole)
+        } else {
+            colored.font(.body)
+        }
     }
 }
 

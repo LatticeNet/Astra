@@ -133,15 +133,10 @@ struct VPNLineDetailScreen: View {
         let role = "\(hop.role.rawValue.prefix(1).uppercased())\(hop.role.rawValue.dropFirst())"
         let title = "\(role): \(entry?.line.displayName ?? "line") on \(node)"
         let routeWord = hop.route.map { VPNStyle.chain(MonitoringChainState($0)).word }
-        let label = Label {
-            VStack(alignment: .leading, spacing: Spacing.xxs) {
-                Text(title).textRole(.rowTitle)
-                Text([isThis ? "this line" : nil, routeWord].compactMap { $0 }.joined(separator: " · ")).textRole(.rowDetail)
-            }
-        } icon: {
-            Image(systemName: hop.role == .exit ? "arrow.up.right.circle" : "circle.circle").foregroundStyle(Color.statusQuiet)
-        }
-        .frame(minHeight: Spacing.minimumTarget)
+        let label = VPNGlyphLabel(title: title, titleRole: .rowTitle,
+                                  detail: [isThis ? "this line" : nil, routeWord].compactMap { $0 }.joined(separator: " · "),
+                                  systemImage: hop.role == .exit ? "arrow.up.right.circle" : "circle.circle", glyphColor: .statusQuiet)
+            .frame(maxWidth: .infinity, minHeight: Spacing.minimumTarget, alignment: .leading)
         .accessibilityElement(children: .combine)
         if isThis {
             label

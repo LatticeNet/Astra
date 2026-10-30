@@ -154,16 +154,13 @@ struct VPNUserDetailScreen: View {
                 .id("link")
             if status.issued {
                 let fetch = VPNLinkWords.fetch(status, now: now) { TimeDisplay.duration($0, locale: locale) }
-                Label {
-                    Text(fetch.text).foregroundStyle(fetch.healthy || fetch.freshness == .never ? Color.secondary : Color.statusWarnText)
-                } icon: {
-                    Image(systemName: switch fetch.freshness {
-                    case .never: "iphone.slash"
-                    case .stale: "clock.badge.exclamationmark"
-                    case .fresh: "iphone"
-                    })
-                        .foregroundStyle(fetch.healthy || fetch.freshness == .never ? Color.statusQuiet : Color.statusWarnFill)
-                }
+                let late = !(fetch.healthy || fetch.freshness == .never)
+                VPNGlyphLabel(title: fetch.text, titleColor: late ? Color.statusWarnText : Color.secondary,
+                              systemImage: switch fetch.freshness {
+                              case .never: "iphone.slash"
+                              case .stale: "clock.badge.exclamationmark"
+                              case .fresh: "iphone"
+                              }, glyphColor: late ? Color.statusWarnFill : Color.statusQuiet)
                 .frame(minHeight: Spacing.minimumTarget)
                 let userinfo = VPNLinkWords.userinfo(status.subscriptionUserinfo, answer: status.answer) {
                     $0.formatted(Date.FormatStyle.dateTime.locale(locale).month(.abbreviated).day())
