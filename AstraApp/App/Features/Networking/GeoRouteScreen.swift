@@ -85,7 +85,7 @@ struct GeoRouteScreen: View {
             Section("Delegation and apply") {
                 DetailRow(label: "Parent zone NS", value: routing.publishNS ? "Published through DDNS profile \(ddnsName(routing.ddnsProfileID))" : "Not published", copyable: false)
                 if let delegated = routing.lastDelegatedAt {
-                    DetailRow(label: "Delegated", value: TimeDisplay.dateTime(delegated, mode: mode, locale: locale), copyable: false)
+                    TimeRow(label: "Delegated", date: delegated)
                 }
                 if let applied = routing.lastAppliedAt {
                     DetailRow(label: "Applied", value: TimeDisplay.dateTime(applied, mode: mode, locale: locale),

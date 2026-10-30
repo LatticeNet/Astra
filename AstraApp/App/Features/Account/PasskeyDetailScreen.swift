@@ -74,9 +74,9 @@ struct PasskeyDetailScreen: View {
             }
 
             Section {
-                if let created = passkey.createdAt { AccountTimeRow(label: "Added", date: created) }
+                if let created = passkey.createdAt { TimeRow(label: "Added", date: created) }
                 if let used = passkey.lastUsedAt {
-                    AccountTimeRow(label: "Last used", date: used)
+                    TimeRow(label: "Last used", date: used)
                 } else {
                     DetailRow(label: "Last used", value: "Never", copyable: false)
                 }

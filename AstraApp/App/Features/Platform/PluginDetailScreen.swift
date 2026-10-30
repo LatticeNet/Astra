@@ -66,8 +66,7 @@ struct PluginDetailScreen: View {
             if !row.transitions.isEmpty {
                 Section("Lifecycle history") {
                     ForEach(row.transitions, id: \.key) { transition in
-                        DetailRow(label: transition.key.sentenceCased, value: TimeDisplay.dateTime(transition.at, mode: mode, locale: locale),
-                                  secondary: TimeDisplay.relative(transition.at, now: Date(), locale: locale), copyable: false)
+                        TimeRow(label: transition.key.sentenceCased, date: transition.at)
                     }
                 }
             }
@@ -115,12 +114,10 @@ struct PluginDetailScreen: View {
                     DetailRow(label: "Runner", value: runtime.runner, copyable: false)
                 }
                 if let started = runtime.startedAt, runtime.state != "stopped" {
-                    DetailRow(label: "Started", value: TimeDisplay.dateTime(started, mode: mode, locale: locale),
-                              secondary: TimeDisplay.relative(started, now: Date(), locale: locale), copyable: false)
+                    TimeRow(label: "Started", date: started)
                 }
                 if let stopped = runtime.stoppedAt, runtime.state == "stopped" {
-                    DetailRow(label: "Stopped", value: TimeDisplay.dateTime(stopped, mode: mode, locale: locale),
-                              secondary: TimeDisplay.relative(stopped, now: Date(), locale: locale), copyable: false)
+                    TimeRow(label: "Stopped", date: stopped)
                 }
                 if !runtime.message.isEmpty {
                     DetailRow(label: "Message", value: runtime.message, copyable: true)

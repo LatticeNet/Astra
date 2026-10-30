@@ -58,7 +58,7 @@ struct UserDetailScreen: View {
                 DetailRow(label: "Role", value: AccessUsers.role(user), copyable: false)
                 DetailRow(label: "Sign-in", value: user.hasPassword ? "Password" : "Single sign-on only, no password", copyable: false)
                 DetailRow(label: "Two-factor", value: user.totpEnabled ? "Authenticator on" : "Off", copyable: false)
-                if let created = user.createdAt { AccountTimeRow(label: "Created", date: created) }
+                if let created = user.createdAt { TimeRow(label: "Created", date: created) }
                 DetailRow(label: "User ID", value: user.id, monospaced: true)
             } header: {
                 Text("Account").accessibilityAddTraits(.isHeader)

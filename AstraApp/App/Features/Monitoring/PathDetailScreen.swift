@@ -196,7 +196,7 @@ struct PathDetailScreen: View {
                 DetailRow(label: "Runs heard", value: "\(item.path.samples) of \(item.path.expected) expected", copyable: false)
             }
             if let last = item.path.lastAt {
-                DetailRow(label: "Last run", value: TimeDisplay.relative(last, now: Date(), locale: locale), secondary: TimeDisplay.dateTime(last, mode: mode, locale: locale), copyable: false)
+                TimeRow(label: "Last run", date: last)
             }
         }
     }

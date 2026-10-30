@@ -12,8 +12,6 @@ struct NodeBeaconScreen: View {
     @Environment(ChangeLog.self) private var changes
     @Environment(ActionRunner.self) private var runner
     @Environment(Router.self) private var router
-    @Environment(\.timeZoneMode) private var mode
-    @Environment(\.locale) private var locale
     @State private var state: ResourceState<FleetBeaconView> = .idle
 
     private var node: ObjectRef {
@@ -71,7 +69,7 @@ struct NodeBeaconScreen: View {
                     if !applied.endpoint.isEmpty { DetailRow(label: "Endpoint", value: applied.endpoint, monospaced: true) }
                     DetailRow(label: "Key epoch", value: String(beacon.epoch), copyable: false)
                     if let rotated = beacon.rotatedAt {
-                        DetailRow(label: "Key age", value: FleetAge.short(rotated) ?? "", secondary: TimeDisplay.dateTime(rotated, mode: mode, locale: locale), copyable: false)
+                        TimeRow(label: "Key rotated", date: rotated)
                     }
                     if let applied = beacon.appliedAt {
                         DetailRow(label: "Applied", value: "\(FleetAge.short(applied) ?? "") ago", copyable: false)

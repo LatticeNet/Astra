@@ -30,7 +30,7 @@ struct BadgeRefreshScreen: View {
             }
             Section("Last background refresh") {
                 if let at = BackgroundRefresh.lastRunAt {
-                    DetailRow(label: "When", value: TimeDisplay.dateTime(at, mode: mode, locale: locale), copyable: false)
+                    TimeRow(label: "When", date: at)
                     DetailRow(label: "Outcome", value: BackgroundRefresh.lastOutcome ?? "", copyable: false)
                 } else {
                     Text("Not run yet").foregroundStyle(.secondary)

@@ -73,10 +73,6 @@ struct SystemScreen: View {
         }
     }
 
-    private func stamp(_ date: Date?) -> String? {
-        date.map { TimeDisplay.relative($0, now: Date(), locale: locale) }
-    }
-
     @ViewBuilder
     private func list(_ health: PlatformSystemHealth) -> some View {
         List {
@@ -185,7 +181,7 @@ struct SystemScreen: View {
                 DetailRow(label: "Open files", value: process.openFDs.map { $0.formatted() } ?? "Not reported", copyable: false)
                 DetailRow(label: "Longest GC pause", value: PlatformFormat.latency(process.gcPauseMaxSeconds), copyable: false)
                 if let started = process.startedAt {
-                    DetailRow(label: "Started", value: TimeDisplay.dateTime(started, mode: mode, locale: locale), secondary: stamp(started), copyable: false)
+                    TimeRow(label: "Started", date: started)
                 }
             }
         }
@@ -246,7 +242,7 @@ struct SystemScreen: View {
                 DetailRow(label: "Size", value: PlatformFormat.bytes(store.sizeBytes), secondary: store.path, copyable: false)
                 DetailRow(label: "Sample every", value: "\(store.sampleSeconds) s", copyable: false)
                 if let last = store.lastWriteAt {
-                    DetailRow(label: "Last write", value: TimeDisplay.dateTime(last, mode: mode, locale: locale), secondary: stamp(last), copyable: false)
+                    TimeRow(label: "Last write", date: last)
                 }
                 if store.refusedSamples > 0 || store.lateSamples > 0 {
                     DetailRow(label: "Samples refused", value: "\(store.refusedSamples) refused, \(store.lateSamples) late", copyable: false)

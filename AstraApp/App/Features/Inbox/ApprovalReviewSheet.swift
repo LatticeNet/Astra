@@ -786,7 +786,7 @@ struct InboxReviewHeader: View {
                     }
                     DetailRow(label: "Filed by", value: approval.actorID == ApprovalEvents.systemWriter ? "Lattice" : (approval.actorID.isEmpty ? "agent" : approval.actorID), copyable: false)
                     if let created = approval.createdAt {
-                        DetailRow(label: "Filed", value: RelativeDateFormatter.string(from: created), secondary: TimeDisplay.dateTime(created, mode: mode, locale: locale), copyable: false)
+                        TimeRow(label: "Filed", date: created)
                     }
                     DetailRow(label: "Action", value: ApprovalEvents.rawLabel(approval))
                     if !approval.pluginVersion.isEmpty {

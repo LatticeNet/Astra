@@ -279,8 +279,7 @@ struct SSHGuardNodeScreen: View {
                 DetailRow(label: "Root login", value: sshd.permitRootLogin.isEmpty ? "Not reported" : sshd.permitRootLogin, monospaced: true, copyable: false)
                 DetailRow(label: "sshd listens on", value: sshd.ports.isEmpty ? "Not reported" : sshd.ports.map(String.init).joined(separator: ", "), monospaced: true, copyable: false)
                 if let observed = sshd.observedAt ?? status.realityCollectedAt {
-                    DetailRow(label: "Observed", value: TimeDisplay.relative(observed, now: .now, locale: locale),
-                              secondary: TimeDisplay.dateTime(observed, mode: mode, locale: locale), copyable: false)
+                    TimeRow(label: "Observed", date: observed)
                 }
             } else {
                 Label(status.sshdNote.isEmpty ? "This node has not reported its sshd configuration." : status.sshdNote, systemImage: "questionmark.circle")
@@ -332,8 +331,7 @@ struct SSHGuardNodeScreen: View {
             DetailRow(label: "SSH port", value: String(port), monospaced: true, copyable: false)
         }
         if let applied = knock.appliedAt {
-            DetailRow(label: "Applied", value: TimeDisplay.relative(applied, now: .now, locale: locale),
-                      secondary: TimeDisplay.dateTime(applied, mode: mode, locale: locale), copyable: false)
+            TimeRow(label: "Applied", date: applied)
         }
         if knock.previousHonoured {
             Label("Mid-rotation: the previous sequence still opens this node until the confirm applies.", systemImage: "arrow.triangle.2.circlepath")

@@ -14,8 +14,6 @@ struct StoreEntryScreen: View {
     @Environment(SessionStore.self) private var session
     @Environment(Router.self) private var router
     @Environment(\.scenePhase) private var scenePhase
-    @Environment(\.timeZoneMode) private var mode
-    @Environment(\.locale) private var locale
 
     @State private var listing = PlatformBucketModel()
     @State private var value: PlatformStoreValue?
@@ -110,8 +108,7 @@ struct StoreEntryScreen: View {
                     DetailRow(label: "Type", value: row.contentType.isEmpty ? "Not set" : row.contentType, copyable: false)
                 }
                 if let updated = row.updatedAt {
-                    DetailRow(label: "Modified", value: TimeDisplay.dateTime(updated, mode: mode, locale: locale),
-                              secondary: TimeDisplay.relative(updated, now: Date(), locale: locale), copyable: false)
+                    TimeRow(label: "Modified", date: updated)
                 }
             }
             valueSection(row)

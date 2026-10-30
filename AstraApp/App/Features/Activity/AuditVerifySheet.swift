@@ -7,7 +7,6 @@ struct AuditVerifySheet: View {
     @Environment(AuditStore.self) private var store
     @Environment(\.dismiss) private var dismiss
     @Environment(\.dynamicTypeSize) private var typeSize
-    @Environment(\.timeZoneMode) private var mode
     @Environment(\.locale) private var locale
 
     var body: some View {
@@ -100,7 +99,7 @@ struct AuditVerifySheet: View {
                         DetailRow(label: "Pending anchor", value: "\(pending.count.formatted(.number.locale(locale))), \(pending.head)", monospaced: true)
                     }
                     if let at = store.verify.loadedAt {
-                        DetailRow(label: "Verified", value: TimeDisplay.dateTime(at, mode: mode, locale: locale), copyable: false)
+                        TimeRow(label: "Verified", date: at)
                     }
                 } header: {
                     Text("Chain").accessibilityAddTraits(.isHeader)

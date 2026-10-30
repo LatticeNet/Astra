@@ -197,21 +197,6 @@ struct AccountNoticeRow: View {
     }
 }
 
-/// An absolute time with the other zone underneath (section 6.16).
-struct AccountTimeRow: View {
-    let label: String
-    let date: Date
-
-    @Environment(\.timeZoneMode) private var mode
-    @Environment(\.locale) private var locale
-
-    var body: some View {
-        let now = Date()
-        DetailRow(label: label, value: AccessTime.dateTime(date, now: now, mode: mode, locale: locale),
-                  secondary: AccessTime.dateTime(date, now: now, mode: mode.other, locale: locale), copyable: false)
-    }
-}
-
 /// The node allowlist of a token or account, by name where the fleet is known.
 struct AccountAllowlistSection: View {
     let allowlist: [String]

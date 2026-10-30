@@ -28,10 +28,13 @@ struct StorageTokenDetailScreen: View {
         .toolbar { toolbar }
     }
 
-    private func stamp(_ label: String, _ date: Date?) -> DetailRow {
-        guard let date else { return DetailRow(label: label, value: label == "Last used" ? "Never" : "Not recorded", copyable: false) }
-        return DetailRow(label: label, value: TimeDisplay.dateTime(date, mode: mode, locale: locale),
-                         secondary: TimeDisplay.relative(date, now: Date(), locale: locale), copyable: false)
+    @ViewBuilder
+    private func stamp(_ label: String, _ date: Date?) -> some View {
+        if let date {
+            TimeRow(label: label, date: date)
+        } else {
+            DetailRow(label: label, value: label == "Last used" ? "Never" : "Not recorded", copyable: false)
+        }
     }
 
     @ViewBuilder

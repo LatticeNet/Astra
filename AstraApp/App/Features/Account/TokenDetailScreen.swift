@@ -100,8 +100,8 @@ struct TokenDetailScreen: View {
             AccountAllowlistSection(allowlist: token.serverAllowlist, footer: "The allowlist confines node-scoped actions. Fleet-wide writes refuse a confined token outright.")
 
             Section {
-                if let created = token.createdAt { AccountTimeRow(label: "Created", date: created) }
-                if let revoked = token.revokedAt { AccountTimeRow(label: "Revoked", date: revoked) }
+                if let created = token.createdAt { TimeRow(label: "Created", date: created) }
+                if let revoked = token.revokedAt { TimeRow(label: "Revoked", date: revoked) }
                 DetailRow(label: "Last used", value: "Not recorded by the server", copyable: false)
                 DetailRow(label: "Created by", value: token.actorID, monospaced: true)
                 DetailRow(label: "Token ID", value: token.id, monospaced: true)

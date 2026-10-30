@@ -226,6 +226,23 @@ struct ValueBarRow: View {
     }
 }
 
+/// A timestamp detail row: the absolute time in the chosen zone, the other
+/// zone underneath (section 6.16). The year shows when it is not this year,
+/// since "Sep 22" alone reads as last month.
+struct TimeRow: View {
+    let label: String
+    let date: Date
+
+    @Environment(\.timeZoneMode) private var mode
+    @Environment(\.locale) private var locale
+
+    var body: some View {
+        let now = Date()
+        DetailRow(label: label, value: AccessTime.dateTime(date, now: now, mode: mode, locale: locale),
+                  secondary: AccessTime.dateTime(date, now: now, mode: mode.other, locale: locale), copyable: false)
+    }
+}
+
 /// A web-only destination: "Open on web" with the console path as a footnote.
 struct WebLinkRow: View {
     var title = "Open on web"

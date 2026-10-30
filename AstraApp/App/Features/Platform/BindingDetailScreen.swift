@@ -9,8 +9,6 @@ struct BindingDetailScreen: View {
     @Environment(ChangeLog.self) private var changes
     @Environment(ActionRunner.self) private var runner
     @Environment(Router.self) private var router
-    @Environment(\.timeZoneMode) private var mode
-    @Environment(\.locale) private var locale
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -50,12 +48,10 @@ struct BindingDetailScreen: View {
                 DetailRow(label: "Who can read", value: PlatformAccessMode.of(origin: binding.kind).sentence, copyable: false)
                 DetailRow(label: "Enabled", value: binding.enabled ? "Yes" : "No, the route answers nothing", copyable: false)
                 if let created = binding.createdAt {
-                    DetailRow(label: "Created", value: TimeDisplay.dateTime(created, mode: mode, locale: locale),
-                              secondary: TimeDisplay.relative(created, now: Date(), locale: locale), copyable: false)
+                    TimeRow(label: "Created", date: created)
                 }
                 if let updated = binding.updatedAt {
-                    DetailRow(label: "Updated", value: TimeDisplay.dateTime(updated, mode: mode, locale: locale),
-                              secondary: TimeDisplay.relative(updated, now: Date(), locale: locale), copyable: false)
+                    TimeRow(label: "Updated", date: updated)
                 }
             }
             Section("Serves") {

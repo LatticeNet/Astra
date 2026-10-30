@@ -89,7 +89,7 @@ struct SecurityScreen: View {
                 DetailRow(label: "Signed in as", value: identity.displayName, copyable: false)
                 DetailRow(label: "Actor", value: identity.actorID, monospaced: true)
                 if let expires = session.revealSession?.expiresAt {
-                    AccountTimeRow(label: "Session ends", date: expires)
+                    TimeRow(label: "Session ends", date: expires)
                 }
             } header: {
                 Text("Account").accessibilityAddTraits(.isHeader)
