@@ -204,15 +204,35 @@ struct WebLinkRow: View {
     var title = "Open on web"
     let path: LatticeConsolePath
     @Environment(Router.self) private var router
+    @Environment(\.dynamicTypeSize) private var typeSize
 
     var body: some View {
         Button {
             router.openOnWeb(path)
         } label: {
+            label
+                .frame(maxWidth: .infinity, minHeight: Spacing.minimumTarget, alignment: .leading)
+                .contentShape(Rectangle())
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("\(title), \(path.display)")
+        }
+        .accessibilityHint("Opens the console in your browser")
+    }
+
+    // Like StatusRow: at accessibility sizes the glyph runs inline with the
+    // title and the path takes the full width instead of starting indented.
+    @ViewBuilder
+    private var label: some View {
+        if typeSize.isAccessibilitySize {
+            VStack(alignment: .leading, spacing: Spacing.xxs) {
+                Text("\(Image(systemName: "safari")) \(title) \(Image(systemName: "arrow.up.forward"))")
+                    .foregroundStyle(Color.accentText)
+                Text(path.display).textRole(.footnote)
+            }
+        } else {
             HStack(spacing: Spacing.m) {
                 Image(systemName: "safari")
                     .foregroundStyle(Color.accentText)
-                    .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: Spacing.xxs) {
                     Text(title).foregroundStyle(Color.accentText)
                     Text(path.display).textRole(.footnote).lineLimit(2)
@@ -221,11 +241,8 @@ struct WebLinkRow: View {
                 Image(systemName: "arrow.up.forward")
                     .font(.footnote.weight(.semibold))
                     .foregroundStyle(.tertiary)
-                    .accessibilityHidden(true)
             }
-            .frame(minHeight: Spacing.minimumTarget)
         }
-        .accessibilityHint("Opens the console in your browser")
     }
 }
 
