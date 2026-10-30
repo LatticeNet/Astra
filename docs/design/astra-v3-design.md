@@ -1655,7 +1655,7 @@ Agents cannot tap, swipe or rotate a simulator, and the project has no UI test t
 | `-AstraBoldText YES` | Sets `\.legibilityWeight` to `.bold` at the root |
 | `-AstraDifferentiateWithoutColor YES` | Sets `\.astraDifferentiateWithoutColor` |
 
-Text size and contrast use `xcrun simctl ui <udid> content_size accessibility-extra-extra-extra-large` (AX5) or `extra-extra-extra-large`, and `xcrun simctl ui <udid> increase_contrast enabled`; appearance uses `xcrun simctl ui <udid> appearance dark`.
+Text size and contrast use `xcrun simctl ui <udid> content_size accessibility-extra-extra-extra-large` (AX5) or `extra-extra-extra-large`, and `xcrun simctl ui <udid> increase_contrast enabled`; appearance uses `xcrun simctl ui <udid> appearance dark`. A change of either makes the scene inactive, which clears a reveal value step (F-14), so for that step set appearance and text size first and then launch with `-AstraPresent reveal:<id> -AstraAuth succeed -AstraAutoConfirm YES`.
 
 **Every module:**
 
