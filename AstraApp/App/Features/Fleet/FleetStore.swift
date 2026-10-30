@@ -20,6 +20,7 @@ final class FleetStore {
     @ObservationIgnored var interactionBusy = false
     @ObservationIgnored private var lastInteraction = Date.distantPast
     @ObservationIgnored private var releaseTask: Task<Void, Never>?
+    @ObservationIgnored private var groupsTask: Task<Void, Never>?
     private(set) var geo: ResourceState<[NodeGeoView]> = .idle
     private(set) var paths: ResourceState<PathsResponse> = .idle
 
@@ -81,11 +82,17 @@ final class FleetStore {
 
     /// Takes a node list another Fleet read already fetched, when this store
     /// has none yet, and loads the group names it needs to label them.
+    /// Group names load even while a list read is in flight: a cold deep link
+    /// otherwise showed raw group ids until the next poll.
     func adopt(_ records: [FleetNodeRecord]) {
-        guard nodes.value == nil, !nodes.isLoading else { return }
-        nodes = .loaded(records, at: Date())
-        guard groups == nil, let client = session.client else { return }
-        Task { groups = await groupsIfReadable(client) ?? groups }
+        if nodes.value == nil, !nodes.isLoading {
+            nodes = .loaded(records, at: Date())
+        }
+        guard groups == nil, groupsTask == nil, let client = session.client else { return }
+        groupsTask = Task {
+            groups = await groupsIfReadable(client) ?? groups
+            groupsTask = nil
+        }
     }
 
     private func groupsIfReadable(_ client: LatticeClient) async -> FleetGroupsResponse? {

@@ -236,7 +236,7 @@ struct MonitoringWindowRow: View {
     }
 
     private var subject: String {
-        let names = window.nodeIDs.map { nodes.name(for: $0) } + window.groupIDs.map { "group \($0)" }
+        let names = window.nodeIDs.map { nodes.name(for: $0) } + window.groupIDs.map { "group \(nodes.groupName(for: $0))" }
         return names.count > 2 ? "\(names.count) subjects" : names.joined(separator: ", ")
     }
 

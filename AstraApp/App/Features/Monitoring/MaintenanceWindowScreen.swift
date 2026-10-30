@@ -80,7 +80,7 @@ struct MaintenanceWindowScreen: View {
                 }
                 ForEach(window.groupIDs, id: \.self) { groupID in
                     NavigationLink(value: AppRoute.fleet(.group(id: groupID))) {
-                        LabeledContent("Group", value: groupID).frame(minHeight: Spacing.minimumTarget)
+                        LabeledContent("Group", value: nodes.groupName(for: groupID)).frame(minHeight: Spacing.minimumTarget)
                     }
                 }
                 if let start = window.startsAt {
