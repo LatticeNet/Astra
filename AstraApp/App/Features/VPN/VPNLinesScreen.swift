@@ -11,6 +11,7 @@ struct VPNLinesScreen: View {
     @Environment(VPNStore.self) private var store
     @Environment(ChangeLog.self) private var changes
     @Environment(Router.self) private var router
+    @Environment(DeepLinkRouter.self) private var deepLinks
     @Environment(NetworkMonitor.self) private var network
     @Environment(\.accessibilityVoiceOverEnabled) private var voiceOver
 
@@ -220,8 +221,14 @@ struct VPNLinesScreen: View {
         ToolbarItem(placement: .topBarTrailing) {
             Menu {
                 Button("VPN users", systemImage: "person.2") { router.push(.vpn(.users)) }
-                Button("Chains in Monitor", systemImage: "waveform.path.ecg") {
-                    router.select(tab: .monitor, scope: "paths")
+                // Through the link router, which also picks the Chains view
+                // and pops whatever is pushed on the Monitor stack.
+                Button {
+                    deepLinks.handle(.monitoring(segment: .paths, view: MonitoringPathsView.chains.rawValue, query: nil))
+                } label: {
+                    Text("Line chains")
+                    Text("Opens in Monitor")
+                    Image(systemName: "waveform.path.ecg")
                 }
                 Button("Lines on web", systemImage: "safari") { router.openOnWeb(.vpnLines) }
             } label: {
