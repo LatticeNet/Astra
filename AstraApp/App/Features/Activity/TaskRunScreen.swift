@@ -64,7 +64,7 @@ struct TaskRunScreen: View {
         return List {
             ActivityRefreshError(state: model.task, noun: "the run", retry: reload)
             Section {
-                ActivityStateHeader(style: StatusStyle.task(state), reason: headerReason(task, state: state, summary: summary))
+                taskHeader(task, state: state, summary: summary)
                 originLine(task)
             }
             nodesSection(task, rows: rows)
@@ -96,6 +96,23 @@ struct TaskRunScreen: View {
         }
         .listStyle(.insetGrouped)
         .refreshable { await model.load(id: id, hint: model.task.value, session: session) }
+    }
+
+    /// A task is an object, not an event, so it leads with a status row
+    /// (section 5.0): the id, then the lowercase word leading the progress.
+    /// Only a problem's line reads as a reason under it.
+    private func taskHeader(_ task: LatticeTask, state: TaskRunState, summary: TasksRunSummary) -> some View {
+        let style = StatusStyle.task(state)
+        let line = headerReason(task, state: state, summary: summary)
+        return StatusRow(
+            style: style,
+            title: task.id,
+            detail: style.tone.isProblem ? nil : line,
+            reason: style.tone.isProblem ? line : nil,
+            reasonLineLimit: nil,
+            titleIsIdentifier: true
+        )
+        .accessibilityAddTraits(.isHeader)
     }
 
     /// The one line under the state: how far a live run got (a count, never

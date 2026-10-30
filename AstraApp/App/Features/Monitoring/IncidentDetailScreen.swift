@@ -129,21 +129,12 @@ struct IncidentDetailScreen: View {
                 }
             }
             Section {
-                Text(incident.displayTitle)
-                    .textRole(.detailHeader)
-                    .accessibilityAddTraits(.isHeader)
-                HStack(alignment: .firstTextBaseline, spacing: Spacing.m) {
-                    StatusGlyph(style: style)
-                    VStack(alignment: .leading, spacing: Spacing.xxs) {
-                        Text("\(incident.severity.capitalized), \(style.word)")
-                            .foregroundStyle(style.tone.isProblem ? style.tone.word : .primary)
-                        if incident.flapping {
-                            Label("flapping, \(incident.flaps) flaps", systemImage: StatusStyle.flapping.symbol)
-                                .textRole(.rowDetail)
-                        }
-                    }
-                }
-                .accessibilityElement(children: .combine)
+                EventHeader(
+                    style: style,
+                    title: incident.displayTitle,
+                    detail: [incident.severity.lowercased(), incident.flapping ? "flapping, \(incident.flaps) flaps" : nil]
+                        .compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · ")
+                )
                 if incident.state == "pending", let opens = incident.opensAt {
                     Label("Opens at \(TimeDisplay.clock(opens, mode: mode, locale: locale)) if still failing", systemImage: "hourglass")
                         .foregroundStyle(.secondary)

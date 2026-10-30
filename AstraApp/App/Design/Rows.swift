@@ -102,6 +102,41 @@ struct StatusRow: View {
     }
 }
 
+/// The first row of a detail screen whose subject is an event (section 5.0):
+/// the full sentence in the detail header style, never truncated, then the
+/// lowercase state word with its symbol leading the detail, and the reason
+/// for a problem. Objects that are not events lead with a `StatusRow`.
+struct EventHeader: View {
+    let style: StatusStyle
+    let title: String
+    var detail: String?
+    var reason: String?
+
+    private var shownDetail: String? { detail?.isEmpty == false ? detail : nil }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Spacing.xs) {
+            Text(title)
+                .textRole(.detailHeader)
+                .fixedSize(horizontal: false, vertical: true)
+            // One Text, so the state line wraps as a sentence at accessibility sizes.
+            Text("\(Text.glyph(style)) \(Text(style.word).foregroundStyle(style.tone.word))\(Text(shownDetail.map { " · \($0)" } ?? "").foregroundStyle(.secondary))")
+                .font(.subheadline)
+                .fixedSize(horizontal: false, vertical: true)
+            if let reason {
+                Text(reason)
+                    .textRole(.rowReason(style.tone.word))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .frame(maxWidth: .infinity, minHeight: Spacing.minimumTarget, alignment: .leading)
+        .padding(.vertical, Spacing.xs)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel([title, style.word, shownDetail, reason].compactMap { $0 }.joined(separator: ", "))
+        .accessibilityAddTraits(.isHeader)
+    }
+}
+
 /// Label and value. Long monospaced values wrap by character; the whole row
 /// copies the value.
 struct DetailRow: View {

@@ -113,10 +113,10 @@ struct DeliveryDetailScreen: View {
         return List {
             Section {
                 NotifyRefreshError(state: model.delivery, noun: "the delivery", retry: refresh)
-                NotifyDetailHeader(
+                EventHeader(
                     style: .notifySent(delivery, now: Date()),
                     title: delivery.title.isEmpty ? store.eventLabel(delivery.eventType) : delivery.title,
-                    detail: [NotifySent.severityWord(delivery), delivery.createdAt.map { NotifyTime.when($0, mode: mode, locale: locale) }].compactMap { $0 }.joined(separator: " · "),
+                    detail: [NotifySent.severityWord(delivery).lowercased(), delivery.createdAt.map { NotifyTime.when($0, mode: mode, locale: locale) }].compactMap { $0 }.joined(separator: " · "),
                     reason: headline(delivery, state: state)
                 )
             }

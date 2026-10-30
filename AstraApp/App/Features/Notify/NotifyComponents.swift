@@ -398,34 +398,3 @@ struct NotifyStatementRow: View {
     }
 }
 
-/// The first row of a detail screen whose subject is a sentence (section
-/// 5.0): the full sentence in the detail header style, never truncated,
-/// then the state as symbol and word, and the reason for a problem.
-struct NotifyDetailHeader: View {
-    let style: StatusStyle
-    let title: String
-    var detail: String?
-    var reason: String?
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: Spacing.xs) {
-            Text(title)
-                .textRole(.detailHeader)
-                .fixedSize(horizontal: false, vertical: true)
-            // One Text, so the state line wraps as a sentence at accessibility sizes.
-            Text("\(Text.glyph(style)) \(Text(style.word).foregroundStyle(style.tone.word))\(Text(detail.map { " · \($0)" } ?? "").foregroundStyle(.secondary))")
-                .font(.subheadline)
-                .fixedSize(horizontal: false, vertical: true)
-            if let reason {
-                Text(reason)
-                    .textRole(.rowReason(style.tone.word))
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-        }
-        .frame(maxWidth: .infinity, minHeight: Spacing.minimumTarget, alignment: .leading)
-        .padding(.vertical, Spacing.xs)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel([title, style.word, detail, reason].compactMap { $0 }.joined(separator: ", "))
-        .accessibilityAddTraits(.isHeader)
-    }
-}

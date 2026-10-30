@@ -298,6 +298,7 @@ struct FleetNodeHeader: View {
             TimelineView(.periodic(from: .now, by: FleetAge.tick)) { context in
                 FleetHonestyRow(
                     style: style,
+                    title: node.displayName,
                     headline: headline(node, now: context.date),
                     detail: detail(node, now: context.date),
                     reason: honesty == .degraded || honesty == .offline ? (node.statusReason.isEmpty ? nil : node.statusReason) : nil,
@@ -329,20 +330,22 @@ struct FleetNodeHeader: View {
     private func headline(_ node: LatticeNode, now: Date) -> String {
         let since = node.statusSince.flatMap { FleetAge.short($0, now: now) }
         switch node.honesty {
-        case .online: return since.map { "Online for \($0)" } ?? "Online"
-        case .degraded: return since.map { "Degraded for \($0)" } ?? "Degraded"
-        case .offline: return since.map { "Offline for \($0)" } ?? "Offline"
-        case .neverReported: return "Never reported"
-        case .disabled: return since.map { "Disabled for \($0), cannot authenticate" } ?? "Disabled, cannot authenticate"
+        case .online: return since.map { "online for \($0)" } ?? "online"
+        case .degraded: return since.map { "degraded for \($0)" } ?? "degraded"
+        case .offline: return since.map { "offline for \($0)" } ?? "offline"
+        case .neverReported: return "never reported"
+        case .disabled: return since.map { "disabled for \($0), cannot authenticate" } ?? "disabled, cannot authenticate"
         }
     }
 
 }
 
-/// The node's state as the header's first row: glyph, the word with its
-/// duration ("Offline for 12m"), colored for problems, and the reason.
+/// The node's header row, shaped like `StatusRow` (section 5.0): the name,
+/// then the lowercase honesty word with its duration ("offline for 12m")
+/// leading the detail, the reason, and how far the agent is behind.
 struct FleetHonestyRow: View {
     let style: StatusStyle
+    let title: String
     let headline: String
     var detail: String?
     let reason: String?
@@ -361,18 +364,15 @@ struct FleetHonestyRow: View {
             VStack(alignment: .leading, spacing: Spacing.xxs) {
                 Group {
                     if typeSize.isAccessibilitySize {
-                        Text("\(Text.glyph(style)) \(headline)")
+                        Text("\(Text.glyph(style)) \(title)")
                     } else {
-                        Text(headline)
+                        Text(title)
                     }
                 }
-                .font(.headline)
-                .foregroundStyle(style.tone.isProblem ? style.tone.word : Color.primary)
+                .textRole(.rowTitle)
+                statusLine.textRole(.rowDetail)
                 if let reason {
                     Text(TimeDisplay.localizingStamps(in: reason, mode: mode, locale: locale)).textRole(.rowReason(style.tone.word))
-                }
-                if let detail, !detail.isEmpty {
-                    Text(detail).textRole(.rowDetail)
                 }
                 if behind > 0 {
                     Label {
@@ -389,7 +389,13 @@ struct FleetHonestyRow: View {
         .padding(.vertical, Spacing.xs)
         .frame(minHeight: Spacing.minimumTarget)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel([headline, reason, detail, behind > 0 ? "\(behind) behind the newest agent" : nil].compactMap { $0 }.joined(separator: ", "))
+        .accessibilityLabel([title, headline, reason, detail, behind > 0 ? "\(behind) behind the newest agent" : nil].compactMap { $0 }.joined(separator: ", "))
         .accessibilityAddTraits(.isHeader)
+    }
+
+    private var statusLine: Text {
+        let word = Text(headline).foregroundStyle(style.tone.word)
+        guard let detail, !detail.isEmpty else { return word }
+        return Text("\(word) · \(detail)")
     }
 }
