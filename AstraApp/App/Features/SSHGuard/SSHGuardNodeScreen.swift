@@ -109,6 +109,7 @@ struct SSHGuardNodeScreen: View {
         content
             .navigationTitle(name)
             .navigationSubtitle(subtitle)
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) { menu }
             }

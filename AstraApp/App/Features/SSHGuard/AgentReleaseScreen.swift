@@ -18,6 +18,7 @@ struct AgentReleaseScreen: View {
         content
             .navigationTitle(version)
             .navigationSubtitle(subtitle)
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu {
