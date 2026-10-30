@@ -151,9 +151,34 @@ struct DetailRow: View {
         .accessibilityElement(children: .combine)
     }
 
-    /// Inserts zero-width spaces so digests and addresses wrap anywhere.
+    /// Inserts zero-width spaces so identifiers wrap at their own seams: after
+    /// a path, host or key separator, and anywhere inside a run too long to
+    /// have one (a digest or a key). A value with spaces keeps word wrapping
+    /// and only its overlong words gain break points.
     static func breakable(_ value: String) -> String {
-        value.map(String.init).joined(separator: "\u{200B}")
+        let zeroWidthSpace = "\u{200B}"
+        let separators: Set<Character> = ["/", ".", "-", "_", ":", ",", "@", "=", "?", "&"]
+        let breakAtSeparators = !value.contains(where: \.isWhitespace)
+        var result = ""
+        var run = ""
+        func flush() {
+            result += run.count > 16 ? run.map(String.init).joined(separator: zeroWidthSpace) : run
+            run = ""
+        }
+        for character in value {
+            if character.isWhitespace {
+                flush()
+                result.append(character)
+            } else if breakAtSeparators, separators.contains(character) {
+                flush()
+                result.append(character)
+                result += zeroWidthSpace
+            } else {
+                run.append(character)
+            }
+        }
+        flush()
+        return result
     }
 }
 
