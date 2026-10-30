@@ -93,24 +93,28 @@ struct GroupsScreen: View {
     }
 }
 
-/// One group: its name, kind and member health. A group with offline
-/// members carries the warning glyph and word.
+/// One group: its name, kind and member health. The rollup borrows the node
+/// states, so offline members read as fail red with the offline symbol and a
+/// healthy group as online, matching the Monitor Overview aggregates.
 struct FleetGroupRow: View {
     let group: FleetGroupView
     var degraded = 0
 
     var body: some View {
         let rollup = group.rollup
+        let offline = StatusStyle.node(.offline)
+        let warn = StatusStyle.node(.degraded)
+        let online = StatusStyle.node(.online)
         let style: StatusStyle = rollup.offline > 0
             ? StatusStyle(word: degraded > 0 ? "\(rollup.offline) offline, \(degraded) degraded" : "\(rollup.offline) offline",
-                          symbol: "exclamationmark.triangle.fill", tone: .warn)
+                          symbol: offline.symbol, tone: offline.tone)
             : degraded > 0
-            ? StatusStyle(word: "\(degraded) degraded", symbol: "exclamationmark.triangle.fill", tone: .warn)
+            ? StatusStyle(word: "\(degraded) degraded", symbol: warn.symbol, tone: warn.tone)
             : (rollup.total == 0
                 ? StatusStyle(word: "empty", symbol: "rectangle.3.group", tone: .quiet)
                 : (rollup.disabled > 0
-                    ? StatusStyle(word: "\(rollup.online) reporting, \(rollup.disabled) disabled", symbol: "rectangle.3.group.fill", tone: .ok)
-                    : StatusStyle(word: "all reporting", symbol: "rectangle.3.group.fill", tone: .ok)))
+                    ? StatusStyle(word: "\(rollup.online) reporting, \(rollup.disabled) disabled", symbol: online.symbol, tone: online.tone)
+                    : StatusStyle(word: "all reporting", symbol: online.symbol, tone: online.tone)))
         StatusRow(
             style: style,
             title: group.displayName,

@@ -103,7 +103,7 @@ struct DeliveryDetailScreen: View {
 
     private var subtitle: String {
         guard let delivery = current else { return "" }
-        let word = NotifySentState.of(delivery, now: Date()).word
+        let word = StatusStyle.notifySent(delivery, now: Date()).word
         return word.prefix(1).uppercased() + word.dropFirst()
     }
 
@@ -115,7 +115,7 @@ struct DeliveryDetailScreen: View {
             Section {
                 NotifyRefreshError(state: model.delivery, noun: "the delivery", retry: refresh)
                 NotifyDetailHeader(
-                    style: .notifySent(state),
+                    style: .notifySent(delivery, now: Date()),
                     title: delivery.title.isEmpty ? store.eventLabel(delivery.eventType) : delivery.title,
                     detail: [NotifySent.severityWord(delivery), delivery.createdAt.map { NotifyTime.when($0, mode: mode, locale: locale) }].compactMap { $0 }.joined(separator: " · "),
                     reason: headline(delivery, state: state)
@@ -142,7 +142,9 @@ struct DeliveryDetailScreen: View {
         case .held, .notRouted:
             return NotifySentNote.of(delivery)?.sentence(mode: mode, locale: locale)
         case .queued:
-            return "Planned and waiting for its first attempt."
+            return NotifySent.isOverdue(delivery, now: Date())
+                ? "Due for its first attempt but not sent yet. The server's outbox may be stuck; check System in Browse."
+                : "Planned and waiting for its first attempt."
         case .sent:
             return nil
         }

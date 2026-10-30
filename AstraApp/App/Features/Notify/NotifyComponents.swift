@@ -10,10 +10,19 @@ extension StatusStyle {
         case .sent: StatusStyle(word: "sent", symbol: "checkmark.circle.fill", tone: .ok)
         case .failed: StatusStyle(word: "failed", symbol: "xmark.circle.fill", tone: .fail)
         case .retrying: StatusStyle(word: "retrying", symbol: "arrow.clockwise.circle", tone: .warn)
-        case .queued: StatusStyle(word: "queued", symbol: "clock", tone: .warn)
+        case .queued: StatusStyle(word: "queued", symbol: "clock", tone: .quiet)
         case .notRouted: StatusStyle(word: "not routed", symbol: "bell.slash", tone: .quiet)
         case .held: StatusStyle(word: "held", symbol: "pause.circle", tone: .quiet)
         }
+    }
+
+    /// A queued delivery is quiet until it is past its due time, then it
+    /// warns with its own word, so a row queued seconds ago is not a problem.
+    static func notifySent(_ delivery: NotifyDelivery, now: Date) -> StatusStyle {
+        if NotifySent.isOverdue(delivery, now: now) {
+            return StatusStyle(word: "overdue", symbol: "clock.badge.exclamationmark", tone: .warn)
+        }
+        return notifySent(NotifySentState.of(delivery, now: now))
     }
 
     static func notifyChannel(_ channel: NotifyChannel) -> StatusStyle {
@@ -287,8 +296,9 @@ struct NotifyDeliveryRow: View {
     @Environment(\.locale) private var locale
 
     var body: some View {
-        let state = NotifySentState.of(delivery, now: Date())
-        let style = StatusStyle.notifySent(state)
+        let now = Date()
+        let state = NotifySentState.of(delivery, now: now)
+        let style = StatusStyle.notifySent(delivery, now: now)
         let title = delivery.title.isEmpty ? eventLabel : delivery.title
         StatusRow(
             style: style,
@@ -325,7 +335,9 @@ struct NotifyDeliveryRow: View {
             return NotifySent.cause(delivery).map { $0.sentence.prefix(1).uppercased() + $0.sentence.dropFirst() }
         case .held, .notRouted:
             return NotifySentNote.of(delivery)?.sentence(mode: mode, locale: locale)
-        case .sent, .queued:
+        case .queued:
+            return NotifySent.isOverdue(delivery, now: Date()) ? "Due but not sent yet" : nil
+        case .sent:
             return nil
         }
     }

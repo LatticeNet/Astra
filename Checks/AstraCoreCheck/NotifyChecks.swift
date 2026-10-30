@@ -222,6 +222,15 @@ private func checkNotifySentLog() throws {
     try expectEqual(NotifySentState.of(try row("planned", attempts: failedAttempt), now: now), .retrying, "an attempted planned row is retrying")
     try expectEqual(NotifySentState.notRouted.word, "not routed", "the not-routed word")
 
+    // A queued row is ordinary until it is a minute past due, then overdue.
+    let queued = try row("planned")
+    try expect(NotifySent.isOverdue(queued, now: now), "queued an hour ago is overdue")
+    try expect(!NotifySent.isOverdue(queued, now: notifyInstant("2026-10-28T11:00:30Z")), "queued 30 seconds ago is not overdue")
+    let retrying = try row("planned", attempts: failedAttempt)
+    let sent = try row("sent")
+    try expect(!NotifySent.isOverdue(retrying, now: now), "a retrying row is never overdue")
+    try expect(!NotifySent.isOverdue(sent, now: now), "a sent row is never overdue")
+
     try expectEqual(NotifySent.cause(try row("failed", attempts: failedAttempt)), .rateLimited(status: 429), "the cause is the last failed attempt, rate limit defaults to 429")
     try expectEqual(NotifyFailureCause.of(kind: "upstream_4xx", status: 401).sentence, "the endpoint refused it (HTTP 401), so the key, token or chat id is likely wrong", "refused sentence")
     try expectEqual(NotifyFailureCause.of(kind: "weird", status: nil), .failed, "an unknown kind is a plain failure")

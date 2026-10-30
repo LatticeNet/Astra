@@ -111,6 +111,19 @@ public enum NotifySentState: String, CaseIterable, Sendable, Hashable {
 }
 
 public enum NotifySent {
+    /// How long past its due time a queued delivery may wait before it reads
+    /// as overdue. The server sends a due row within seconds and gives up on a
+    /// send after 15 seconds, so a minute means the outbox is not draining.
+    public static let overdueGrace: TimeInterval = 60
+
+    /// A queued delivery that should have gone out by now. A fresh one is
+    /// ordinary and stays quiet; this one owes the operator an answer.
+    public static func isOverdue(_ delivery: NotifyDelivery, now: Date) -> Bool {
+        guard NotifySentState.of(delivery, now: now) == .queued,
+              let due = delivery.nextAttemptAt ?? delivery.createdAt else { return false }
+        return now.timeIntervalSince(due) > overdueGrace
+    }
+
     /// The latest failed attempt, which is what a row's cause names.
     public static func lastFailedAttempt(_ delivery: NotifyDelivery) -> NotifyAttempt? {
         delivery.attempts.last { !$0.ok }
