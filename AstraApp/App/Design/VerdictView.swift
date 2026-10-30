@@ -45,7 +45,8 @@ struct VerdictView: View {
                 .frame(minHeight: Spacing.minimumTarget - 12)
         }
         .buttonStyle(.bordered)
-        .tint(.secondary)
+        // Accent text on the bordered fill: it reads as tappable and clears 4.5:1.
+        .tint(Color.accentText)
         .frame(minHeight: Spacing.minimumTarget)
     }
 }
