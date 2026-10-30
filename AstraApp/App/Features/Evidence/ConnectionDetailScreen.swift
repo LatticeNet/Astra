@@ -93,6 +93,7 @@ struct ConnectionDetailScreen: View {
                     }
                 }
             }
+            .onChange(of: id) { _, newID in model = EvidenceConnectionModel(id: newID) }
             .polling(.standard, version: changes.version([.evidence])) {
                 await nodes.refreshIfOlder(than: 15)
                 return await model.refresh(session: session)

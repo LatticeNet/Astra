@@ -175,8 +175,8 @@ struct NodeDetailScreen: View {
         }
         .navigationTitle(model?.node?.displayName ?? displayFallback)
         .navigationBarTitleDisplayMode(.inline)
-        .task {
-            if model == nil {
+        .task(id: id) {
+            if model?.nodeID != id {
                 selected = tab
                 model = FleetNodeDetailModel(nodeID: id, session: session) { [store] records in store.adopt(records) }
             }

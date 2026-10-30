@@ -112,6 +112,7 @@ struct SSHGuardNodeScreen: View {
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) { menu }
             }
+            .onChange(of: nodeID) { _, newID in model = SSHGuardNodeModel(nodeID: newID) }
             .sheet(item: $armTarget) { target in
                 SSHGuardArmSheet(nodeID: target.nodeID, rotate: target.rotate)
             }

@@ -24,8 +24,11 @@ struct AppRouteDestination: View {
 }
 
 extension View {
-    /// Registers the app's destinations on a tab stack.
+    /// Registers the app's destinations on a tab stack. The `.id` ties each
+    /// pushed screen's identity to its route value: NavigationStack reuses a
+    /// destination at the same depth when only the value changes, so a deep
+    /// link from node A to node B would otherwise keep A's `@State` models.
     func appRouteDestinations() -> some View {
-        navigationDestination(for: AppRoute.self) { AppRouteDestination(route: $0) }
+        navigationDestination(for: AppRoute.self) { AppRouteDestination(route: $0).id($0) }
     }
 }
