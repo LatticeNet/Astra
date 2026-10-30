@@ -1,27 +1,16 @@
 import Foundation
 
+/// The row-level spellings of `TimeDisplay`, kept so every screen reads ages
+/// one way ("12 min. ago", "3h") whichever entry point it calls (6.16).
 public enum RelativeDateFormatter {
-    public static func string(from date: Date, now: Date = Date()) -> String {
-        let interval = now.timeIntervalSince(date)
-        if interval < 0 {
-            return shortDuration(-interval) + " from now"
-        }
-        if interval < 5 {
-            return "just now"
-        }
-        return shortDuration(interval) + " ago"
+    /// A relative age through `TimeDisplay.relative`.
+    public static func string(from date: Date, now: Date = Date(), locale: Locale = .current) -> String {
+        TimeDisplay.relative(date, now: now, locale: locale)
     }
 
-    /// Compact human duration: "45s", "12m", "3h", "2d".
-    public static func shortDuration(_ seconds: TimeInterval) -> String {
-        let value = Int(seconds.rounded())
-        if value < 60 { return "\(value)s" }
-        let minutes = value / 60
-        if minutes < 60 { return "\(minutes)m" }
-        let hours = minutes / 60
-        if hours < 24 { return "\(hours)h" }
-        let days = hours / 24
-        return "\(days)d"
+    /// A compact duration through `TimeDisplay.shortDuration`.
+    public static func shortDuration(_ seconds: TimeInterval, locale: Locale = .current) -> String {
+        TimeDisplay.shortDuration(seconds, locale: locale)
     }
 }
 
@@ -79,6 +68,21 @@ public enum TimeDisplay {
         formatter.locale = locale
         formatter.unitsStyle = .short
         return formatter.localizedString(for: date, relativeTo: now)
+    }
+
+    /// A compact duration for rows, in the locale's abbreviations: "45s",
+    /// "12m", "3h", "2d". It counts whole units, so 1 h 50 min reads "1h".
+    public static func shortDuration(_ seconds: TimeInterval, locale: Locale) -> String {
+        let value = max(0, seconds.rounded())
+        let unit: TimeInterval = value >= 86_400 ? 86_400 : value >= 3_600 ? 3_600 : value >= 60 ? 60 : 1
+        let formatter = DateComponentsFormatter()
+        var calendar = Calendar.current
+        calendar.locale = locale
+        formatter.calendar = calendar
+        formatter.unitsStyle = .abbreviated
+        formatter.maximumUnitCount = 1
+        formatter.allowedUnits = [.day, .hour, .minute, .second]
+        return formatter.string(from: (value / unit).rounded(.down) * unit) ?? ""
     }
 
     /// A duration for VoiceOver and age phrases: "12 minutes", "3 hours".

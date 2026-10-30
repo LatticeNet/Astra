@@ -262,8 +262,11 @@ private func checkFormatters() throws {
     try expect(!local.contains("2026-10-29T03:20:00Z") && local.contains(TimeDisplay.dateTime(ISO8601DateFormatter().date(from: "2026-10-29T03:20:00Z")!, mode: .utc, locale: posix)), "reason stamps show in the chosen zone")
     try expect(local.hasSuffix("after 1m30s of silence."), "the rest of the reason is kept")
     try expectEqual(TimeDisplay.localizingStamps(in: "disk 94% full", mode: .utc, locale: posix), "disk 94% full", "text without a stamp is unchanged")
-    try expectEqual(RelativeDateFormatter.shortDuration(3_600), "1h", "relative duration hours")
-    try expectEqual(RelativeDateFormatter.string(from: now.addingTimeInterval(-120), now: now), "2m ago", "relative date ago")
+    let english = Locale(identifier: "en_US")
+    try expectEqual(RelativeDateFormatter.shortDuration(3_600, locale: english), "1h", "relative duration hours")
+    try expectEqual(RelativeDateFormatter.shortDuration(6_600, locale: english), "1h", "relative duration counts whole hours")
+    try expectEqual(RelativeDateFormatter.shortDuration(45, locale: english), "45s", "relative duration seconds")
+    try expectEqual(RelativeDateFormatter.string(from: now.addingTimeInterval(-120), now: now, locale: english), TimeDisplay.relative(now.addingTimeInterval(-120), now: now, locale: english), "relative date uses the one formatter")
 
     let nanGeo = NodeGeoView(id: "nan", geo: NodeGeoInfo(lat: .nan, lon: 10))
     try expect(!nanGeo.hasCoordinate, "NaN is not a map coordinate")
