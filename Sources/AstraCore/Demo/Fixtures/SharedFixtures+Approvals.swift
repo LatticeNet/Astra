@@ -209,6 +209,18 @@ extension SharedFixtures {
             approval.approvedBy = "lattice-server"
             return approval
         }(),
+        {
+            // relay-fra-1's confirm, approved and applying: the server points
+            // its confirm_approved SSH Guard row here (actionable_approval_id).
+            var approval = DemoApproval(
+                id: "approval_d0909", plugin: "sshguard", action: "sshguard-confirm:v1", node: "relay-fra-1", status: "approved",
+                plan: DemoPlans.sshGuardConfirmPlan(node: "relay-fra-1", armApprovalID: "approval_arm_relay-fra-1"),
+                planSHA256: "52f26f7bcf1eefbe6db38184a1056b4de4a4fa19a58d1266729875d087ca5f1e", createdAt: "-3m", updatedAt: "-1m"
+            )
+            approval.approvedBy = DemoWorld.actorID
+            approval.reason = "Confirm before the automatic revert"
+            return approval
+        }(),
     ]
 
     // MARK: Answers
@@ -482,6 +494,27 @@ enum DemoPlans {
 
     Check before approving: you can still log in to edge-tyo-2 with a key.
     """
+
+    /// The confirm plan for any node; `sshGuardConfirm` stays a literal so
+    /// approval_d1001 keeps its pinned hash.
+    static func sshGuardConfirmPlan(node name: String, armApprovalID: String) -> String {
+        let node = DemoWorld.node(name)
+        return """
+        plugin: sshguard
+        action: sshguard-confirm:v1
+        node_id: \(node.id)
+        node_name: \(node.name)
+        arm_approval_id: \(armApprovalID)
+
+        Confirm cancels the automatic revert the arm plan armed.
+        After it applies, the hardened sshd profile and the SSH gate stay in force:
+          PasswordAuthentication no
+          PermitRootLogin prohibit-password
+          tcp/22 open to 198.51.100.0/28, 2001:db8:22::/48 and the knock sequence
+
+        Check before approving: you can still log in to \(node.name) with a key.
+        """
+    }
 
     static func outboundPolicy(node name: String) -> String {
         let node = DemoWorld.node(name)

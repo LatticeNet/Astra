@@ -112,7 +112,7 @@ extension SharedFixtures {
         GuardRow(node: "edge-sin-2", stage: "arm_pending", posture: "partial", knock: "planned"),
         GuardRow(node: "relay-hkg-1", stage: "arm_approved", posture: "partial", knock: "planned"),
         GuardRow(node: "edge-hkg-2", stage: "arm_failed", posture: "password_open", knock: "no_knock"),
-        GuardRow(node: "relay-fra-1", stage: "confirm_approved", posture: "secured", revertDeadline: "+11m"),
+        GuardRow(node: "relay-fra-1", stage: "confirm_approved", posture: "secured", revertDeadline: "+11m", actionable: "approval_d0909"),
         GuardRow(node: "edge-fra-3", stage: "reverted", posture: "password_open", knock: "installed_superseded"),
         GuardRow(node: "edge-ams-2", stage: "in_force", posture: "secured"),
         GuardRow(node: "core-lon-1", stage: "idle", posture: "unknown", knock: "unknown"),
