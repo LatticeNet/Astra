@@ -21,7 +21,9 @@ extension VPNRoute: DemoHooks {
     static func demoIntent(_ id: String, session: SessionStore) -> WriteIntent? {
         guard session.isDemo, let (verb, argument) = demoParts(id), let user = VPNFixtures.user(argument) else { return nil }
         switch verb {
-        case "rotateLink": return VPNIntents.rotateLink(userID: user.id, email: user.email, rotatedBefore: nil)
+        case "rotateLink":
+            return VPNIntents.rotateLink(userID: user.id, email: user.email, rotatedBefore: nil,
+                                         caveat: user.linkEnabled ? nil : VPNLinkWords.pausedRotateCaveat)
         case "revokeLink": return VPNIntents.revokeLink(userID: user.id, email: user.email)
         default: return nil
         }

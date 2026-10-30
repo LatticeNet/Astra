@@ -355,10 +355,13 @@ public enum VPNLinkWords {
     /// replaces only the token). Nil when the rotated link will serve.
     public static func rotateCaveat(_ link: VPNLinkSummary?, now: Date) -> String? {
         guard let link else { return nil }
-        if !link.enabled { return "The new link stays paused. Resume it on the web before it serves." }
-        if let expires = link.expiresAt, expires <= now { return "The new link stays expired. Remove the expiry on the web before it serves." }
+        if !link.enabled { return pausedRotateCaveat }
+        if let expires = link.expiresAt, expires <= now { return expiredRotateCaveat }
         return nil
     }
+
+    public static let pausedRotateCaveat = "The new link stays paused. Resume it on the web before it serves."
+    public static let expiredRotateCaveat = "The new link stays expired. Remove the expiry on the web before it serves."
 
     /// `linkAnswers`: issued, on, and not expired.
     public static func answers(_ status: VPNLinkStatus) -> Bool {
