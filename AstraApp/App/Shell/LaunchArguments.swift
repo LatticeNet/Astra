@@ -13,6 +13,8 @@ struct LaunchOverrides: Sendable {
     var tab: AppTab?
     /// One or more comma-separated sheets, opened in order.
     var present: String?
+    /// `-AstraIntent openNode:<id>|reviewApproval:<id>`: runs an App Intent.
+    var intent: String?
     var auth: DeviceAuthOutcome?
     var autoConfirm = false
     var scenario: DemoScenario?
@@ -33,6 +35,7 @@ struct LaunchOverrides: Sendable {
         route = defaults.string(forKey: "AstraRoute").flatMap(URL.init(string:))
         tab = defaults.string(forKey: "AstraTab").flatMap(AppTab.init(rawValue:))
         present = defaults.string(forKey: "AstraPresent")
+        intent = defaults.string(forKey: "AstraIntent")
         auth = switch defaults.string(forKey: "AstraAuth") {
         case "succeed": .confirmed
         case "cancel": .cancelled
@@ -116,6 +119,24 @@ enum LaunchActions {
             } else {
                 await self.present(value, services: services)
             }
+        }
+    }
+
+    /// `-AstraIntent`: resolves the id through the intent's own query and
+    /// calls perform(), as Shortcuts does. AppServices starts it before any
+    /// scene exists, so it also exercises the cold-launch hold.
+    static func runIntent(_ value: String) async {
+        let parts = value.split(separator: ":", maxSplits: 1).map(String.init)
+        guard parts.count == 2 else { return }
+        switch parts[0] {
+        case "openNode":
+            guard let target = try? await IntentsNodeQuery().entities(for: [parts[1]]).first else { return }
+            _ = try? await OpenNodeIntent(target: target).perform()
+        case "reviewApproval":
+            guard let target = try? await IntentsApprovalQuery().entities(for: [parts[1]]).first else { return }
+            _ = try? await ReviewApprovalIntent(target: target).perform()
+        default:
+            break
         }
     }
 

@@ -67,5 +67,8 @@ final class AppServices {
             }
         }
         session.restore(launch: launch)
+        if launch.demo, let intent = launch.intent {
+            Task { await LaunchActions.runIntent(intent) }
+        }
     }
 }

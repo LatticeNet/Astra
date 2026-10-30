@@ -1644,6 +1644,7 @@ Agents cannot tap, swipe or rotate a simulator, and the project has no UI test t
 |---|---|
 | `-AstraRoute <lattice:// URL>` | Opens a route after launch, including the scope and segment links of 2.5 (`lattice://monitor?segment=paths&view=chains`) |
 | `-AstraPresent <sheet>[:<args>]` | Opens any global or module sheet: `review:<id>`, `batch:<groupKey>`, `confirm:<intentID>` (each module registers its intents' ids in its route file), `reveal:<intentID>`, `renew:<machineID>`, `maintenanceStart:<nodeID>`, `settings:<page>`, and module sheets by name (`sshguardArm:<nodeID>`, `nodeIdentity:<nodeID>`, `reminders`) |
+| `-AstraIntent openNode:<id>\|reviewApproval:<id>` | Resolves the id through the M14 intent's query and runs its `perform()`, started before any scene exists, so the deep link hold until the shell restores is exercised without Shortcuts |
 | `-AstraAuth succeed\|cancel` | Stub authenticator for D, T3, T4 and unlock |
 | `-AstraAutoConfirm YES` | After `-AstraPresent`, runs the primary action once (with `-AstraAuth succeed`) so after-states can be captured; for a T2 write it confirms the first dialog of the launch about a second after it appears |
 | `-AstraDemoScenario <name>[:<path prefix>]` | Scenario of 8.6 |
