@@ -108,7 +108,7 @@ final class InboxStore {
     static let incidentsRequirement = ScopeRequirement("monitor:read")
     static let nodesRequirement = ScopeRequirement("node:read")
     static let tasksRequirement = ScopeRequirement("task:read")
-    static let upcomingRequirement = ScopeRequirement.anyOf("inventory:read", "proxy:read", "proxy:admin", "monitor:read")
+    static let upcomingRequirement = InventoryStore.upcomingRequirement
     static let sshGuardRequirement = ScopeRequirement("sshguard:read", "network:plan")
     static let ddnsRequirement = ScopeRequirement("ddns:admin")
     static let auditRequirement = ScopeRequirement("audit:read")

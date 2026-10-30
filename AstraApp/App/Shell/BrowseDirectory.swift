@@ -40,7 +40,7 @@ enum BrowseDirectory {
             DirectoryEntry(id: "groups", title: "Groups", symbol: "square.stack.3d.up", target: .tab(.fleet, scope: "groups"), requirement: ScopeRequirement("group:read")),
             DirectoryEntry(id: "map", title: "Map", symbol: "map", target: .tab(.fleet, scope: "map"), requirement: ScopeRequirement("node:read")),
             DirectoryEntry(id: "machines", title: "Machines", symbol: "shippingbox", target: .tab(.fleet, scope: "machines"), requirement: ScopeRequirement("inventory:read")),
-            DirectoryEntry(id: "upcoming", title: "Upcoming", symbol: "calendar", target: .open(.inventory(.upcoming), in: .fleet, scope: "machines"), requirement: .anyOf("inventory:read", "proxy:read", "dns:admin")),
+            DirectoryEntry(id: "upcoming", title: "Upcoming", symbol: "calendar", target: .open(.inventory(.upcoming), in: .fleet, scope: "machines"), requirement: InventoryStore.upcomingRequirement),
             DirectoryEntry(id: "monitoring", title: "Monitoring", symbol: "waveform.path.ecg", target: .tab(.monitor, scope: "overview"), requirement: ScopeRequirement("monitor:read")),
         ]),
         DirectorySection(title: "VPN", entries: [
