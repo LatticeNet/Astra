@@ -123,9 +123,10 @@ struct BrowseRoot: View {
             results = []
             return
         }
-        let found = await SearchRegistry.search(parsed, context: SearchContext(session: session, nodes: nodes))
-        guard !Task.isCancelled else { return }
-        results = found
+        await SearchRegistry.search(parsed, context: SearchContext(session: session, nodes: nodes)) { found in
+            guard !Task.isCancelled else { return }
+            results = found
+        }
     }
 }
 

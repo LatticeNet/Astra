@@ -2,7 +2,7 @@ import SwiftUI
 
 /// What a Browse search provider can read.
 @MainActor
-struct SearchContext {
+struct SearchContext: Sendable {
     let session: SessionStore
     let nodes: NodeDirectory
 }
@@ -44,14 +44,26 @@ enum SearchRegistry {
         VPNSearch.self,
     ]
 
-    /// Runs every provider; results keep the providers' order.
+    /// Runs every provider at once and reports the results gathered so far
+    /// each time one returns, so a slow endpoint holds back only its own
+    /// group. Every update keeps the providers' order.
     @MainActor
-    static func search(_ query: LatticeQuery, context: SearchContext) async -> [SearchResult] {
-        var results: [SearchResult] = []
-        for provider in providers {
-            if Task.isCancelled { return [] }
-            results += await provider.results(for: query, context: context)
+    static func search(_ query: LatticeQuery, context: SearchContext, onUpdate: ([SearchResult]) -> Void) async {
+        var found: [Int: [SearchResult]] = [:]
+        await withTaskGroup(of: (Int, [SearchResult]).self) { group in
+            for index in providers.indices {
+                group.addTask { await run(index, query: query, context: context) }
+            }
+            for await landed in group {
+                if Task.isCancelled { return }
+                found[landed.0] = landed.1
+                onUpdate(providers.indices.flatMap { found[$0] ?? [] })
+            }
         }
-        return results
+    }
+
+    @MainActor
+    private static func run(_ index: Int, query: LatticeQuery, context: SearchContext) async -> (Int, [SearchResult]) {
+        (index, await providers[index].results(for: query, context: context))
     }
 }
