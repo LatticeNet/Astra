@@ -42,7 +42,7 @@ struct VPNUsersScreen: View {
     @ViewBuilder
     private var content: some View {
         if !network.isSatisfied, store.users.value == nil, !store.users.isLoading, store.readMissing == nil {
-            VPNOfflineView(noun: "VPN users", retry: refresh)
+            VPNOfflineView(sentence: "VPN users load when the connection returns.", retry: refresh)
         } else {
             ResourceView(state: store.users, noun: "VPN users", retry: refresh) { listing in
                 list(listing)
@@ -181,7 +181,7 @@ struct VPNUsersScreen: View {
             StatusRow(style: style, title: VPNText.breakable(user.displayName), detail: detail,
                       reason: VPNIdentity.reason(user, state: state, now: now),
                       trailing: usage(user),
-                      accessibilityPhrase: "\(user.displayName), \(style.word), \(detail)\(usage(user).map { ", \($0) this period" } ?? "")")
+                      accessibilityPhrase: "\(user.displayName), \(style.word), \(detail)")
         }
         .contextMenu {
             Button("Open", systemImage: "person.text.rectangle") { router.push(.vpn(.user(id: user.id))) }
@@ -206,6 +206,19 @@ struct VPNUsersScreen: View {
             Button("Copy link") { VPNCopy.copy(VPNCopy.userLink(user.id)) }
             Button("Copy ID") { VPNCopy.copy(user.id) }
             Button("Open on web") { router.openOnWeb(.vpnUsers) }
+            if user.link != nil, network.isSatisfied {
+                if store.revealLinkMissing == nil {
+                    Button("Reveal subscription link") {
+                        Task { await runner.reveal(VPNIntents.revealLink(userID: user.id, email: user.displayName, origin: session.consoleURL)) }
+                    }
+                }
+                if store.linkMissing == nil {
+                    Button("Rotate link") {
+                        Task { await runner.run(VPNIntents.rotateLink(userID: user.id, email: user.displayName, rotatedBefore: user.link?.rotatedAt,
+                                                                       caveat: VPNLinkWords.rotateCaveat(user.link, now: Date()))) }
+                    }
+                }
+            }
         }
     }
 

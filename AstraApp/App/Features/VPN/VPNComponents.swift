@@ -216,7 +216,8 @@ struct VPNRefreshError<Value: Sendable>: View {
 
 /// Nothing loaded and no network: says so instead of placeholders that never end.
 struct VPNOfflineView: View {
-    let noun: String
+    /// "The identity loads when the connection returns."
+    let sentence: String
     let retry: () -> Void
 
     var body: some View {
@@ -224,13 +225,12 @@ struct VPNOfflineView: View {
             ContentUnavailableView {
                 Label("Offline", systemImage: "wifi.slash")
             } description: {
-                Text("Nothing loaded yet. \(noun) load when the connection returns.")
+                Text("Nothing loaded yet. \(sentence)")
             } actions: {
                 Button("Retry", action: retry).buttonStyle(.bordered)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color(uiColor: .systemGroupedBackground))
     }
 }
 

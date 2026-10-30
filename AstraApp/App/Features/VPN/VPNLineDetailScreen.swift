@@ -36,7 +36,7 @@ struct VPNLineDetailScreen: View {
     @ViewBuilder
     private var content: some View {
         if !network.isSatisfied, store.lines.value == nil, !store.lines.isLoading, store.readMissing == nil {
-            VPNOfflineView(noun: "The line", retry: refresh)
+            VPNOfflineView(sentence: "The line loads when the connection returns.", retry: refresh)
         } else {
             ResourceView(state: store.lines, noun: "the line", retry: refresh) { groups in
                 if let entry = VPNLineEntry.find(id, in: groups) {

@@ -38,7 +38,7 @@ struct VPNUserDetailScreen: View {
         if model.notFound {
             notFound
         } else if !network.isSatisfied, model.user.value == nil, !model.user.isLoading, store.readMissing == nil {
-            VPNOfflineView(noun: "The identity", retry: refresh)
+            VPNOfflineView(sentence: "The identity loads when the connection returns.", retry: refresh)
         } else {
             ResourceView(state: model.user, noun: "the identity", retry: refresh) { user in
                 detail(user)
@@ -368,7 +368,7 @@ struct VPNUserDetailScreen: View {
     @ViewBuilder
     private func identitySection(_ user: VPNUser) -> some View {
         Section {
-            DetailRow(label: "Email", value: user.email.isEmpty ? "None" : user.email)
+            DetailRow(label: "Email", value: user.email.isEmpty ? "None" : user.email, monospaced: !user.email.isEmpty)
                 .id("identity")
             if !user.name.isEmpty { DetailRow(label: "Name", value: user.name) }
             if !user.group.isEmpty { DetailRow(label: "Group", value: user.group) }

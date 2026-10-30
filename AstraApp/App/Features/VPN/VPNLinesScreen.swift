@@ -42,7 +42,7 @@ struct VPNLinesScreen: View {
     @ViewBuilder
     private var content: some View {
         if !network.isSatisfied, store.lines.value == nil, !store.lines.isLoading, store.readMissing == nil {
-            VPNOfflineView(noun: "Lines", retry: refresh)
+            VPNOfflineView(sentence: "Lines load when the connection returns.", retry: refresh)
         } else {
             ResourceView(state: store.lines, noun: "lines", retry: refresh) { groups in
                 list(groups)
@@ -188,7 +188,7 @@ struct VPNLinesScreen: View {
         let detail = parts.joined(separator: " · ")
         return NavigationLink(value: AppRoute.vpn(.line(id: line.lineHashID))) {
             StatusRow(style: style, title: line.displayName, detail: detail, reason: reason(line, state: state, chain: chain),
-                      accessibilityPhrase: "Line \(line.displayName) on \(entry.nodeName), \(style.word), \(detail)")
+                      accessibilityPhrase: "Line \(line.displayName) on \(entry.nodeName), \(style.word), \(parts.dropFirst().joined(separator: ", "))")
         }
         .contextMenu {
             Button("Open", systemImage: "point.3.connected.trianglepath.dotted") { router.push(.vpn(.line(id: line.lineHashID))) }
@@ -202,6 +202,9 @@ struct VPNLinesScreen: View {
         .accessibilityActions {
             Button("Copy ID") { VPNCopy.copy(line.lineHashID) }
             Button("Open node") { router.push(.fleet(.node(id: entry.nodeID))) }
+            if let chain {
+                Button("Open chain") { router.push(.monitoring(.chain(id: chain.chain.id))) }
+            }
             Button("Open on web") { router.openOnWeb(.vpnLines) }
         }
     }
