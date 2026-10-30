@@ -34,6 +34,7 @@ public func checkShared() async throws {
     try checkVerdicts()
     try checkDeepLinkGoldens()
     try checkRawJSONSlices()
+    try await checkWriteBodyGoldens()
 }
 
 private func checkNodeDecoding() throws {
@@ -1203,4 +1204,44 @@ extension AstraTestDates {
 private func checkIdentifierText() throws {
     try expectEqual(IdentifierText.breakable("relay-fra-1.example.org"), "relay-\u{200B}fra-\u{200B}1.\u{200B}example.\u{200B}org", "breaks after hyphens and dots")
     try expectEqual(IdentifierText.breakable("expiring_within_14d").replacingOccurrences(of: "\u{200B}", with: ""), "expiring_within_14d", "removing the breaks gives the identifier back")
+}
+
+// MARK: Request-body goldens for writes and reveals without one elsewhere
+
+/// Sends one call through a mock and returns the canonical JSON body it wrote.
+/// The answer is `{}`, so a decode failure after the send is ignored: only the
+/// request matters here.
+private func sentBody(_ path: String, _ call: @Sendable (LatticeClient) async throws -> Void) async throws -> String {
+    let base = "https://lattice.example.com"
+    let transport = MockTransport(responses: ["\(base)\(path)": (200, json("{}"))])
+    let client = LatticeClient(baseURL: URL(string: base)!, credential: LatticeCredential(bearerToken: "lat_check.notasecret"), transport: transport)
+    try? await call(client)
+    try expectEqual(await transport.requestURLs, ["\(base)\(path)"], "\(path) is the only request")
+    try expectEqual(await transport.methods, ["POST"], "\(path) is a POST")
+    let object = try bodyObject(await transport.bodies.last ?? nil)
+    let canonical = try JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])
+    return String(decoding: canonical, as: UTF8.self)
+}
+
+private func checkWriteBodyGoldens() async throws {
+    try expectEqual(try await sentBody("/api/incidents/ack") { _ = try await $0.acknowledgeIncident(id: "inc-1") },
+                    #"{"id":"inc-1"}"#, "acknowledge sends only the id")
+    try expectEqual(try await sentBody("/api/incidents/unack") { _ = try await $0.unacknowledgeIncident(id: "inc-1") },
+                    #"{"id":"inc-1"}"#, "unacknowledge sends only the id")
+    // The server rejects a missing minutes value, so zero (end the snooze) is encoded too.
+    try expectEqual(try await sentBody("/api/incidents/snooze") { _ = try await $0.snoozeIncident(id: "inc-1", minutes: 0) },
+                    #"{"id":"inc-1","minutes":0}"#, "ending a snooze encodes minutes 0")
+    try expectEqual(try await sentBody("/api/incidents/snooze") { _ = try await $0.snoozeIncident(id: "inc-1", minutes: 60) },
+                    #"{"id":"inc-1","minutes":60}"#, "a snooze encodes its minutes")
+    try expectEqual(try await sentBody("/api/maintenance-windows/delete") { try await $0.deleteMaintenanceWindow(id: "mw-1") },
+                    #"{"id":"mw-1"}"#, "maintenance delete sends only the id")
+    try expectEqual(try await sentBody("/api/nodes/agent-updates/plan") { _ = try await $0.planAgentUpdate(nodeID: "n-1", force: false) },
+                    #"{"force":false,"node_id":"n-1"}"#, "an agent update plan always encodes force")
+    try expectEqual(try await sentBody("/api/nodes/agent-updates/plan") { _ = try await $0.planAgentUpdate(nodeID: "n-1", force: true) },
+                    #"{"force":true,"node_id":"n-1"}"#, "a forced agent update plan says so")
+    let grant = StepUpGrant(grant: "sug_check", expiresAt: Date(timeIntervalSince1970: 0))
+    try expectEqual(try await sentBody("/api/sshguard/knock/reveal") { _ = try await $0.sshGuardRevealKnock(nodeID: "n-1", grant: grant) },
+                    #"{"node_id":"n-1","step_up_grant":"sug_check"}"#, "the knock reveal carries the node and the grant")
+    try expectEqual(try await sentBody("/api/security/step-up") { _ = try await $0.stepUp(code: "123456") },
+                    #"{"code":"123456"}"#, "step-up sends only the code")
 }
