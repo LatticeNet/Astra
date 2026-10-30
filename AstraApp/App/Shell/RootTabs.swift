@@ -8,6 +8,7 @@ struct RootTabs: View {
     @Environment(SessionStore.self) private var session
     @Environment(DeepLinkRouter.self) private var deepLinks
     @Environment(ChangeLog.self) private var changes
+    @Environment(InboxStore.self) private var inbox
     @Environment(\.scenePhase) private var scenePhase
 
     // State restoration (section 2.6). Keys are `<module>.<screen>.<field>`.
@@ -69,6 +70,16 @@ struct RootTabs: View {
         }
         .environment(\.timeZoneMode, showUTC ? .utc : .local)
         .onChange(of: session.generation) { changes.recordAll() }
+        // The badge lives here, not in InboxScreen: TabView builds tab content
+        // lazily, so a launch restored to another tab never builds Inbox.
+        .onChange(of: inbox.badge) { syncBadge() }
+        .task(id: session.generation) {
+            guard session.isConnected else { return }
+            // InboxScreen polls while it is on screen; any other tab still
+            // needs the count of approvals and incidents waiting.
+            if appState.selectedTab != .inbox { await inbox.refresh() }
+            syncBadge()
+        }
         // Scene storage is written on every change and saved by the system
         // when the scene goes to the background.
         .onChange(of: appState.paths) { if restored { persist() } }
@@ -92,6 +103,11 @@ struct RootTabs: View {
                 if tab == appState.selectedTab { appState.reselect(tab) } else { appState.selectedTab = tab }
             }
         )
+    }
+
+    private func syncBadge() {
+        appState.badgeCount = inbox.badge
+        appState.badgeSourceAt = inbox.badgeSourceAt
     }
 
     // MARK: Restoration

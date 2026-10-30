@@ -118,10 +118,6 @@ struct InboxScreen: View {
         .onScrollPhaseChange { _, phase in
             if phase != .idle { store.lastInteraction = .now }
         }
-        .onChange(of: store.badge) { _, badge in
-            appState.badgeCount = badge
-            appState.badgeSourceAt = store.badgeSourceAt
-        }
         .onChange(of: store.heldChanges) { _, count in
             // Announced once per hold; focus stays where it is.
             if count > 0, !announcedHold {
