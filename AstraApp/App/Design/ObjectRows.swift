@@ -186,16 +186,22 @@ struct IncidentRow: View {
 
     /// Snooze for `minutes`; `0` ends a snooze. The inverse restores the
     /// previous snooze, or ends it when there was none (section 6.6).
-    nonisolated static func snoozeIntent(_ incident: Incident, minutes: Int, until: String) -> WriteIntent {
+    nonisolated static func snoozeIntent(_ incident: Incident, minutes: Int, until: String, mode: TimeZoneMode, locale: Locale) -> WriteIntent {
         let object = ObjectRef(kind: "incident", id: incident.id, name: incident.displayTitle)
         let previous = incident.snoozed ? incident.snoozedUntil : nil
         let ending = minutes == 0
         return WriteIntent(
             tier: .t1, verb: ending ? "End snooze for" : "Snooze", object: object, scopes: ["monitor:admin"],
             consequence: ending ? "Repeat alerts resume." : "No repeat alerts until \(until).",
+            // Undo restores the snooze that was there before, judged at undo
+            // time: one that has since run out ends instead of becoming a
+            // fresh one-minute snooze.
             inverse: {
-                let restore = previous.map { max(1, Int(($0.timeIntervalSinceNow / 60).rounded(.up))) } ?? 0
-                return snoozeIntent(incident, minutes: restore, until: until)
+                guard let previous, previous > Date() else {
+                    return snoozeIntent(incident, minutes: 0, until: "", mode: mode, locale: locale)
+                }
+                let restore = max(1, Int((previous.timeIntervalSinceNow / 60).rounded(.up)))
+                return snoozeIntent(incident, minutes: restore, until: TimeDisplay.clock(previous, mode: mode, locale: locale), mode: mode, locale: locale)
             },
             idempotent: true, changes: [.incidents],
             perform: { client, _ in
@@ -265,12 +271,12 @@ struct IncidentSnoozeDialog: ViewModifier {
             let now = Date()
             ForEach(IncidentSnoozeChoice.choices(now: now, mode: mode, locale: locale)) { choice in
                 Button(choice.label) {
-                    Task { await runner.run(IncidentRow.snoozeIntent(incident, minutes: choice.minutes, until: choice.until)) }
+                    Task { await runner.run(IncidentRow.snoozeIntent(incident, minutes: choice.minutes, until: choice.until, mode: mode, locale: locale)) }
                 }
             }
             if IncidentFilter.isSnoozed(incident, now: now) {
                 Button("End snooze") {
-                    Task { await runner.run(IncidentRow.snoozeIntent(incident, minutes: 0, until: "")) }
+                    Task { await runner.run(IncidentRow.snoozeIntent(incident, minutes: 0, until: "", mode: mode, locale: locale)) }
                 }
             }
             Button("Cancel", role: .cancel) {}
