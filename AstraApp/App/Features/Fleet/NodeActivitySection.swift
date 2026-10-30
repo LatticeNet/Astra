@@ -72,7 +72,7 @@ struct NodeActivitySection: View {
                 }
             }
             .listStyle(.insetGrouped)
-            .searchable(text: $text, placement: .navigationBarDrawer(displayMode: .automatic), prompt: "Filter activity")
+            .searchable(text: $text, placement: .navigationBarDrawer(displayMode: .automatic), prompt: "Search activity")
             .searchScopes($scope, activation: .onSearchPresentation) {
                 ForEach(FleetTimelineScope.allCases, id: \.self) { Text($0.rawValue).tag($0) }
             }

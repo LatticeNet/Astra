@@ -30,7 +30,7 @@ struct NodesScreen: View {
         FleetListState(state: store.nodes, noun: "nodes", retry: { Task { await store.refresh() } }) { records in
             content(records)
         }
-        .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .automatic), prompt: "Filter nodes")
+        .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .automatic), prompt: "Search, status:, tag:")
         .textInputAutocapitalization(.never)
         .autocorrectionDisabled()
         .refreshable { await store.refresh() }

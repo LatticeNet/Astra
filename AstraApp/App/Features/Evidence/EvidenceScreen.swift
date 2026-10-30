@@ -27,7 +27,7 @@ struct EvidenceScreen: View {
         content
             .navigationTitle("Evidence")
             .navigationBarTitleDisplayMode(.large)
-            .searchable(text: $query, prompt: "Node or state")
+            .searchable(text: $query, prompt: "Search nodes and states")
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu {

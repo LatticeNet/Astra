@@ -71,7 +71,7 @@ struct ApprovalsScreen: View {
                 list
             }
         }
-        .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .automatic), prompt: "Search approvals")
+        .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .automatic), prompt: "Search, status:, node:")
         .searchScopes($scope, activation: .automatic) {
             Text("Needs you").tag(ApprovalsScope.needs)
             Text("History").tag(ApprovalsScope.history)

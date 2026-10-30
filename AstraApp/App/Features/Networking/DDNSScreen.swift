@@ -98,7 +98,7 @@ struct DDNSScreen: View {
             }
         }
         .listStyle(.insetGrouped)
-        .searchable(text: $query, prompt: "state:failing, domain:, node:")
+        .searchable(text: $query, prompt: "Search, state:, domain:")
         .onScrollPhaseChange { _, phase in if phase != .idle { stable.noteActivity() } }
         .refreshable {
             await nodes.refreshIfOlder(than: 0)

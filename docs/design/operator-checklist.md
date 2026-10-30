@@ -36,7 +36,7 @@ Agents cannot tap, swipe or rotate a simulator, and they cannot run VoiceOver, V
 - Review: Find in plan scrolls the sheet to each match; Wrap lines off lets the plan scroll sideways without the sheet scrolling sideways; Voice Control "Show names" labels Previous match, Next match and More.
 - Review at AX5 on the iPhone SE: the toolbar is gone and the panel stacks the toggle, the primary button and Reject; every control is reachable by scrolling.
 - BatchReview: one Face ID decides every included plan; rows another operator decided show "Not recorded"; the banner reads "N approved, M not recorded" with a warning haptic.
-- Approvals (Activity): pulling down shows Search approvals with its Needs you, History and Stuck scopes; History loads more rows at the bottom and the range menu filters it.
+- Approvals (Activity): pulling down shows the search field (Search, status:, node:) with its Needs you, History and Stuck scopes; History loads more rows at the bottom and the range menu filters it.
 
 ## M2 Fleet
 

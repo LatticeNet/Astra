@@ -118,7 +118,7 @@ struct AccessScreen: View {
         ResourceView(state: store.tokens, noun: "tokens", retry: refreshTokens) { tokens in
             tokensList(tokens)
         }
-        .accountSearchable($tokensQuery, prompt: "Name, scope:task:run, is:revoked", when: store.tokens.value != nil)
+        .accountSearchable($tokensQuery, prompt: "Search, scope:, state:", when: store.tokens.value != nil)
         .polling(.standard, version: changes.version([.tokens, .account])) {
             await store.refreshTokens()
         }
@@ -246,7 +246,7 @@ struct AccessScreen: View {
         ResourceView(state: store.users, noun: "users", retry: refreshUsers) { users in
             usersList(users)
         }
-        .accountSearchable($usersQuery, prompt: "Name, login:sso, -is:totp", when: store.users.value != nil)
+        .accountSearchable($usersQuery, prompt: "Search, login:, scope:", when: store.users.value != nil)
         .polling(.standard, version: changes.version([.account])) {
             await store.refreshUsers()
         }
@@ -322,7 +322,7 @@ struct AccessScreen: View {
         ResourceView(state: store.providers, noun: "identity providers", retry: refreshProviders) { providers in
             ssoList(providers)
         }
-        .accountSearchable($ssoQuery, prompt: "Name or issuer", when: store.providers.value != nil)
+        .accountSearchable($ssoQuery, prompt: "Search identity providers", when: store.providers.value != nil)
         .polling(.standard, version: changes.version([.account])) {
             await store.refreshProviders()
         }

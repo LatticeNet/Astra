@@ -71,7 +71,7 @@ struct GroupsScreen: View {
                 .listStyle(.insetGrouped)
             }
         }
-        .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .automatic), prompt: "Filter groups")
+        .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .automatic), prompt: "Search groups")
         .refreshable { await store.refresh() }
         .polling(.standard, version: changes.version([.groups, .nodes])) { await store.refresh() }
         // Degraded members come from the node list; the group rollup does not count them.

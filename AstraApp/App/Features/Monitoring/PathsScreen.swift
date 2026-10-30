@@ -73,7 +73,7 @@ struct MonitoringPathsList: View {
             MonitoringResource(state: store.paths, noun: "paths", retry: refresh) { _ in
                 list
             }
-            .searchable(text: query, prompt: "source:, target:, state:, method:")
+            .searchable(text: query, prompt: "Search, source:, state:")
         }
     }
 

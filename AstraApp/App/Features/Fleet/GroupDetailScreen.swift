@@ -242,7 +242,7 @@ struct FleetAddMembersSheet: View {
                 }
             }
             .environment(\.editMode, .constant(.active))
-            .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: "Filter nodes")
+            .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: "Search nodes")
             .navigationTitle("Add to \(group.displayName)")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

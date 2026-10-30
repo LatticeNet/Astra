@@ -115,7 +115,7 @@ struct InboundFirewallScreen: View {
             }
         }
         .listStyle(.insetGrouped)
-        .searchable(text: $query, prompt: "state:failed, group:, is:managed")
+        .searchable(text: $query, prompt: "Search, state:, group:")
         .onScrollPhaseChange { _, phase in if phase != .idle { stable.noteActivity() } }
         .refreshable {
             await store.refreshFirewall()

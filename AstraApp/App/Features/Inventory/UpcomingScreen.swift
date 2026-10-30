@@ -27,7 +27,7 @@ struct UpcomingScreen: View {
         }
         .navigationTitle("Upcoming")
         .navigationBarTitleDisplayMode(.inline)
-        .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .automatic), prompt: "Filter upcoming")
+        .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .automatic), prompt: "Search, kind:, due_in:")
         .textInputAutocapitalization(.never)
         .autocorrectionDisabled()
         .modifier(InventoryFilterSubtitle(text: subtitle))

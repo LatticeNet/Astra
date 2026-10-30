@@ -183,7 +183,7 @@ struct SSHGuardBoardScreen: View {
             }
         }
         .listStyle(.insetGrouped)
-        .searchable(text: $query, tokens: tokensBinding, prompt: "posture:, state:, knock:, tag:") { token in
+        .searchable(text: $query, tokens: tokensBinding, prompt: "Search, posture:, state:") { token in
             Text(token.title)
         }
         .onScrollPhaseChange { _, phase in

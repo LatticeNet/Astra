@@ -191,7 +191,7 @@ struct AgentUpdatesScreen: View {
             }
         }
         .listStyle(.insetGrouped)
-        .searchable(text: $query, prompt: "is:behind, policy:, version:, tag:")
+        .searchable(text: $query, prompt: "Search, policy:, version:")
         .refreshable { await store.refresh() }
     }
 

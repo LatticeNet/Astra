@@ -48,7 +48,7 @@ struct IncidentsScreen: View {
         MonitoringResource(state: store.incidents, noun: "incidents", retry: refresh) { _ in
             list
         }
-        .searchable(text: $query, prompt: "kind:, node:, state:")
+        .searchable(text: $query, prompt: "Search, kind:, state:")
         .searchScopes($scope, activation: .onSearchPresentation) {
             ForEach(MonitoringIncidentScope.allCases, id: \.self) { Text($0.title).tag($0) }
         }

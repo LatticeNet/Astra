@@ -21,7 +21,7 @@ struct WebhooksScreen: View {
         }
         .navigationTitle("Webhooks")
         .navigationBarTitleDisplayMode(.large)
-        .searchable(text: $query, prompt: "Name or event type")
+        .searchable(text: $query, prompt: "Search webhooks")
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {

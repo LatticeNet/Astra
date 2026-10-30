@@ -39,7 +39,7 @@ struct SentLogScreen: View {
         NotifyResourceScreen(state: store.sent, noun: "the Sent log", retry: refresh) { response in
             list(response)
         }
-        .searchable(text: $query, tokens: tokensBinding, prompt: "Search messages, state:, channel:") { token in
+        .searchable(text: $query, tokens: tokensBinding, prompt: "Search, state:, channel:") { token in
             Label(token.title, systemImage: token.symbol)
         }
         .navigationSubtitle(subtitle)

@@ -35,7 +35,7 @@ struct ConnectionsScreen: View {
             .navigationTitle("Connections")
             .navigationBarTitleDisplayMode(.large)
             .navigationSubtitle(subtitle)
-            .searchable(text: $text, tokens: tokensBinding, prompt: "node:, user:, dst:, line:, session:") { token in
+            .searchable(text: $text, tokens: tokensBinding, prompt: "Search, node:, user:") { token in
                 Label(token.title, systemImage: token.symbol)
             }
             .onSubmit(of: .search) { absorbTokens() }

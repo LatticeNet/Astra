@@ -31,7 +31,7 @@ struct VPNLinesScreen: View {
             .navigationTitle("Lines")
             .navigationBarTitleDisplayMode(.large)
             .navigationSubtitle(query.trimmingCharacters(in: .whitespaces).isEmpty ? "" : "Filtered: \(query.trimmingCharacters(in: .whitespaces))")
-            .searchable(text: $query, prompt: "Node, name or state:down")
+            .searchable(text: $query, prompt: "Search, node:, state:")
             .toolbar { toolbar }
             .onChange(of: store.lines.loadedAt, initial: true) { offer(force: false) }
             .onChange(of: store.chains.loadedAt) { offer(force: false) }

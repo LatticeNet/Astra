@@ -251,7 +251,7 @@ struct OutboundPolicyScreen: View {
             }
         }
         .listStyle(.insetGrouped)
-        .searchable(text: $query, prompt: "name:, is:enabled, nodes>3")
+        .searchable(text: $query, prompt: "Search, name:, priority:")
         .onScrollPhaseChange { _, phase in if phase != .idle { stablePolicies.noteActivity() } }
         .refreshable {
             await store.refreshPolicies()
@@ -353,7 +353,7 @@ struct OutboundPolicyScreen: View {
             }
         }
         .listStyle(.insetGrouped)
-        .searchable(text: $query, prompt: "state:failed, kind:manual")
+        .searchable(text: $query, prompt: "Search, state:, kind:")
         .onScrollPhaseChange { _, phase in if phase != .idle { stableNodes.noteActivity() } }
         .refreshable {
             await nodes.refreshIfOlder(than: 0)

@@ -80,7 +80,7 @@ struct DNSScreen: View {
             }
         }
         .listStyle(.insetGrouped)
-        .searchable(text: $query, prompt: "engine:external, is:drift, node:")
+        .searchable(text: $query, prompt: "Search, engine:, node:")
         .onScrollPhaseChange { _, phase in if phase != .idle { stable.noteActivity() } }
         .refreshable {
             await store.refreshDNS()

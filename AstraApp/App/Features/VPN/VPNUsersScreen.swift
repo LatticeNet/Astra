@@ -27,7 +27,7 @@ struct VPNUsersScreen: View {
             .navigationTitle("VPN users")
             .navigationBarTitleDisplayMode(.large)
             .navigationSubtitle(subtitle)
-            .searchable(text: $query, prompt: "Email, group or status:expiring")
+            .searchable(text: $query, prompt: "Search, group:, status:")
             .toolbar { toolbar }
             .onChange(of: store.users.loadedAt, initial: true) { offer(force: false) }
             .onChange(of: query) { offer(force: true) }

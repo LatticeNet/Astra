@@ -26,7 +26,7 @@ struct InventoryScreen: View {
         InventoryListState(state: store.machines, noun: "machines", retry: { Task { await store.refresh() } }) { machines in
             content(machines)
         }
-        .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .automatic), prompt: "Filter machines")
+        .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .automatic), prompt: "Search, region:, status:")
         .textInputAutocapitalization(.never)
         .autocorrectionDisabled()
         .refreshable { await store.refresh() }

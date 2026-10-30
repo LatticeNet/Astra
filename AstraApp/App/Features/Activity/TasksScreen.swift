@@ -24,7 +24,7 @@ struct TasksScreen: View {
         ActivityResource(state: store.runs, noun: "runs", retry: refresh) { _ in
             list
         }
-        .searchable(text: $query, prompt: "status:, node:, origin:, approval:")
+        .searchable(text: $query, prompt: "Search, status:, node:")
         .navigationSubtitle(subtitle)
         .toolbar {
             // The same leading pair as Audit, so the bar holds still between

@@ -28,7 +28,7 @@ struct TerminalSessionsScreen: View {
             .navigationTitle("Terminal")
             .navigationBarTitleDisplayMode(.large)
             .navigationSubtitle(nodeFilter.map { "On \(nodes.name(for: $0))" } ?? "")
-            .searchable(text: $query, prompt: "Node, shell or state")
+            .searchable(text: $query, prompt: "Search sessions")
             .toolbar { toolbar }
             .onChange(of: store.sessions.loadedAt, initial: true) { offer(force: false) }
             .onChange(of: nodes.loadedAt) { offer(force: false) }

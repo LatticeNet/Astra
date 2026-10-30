@@ -40,7 +40,7 @@ struct AuditScreen: View {
                 }
             }
         }
-        .searchable(text: $query, prompt: "action:, actor:, node:, trace:")
+        .searchable(text: $query, prompt: "Search, action:, actor:")
         .searchScopes($layer, activation: .automatic) {
             ForEach(AuditLayer.allCases, id: \.self) { Text($0.title).tag($0) }
         }

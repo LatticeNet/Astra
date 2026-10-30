@@ -89,7 +89,7 @@ struct GeoRoutingScreen: View {
             }
         }
         .listStyle(.insetGrouped)
-        .searchable(text: $query, prompt: "host:, strategy:geoip, is:applied")
+        .searchable(text: $query, prompt: "Search, host:, strategy:")
         .onScrollPhaseChange { _, phase in if phase != .idle { stable.noteActivity() } }
         .refreshable {
             await store.refreshGeo()

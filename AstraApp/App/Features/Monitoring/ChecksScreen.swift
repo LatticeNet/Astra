@@ -22,7 +22,7 @@ struct ChecksScreen: View {
         MonitoringResource(state: store.monitors, noun: "checks", retry: refresh) { _ in
             list
         }
-        .searchable(text: $query, prompt: "type:, node:, state:")
+        .searchable(text: $query, prompt: "Search, type:, state:")
         .navigationSubtitle(query.isEmpty ? "" : query)
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {

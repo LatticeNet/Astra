@@ -93,7 +93,7 @@ struct TunnelsScreen: View {
             }
         }
         .listStyle(.insetGrouped)
-        .searchable(text: $query, prompt: "host:, node:, ingress>1")
+        .searchable(text: $query, prompt: "Search, host:, node:")
         .onScrollPhaseChange { _, phase in if phase != .idle { stable.noteActivity() } }
         .refreshable {
             await store.refreshTunnels()
