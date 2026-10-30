@@ -128,22 +128,24 @@ public enum AgentUpdatesPlanning {
                 }
             }
         }
-        var unconfirmed: [String] = []
+        // An unconfirmed node travels with the refusals, so the Result step
+        // names it and the run never reads as a clean success (6.5).
+        var unconfirmed: [ObjectFailure] = []
         for node in lost {
             let pending = try? await client.listApprovals(status: "pending", nodeID: node.id, plugin: plugin, limit: 5)
             if let found = pending?.first(where: { $0.nodeID == node.id }) {
                 if !filed.contains(found.id) { filed.append(found.id) }
                 filedNodes.append(node)
             } else if pending == nil {
-                unconfirmed.append("Could not confirm \(node.name), and its approvals could not be read. Check them before planning it again.")
+                unconfirmed.append(ObjectFailure(object: node, reason: "Could not confirm, and its approvals could not be read. Check them before planning it again."))
             } else {
-                unconfirmed.append("Could not confirm \(node.name): the answer was lost and no pending plan was found. Check its approvals before planning it again.")
+                unconfirmed.append(ObjectFailure(object: node, reason: "Could not confirm: the answer was lost and no pending plan was found. Check its approvals before planning it again."))
             }
         }
         if filed.isEmpty {
-            let reasons = refused.map { "\($0.object.name): \($0.reason)" }
+            let reasons = (unconfirmed + refused).map { "\($0.object.name): \($0.reason)" }
             if !unconfirmed.isEmpty {
-                return .unknown((unconfirmed + reasons).joined(separator: "\n"))
+                return .unknown(reasons.joined(separator: "\n"))
             }
             let joined = reasons.joined(separator: "\n")
             return .refused(.validation(joined), refused.count == 1 ? "Not filed. \(joined)" : "No plan was filed.\n\(joined)")
@@ -152,6 +154,6 @@ public enum AgentUpdatesPlanning {
         if !refused.isEmpty { summary += ", \(refused.count) refused" }
         if !unconfirmed.isEmpty { summary += ", \(unconfirmed.count) not confirmed" }
         let names = filedNodes.map(\.name).joined(separator: ", ")
-        return .filed(approvalIDs: filed, refused: refused, notes: [summary, "Filed for \(names)."] + unconfirmed)
+        return .filed(approvalIDs: filed, refused: refused + unconfirmed, notes: [summary, "Filed for \(names)."])
     }
 }

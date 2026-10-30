@@ -240,13 +240,22 @@ private func checkAgentUpdatesLostAnswers() async throws {
     try expectEqual(notes.first, "3 plans filed", "summary")
     try expectEqual(await found.posts, 3, "nothing is retried")
 
-    // Lost with no plan found: not confirmed, never refused.
+    // Lost with no plan found: counted as not confirmed, listed beside the
+    // refusals so the Result step names it and the run is never clean.
     let missing = PlanLossTransport(lost: ["n-b"], refused: ["n-c"])
     let second = await AgentUpdatesPlanning.planSequentially(nodes, client: client(missing))
     guard case .filed(_, let refusedHalf, let secondNotes) = second else { throw CheckFailure.failed("one filed plan still files, got \(second)") }
-    try expectEqual(refusedHalf.map(\.object.id), ["n-c"], "only the server's answer is refused")
-    try expectEqual(secondNotes.first, "1 plan filed, 1 refused, 1 not confirmed", "summary names the unconfirmed node")
-    try expect(secondNotes.contains { $0.contains("Could not confirm edge-b") }, "the unconfirmed node is named")
+    try expectEqual(refusedHalf.map(\.object.id), ["n-c", "n-b"], "the refusal, then the unconfirmed node")
+    try expect(refusedHalf.last?.reason.hasPrefix("Could not confirm") == true, "the unconfirmed node says why")
+    try expectEqual(secondNotes.first, "1 plan filed, 1 refused, 1 not confirmed", "summary counts the unconfirmed node apart")
+    try expect(!second.isCleanSuccess, "an unconfirmed node is never a clean success")
+
+    let onlyLost = PlanLossTransport(lost: ["n-b"])
+    let fourth = await AgentUpdatesPlanning.planSequentially(Array(nodes.prefix(2)), client: client(onlyLost))
+    guard case .filed(let fourthIDs, let fourthRefused, _) = fourth else { throw CheckFailure.failed("one filed plan still files, got \(fourth)") }
+    try expectEqual(fourthIDs, ["approval_n-a"], "one plan filed")
+    try expectEqual(fourthRefused.map(\.object.id), ["n-b"], "a lone unconfirmed node keeps the Result step")
+    try expect(!fourth.isCleanSuccess, "one filed and one unconfirmed is partial")
 
     // Every answer lost: unknown, never "No plan was filed".
     let allLost = PlanLossTransport(lost: ["n-a", "n-b", "n-c"])
