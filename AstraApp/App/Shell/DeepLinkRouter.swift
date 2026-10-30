@@ -4,8 +4,9 @@ import UIKit
 /// Applies `lattice://` links and same-origin console links (section 2.5).
 ///
 /// Rules: select the owning tab and reset that tab's path to the route (or
-/// present Review for approvals), leave other tabs alone; hold a link while
-/// the welcome flow is up; queue it while a write or decision is in flight.
+/// present Review for approvals), leave other tabs alone; hold a link until
+/// the shell has restored its scene state and while the welcome flow is up;
+/// queue it while a write or decision is in flight.
 /// A link to an object the token cannot read still opens the screen, which
 /// shows its missing-scope state.
 @MainActor @Observable
@@ -14,7 +15,7 @@ final class DeepLinkRouter {
     private let router: Router
     private let runner: ActionRunner
     private let session: SessionStore
-    /// A link that arrived before the app was connected.
+    /// A link that arrived before the shell restored or the app was connected.
     private(set) var held: LatticeDeepLink?
 
     init(appState: AppState, router: Router, runner: ActionRunner, session: SessionStore) {
@@ -35,14 +36,14 @@ final class DeepLinkRouter {
     }
 
     func handle(_ link: LatticeDeepLink) {
-        guard session.isConnected, !appState.welcomePresented else {
+        guard appState.shellRestored, session.isConnected, !appState.welcomePresented else {
             held = link
             return
         }
         runner.whenIdle { [weak self] in self?.apply(link) }
     }
 
-    /// Applies the link held during the welcome flow.
+    /// Applies the link held before restoration or during the welcome flow.
     func releaseHeld() {
         guard let link = held else { return }
         held = nil

@@ -115,6 +115,8 @@ struct RootTabs: View {
         if !storedReviewTarget.isEmpty, session.isConnected {
             appState.globalSheet = .review(.single(storedReviewTarget))
         }
+        appState.shellRestored = true
+        deepLinks.releaseHeld()
     }
 
     private func persist() {

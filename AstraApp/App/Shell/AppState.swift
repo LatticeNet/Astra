@@ -49,6 +49,10 @@ final class AppState {
     /// The welcome cover. It stays up through the scope summary after the
     /// credential connects, so it is not simply "not connected".
     var welcomePresented = false
+    /// Set once RootTabs has applied scene storage. A link that arrives
+    /// earlier (an App Intent on a cold launch) is held until then, or the
+    /// restore would overwrite the tab and path it chose.
+    var shellRestored = false
     var settingsPresented = false
     var settingsPath: [SettingsRoute] = []
     /// Bumped when the selected tab is tapped again.

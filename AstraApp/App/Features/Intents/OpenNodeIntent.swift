@@ -35,7 +35,8 @@ struct OpenNodeIntent: OpenIntent {
 
     @MainActor
     func perform() async throws -> some IntentResult {
-        await IntentsGate.open(Self.link(for: target))
+        // On a cold launch DeepLinkRouter holds the link until the shell restores.
+        AppServices.shared.deepLinks.handle(Self.link(for: target))
         return .result()
     }
 }
