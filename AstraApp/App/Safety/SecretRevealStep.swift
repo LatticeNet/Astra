@@ -11,6 +11,9 @@ import UniformTypeIdentifiers
 struct SecretRevealStep: View {
     let secret: RevealedSecret
     let shareable: Bool
+    /// The object the value belongs to, shown under a short title that does
+    /// not already name it ("Subscription link" for alice@example.com).
+    let subject: String?
     let onClose: () -> Void
 
     @State private var value: String?
@@ -20,9 +23,10 @@ struct SecretRevealStep: View {
     @State private var safariURL: URL?
     @Environment(\.scenePhase) private var scenePhase
 
-    init(secret: RevealedSecret, shareable: Bool, onClose: @escaping () -> Void) {
+    init(secret: RevealedSecret, shareable: Bool, subject: String? = nil, onClose: @escaping () -> Void) {
         self.secret = secret
         self.shareable = shareable
+        self.subject = subject.flatMap { $0.isEmpty || secret.title.contains($0) ? nil : $0 }
         self.onClose = onClose
         _value = State(initialValue: secret.value)
     }
@@ -64,6 +68,7 @@ struct SecretRevealStep: View {
             }
         }
         .navigationTitle(secret.title)
+        .navigationSubtitle(subject ?? "")
         .navigationBarTitleDisplayMode(.inline)
         .safeAreaInset(edge: .bottom) {
             Button {

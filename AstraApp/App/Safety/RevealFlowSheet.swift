@@ -180,7 +180,7 @@ private struct RevealFlowContent: View {
         case .code:
             codeStep
         case .value(let secret):
-            SecretRevealStep(secret: secret, shareable: pending.intent.shareable, onClose: close)
+            SecretRevealStep(secret: secret, shareable: pending.intent.shareable, subject: pending.intent.object.name, onClose: close)
         case .failed(let message):
             ContentUnavailableView {
                 Label("Not revealed", systemImage: "exclamationmark.triangle")
