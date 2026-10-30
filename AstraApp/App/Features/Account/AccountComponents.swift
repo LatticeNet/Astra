@@ -191,7 +191,7 @@ struct AccountNoticeRow: View {
                 .foregroundStyle(tone.isProblem ? tone.word : .primary)
                 .fixedSize(horizontal: false, vertical: true)
         } icon: {
-            Image(systemName: symbol).foregroundStyle(tone.glyph)
+            Image(systemName: symbol).symbolRenderingMode(.hierarchical).foregroundStyle(tone.glyph)
         }
         .frame(minHeight: Spacing.minimumTarget, alignment: .leading)
     }

@@ -182,7 +182,7 @@ struct ActivityTraceRow: View {
             }
             VStack(alignment: .leading, spacing: Spacing.xxs) {
                 Text(time).textRole(.stamp)
-                Text(typeSize.isAccessibilitySize ? "\(Text(Image(systemName: style.symbol)).foregroundStyle(style.tone.glyph)) \(words)" : "\(words)")
+                Text(typeSize.isAccessibilitySize ? "\(Text.glyph(style)) \(words)" : "\(words)")
                     .textRole(.rowTitle)
                 Text(detail(style)).textRole(.rowDetail)
                 if style.tone.isProblem, !event.reason.isEmpty {

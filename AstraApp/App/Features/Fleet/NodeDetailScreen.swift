@@ -355,7 +355,7 @@ struct FleetHonestyRow: View {
             VStack(alignment: .leading, spacing: Spacing.xxs) {
                 Group {
                     if typeSize.isAccessibilitySize {
-                        Text("\(Text(Image(systemName: style.symbol)).foregroundStyle(style.tone.glyph)) \(headline)")
+                        Text("\(Text.glyph(style)) \(headline)")
                     } else {
                         Text(headline)
                     }

@@ -353,7 +353,7 @@ struct NotifyStatementRow: View {
             VStack(alignment: .leading, spacing: Spacing.xxs) {
                 Group {
                     if accessible {
-                        Text("\(Text(Image(systemName: style.symbol)).foregroundStyle(style.tone.glyph)) \(title)")
+                        Text("\(Text.glyph(style)) \(title)")
                     } else {
                         Text(title)
                     }
@@ -401,7 +401,7 @@ struct NotifyDetailHeader: View {
                 .textRole(.detailHeader)
                 .fixedSize(horizontal: false, vertical: true)
             // One Text, so the state line wraps as a sentence at accessibility sizes.
-            Text("\(Text(Image(systemName: style.symbol)).foregroundStyle(style.tone.glyph)) \(Text(style.word).foregroundStyle(style.tone.word))\(Text(detail.map { " · \($0)" } ?? "").foregroundStyle(.secondary))")
+            Text("\(Text.glyph(style)) \(Text(style.word).foregroundStyle(style.tone.word))\(Text(detail.map { " · \($0)" } ?? "").foregroundStyle(.secondary))")
                 .font(.subheadline)
                 .fixedSize(horizontal: false, vertical: true)
             if let reason {

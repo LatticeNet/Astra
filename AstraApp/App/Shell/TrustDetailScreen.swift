@@ -44,7 +44,7 @@ struct TrustDetailScreen: View {
         Label {
             Text(text).foregroundStyle(tone.word)
         } icon: {
-            Image(systemName: "exclamationmark.shield.fill").foregroundStyle(tone.glyph)
+            Image(systemName: "exclamationmark.shield.fill").symbolRenderingMode(.hierarchical).foregroundStyle(tone.glyph)
         }
     }
 

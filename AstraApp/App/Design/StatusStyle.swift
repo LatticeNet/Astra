@@ -180,6 +180,18 @@ enum AccessState: Sendable, Hashable {
     }
 }
 
+extension Text {
+    /// A status glyph inside a run of text, hierarchical like `StatusGlyph`
+    /// so a state looks the same at every size (section 4.2).
+    static func glyph(_ symbol: String, color: Color) -> Text {
+        Text(Image(systemName: symbol).symbolRenderingMode(.hierarchical)).foregroundStyle(color)
+    }
+
+    static func glyph(_ style: StatusStyle) -> Text {
+        glyph(style.symbol, color: style.tone.glyph)
+    }
+}
+
 /// The leading status glyph, hierarchical, with its symbol transition.
 struct StatusGlyph: View {
     let style: StatusStyle

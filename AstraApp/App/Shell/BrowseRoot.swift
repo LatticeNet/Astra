@@ -195,7 +195,7 @@ struct DirectoryRow: View {
             // and where the row opens is a line of its own.
             VStack(alignment: .leading, spacing: Spacing.xxs) {
                 if let status {
-                    Text("\(Text(Image(systemName: status.symbol)).foregroundStyle(status.tone.glyph)) \(entry.title)")
+                    Text("\(Text.glyph(status)) \(entry.title)")
                 } else {
                     Text(entry.title)
                 }

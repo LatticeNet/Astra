@@ -497,6 +497,7 @@ private struct ConfirmResultView: View {
             Text(text).foregroundStyle(tone.isProblem ? tone.word : .primary)
         } icon: {
             Image(systemName: tone == .fail ? "xmark.octagon.fill" : (tone == .warn ? "exclamationmark.triangle.fill" : "checkmark.circle"))
+                .symbolRenderingMode(.hierarchical)
                 .foregroundStyle(tone.glyph)
         }
     }

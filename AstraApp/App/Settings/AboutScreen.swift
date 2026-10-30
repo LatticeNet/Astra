@@ -24,7 +24,7 @@ struct AboutScreen: View {
                 Label {
                     Text(compatibility.text)
                 } icon: {
-                    Image(systemName: compatibility.symbol).foregroundStyle(compatibility.tone.glyph)
+                    Image(systemName: compatibility.symbol).symbolRenderingMode(.hierarchical).foregroundStyle(compatibility.tone.glyph)
                 }
             }
             Section {

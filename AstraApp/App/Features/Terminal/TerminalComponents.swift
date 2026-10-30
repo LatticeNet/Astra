@@ -128,7 +128,7 @@ struct TerminalNoticeRow: View {
             }
             VStack(alignment: .leading, spacing: Spacing.xxs) {
                 if typeSize.isAccessibilitySize {
-                    Text("\(Text(Image(systemName: symbol)).foregroundStyle(tone.glyph)) \(title)")
+                    Text("\(Text.glyph(symbol, color: tone.glyph)) \(title)")
                         .font(.body.weight(.semibold))
                         .foregroundStyle(tone.isProblem ? tone.word : .primary)
                 } else {

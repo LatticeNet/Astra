@@ -173,7 +173,7 @@ struct VPNGlyphLabel: View {
     private func layout(detail: String?) -> some View {
         if typeSize.isAccessibilitySize {
             VStack(alignment: .leading, spacing: Spacing.xxs) {
-                styledTitle(Text("\(Text(Image(systemName: systemImage)).foregroundStyle(glyphColor)) \(Text(title))"))
+                styledTitle(Text("\(Text.glyph(systemImage, color: glyphColor)) \(Text(title))"))
                 if let detail { Text(detail).textRole(detailRole) }
             }
         } else {

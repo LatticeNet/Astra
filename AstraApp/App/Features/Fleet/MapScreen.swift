@@ -369,7 +369,7 @@ struct FleetOffscreenNotice: View {
                             .foregroundStyle(style.tone.word)
                             .fixedSize(horizontal: false, vertical: true)
                     } icon: {
-                        Image(systemName: style.symbol).foregroundStyle(style.tone.glyph)
+                        Image(systemName: style.symbol).symbolRenderingMode(.hierarchical).foregroundStyle(style.tone.glyph)
                     }
                     Spacer(minLength: 0)
                     Text("Show").fontWeight(.semibold).foregroundStyle(Color.accentText)

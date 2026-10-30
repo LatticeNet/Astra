@@ -156,7 +156,7 @@ struct ActivityStateHeader: View {
         Group {
             if typeSize.isAccessibilitySize {
                 VStack(alignment: .leading, spacing: Spacing.xs) {
-                    Text("\(Text(Image(systemName: style.symbol)).foregroundStyle(style.tone.glyph)) \(Text(style.word.activityCapitalized).foregroundStyle(wordColor))")
+                    Text("\(Text.glyph(style)) \(Text(style.word.activityCapitalized).foregroundStyle(wordColor))")
                         .textRole(.detailHeader)
                     if let reason { Text(reason).textRole(.rowReason(style.tone.isProblem ? style.tone.word : .secondary)) }
                 }

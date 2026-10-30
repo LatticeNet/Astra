@@ -83,6 +83,7 @@ struct OutcomeBannerView: View {
             HStack(alignment: .firstTextBaseline, spacing: Spacing.s) {
                 if message.tone.isProblem {
                     Image(systemName: "exclamationmark.triangle.fill")
+                        .symbolRenderingMode(.hierarchical)
                         .foregroundStyle(message.tone.glyph)
                         .accessibilityHidden(true)
                 }

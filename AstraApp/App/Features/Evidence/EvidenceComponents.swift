@@ -146,7 +146,7 @@ struct EvidenceCaptureRow: View {
             }
             VStack(alignment: .leading, spacing: Spacing.xxs) {
                 if accessible {
-                    Text("\(Text(Image(systemName: style.symbol)).foregroundStyle(style.tone.glyph)) \(session.name)")
+                    Text("\(Text.glyph(style)) \(session.name)")
                         .textRole(.rowTitle).lineLimit(3)
                 } else {
                     Text(session.name).textRole(.rowTitle).lineLimit(2)

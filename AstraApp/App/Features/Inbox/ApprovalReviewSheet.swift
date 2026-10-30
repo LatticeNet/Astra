@@ -719,7 +719,7 @@ struct InboxResultCard: View {
                     .foregroundStyle(tone == .ok ? .primary : (tone.isProblem ? tone.word : .primary))
                     .fixedSize(horizontal: false, vertical: true)
             } icon: {
-                Image(systemName: symbol).foregroundStyle(tone == .ok ? Color.statusOKFill : tone.glyph)
+                Image(systemName: symbol).symbolRenderingMode(.hierarchical).foregroundStyle(tone == .ok ? Color.statusOKFill : tone.glyph)
             }
         }
         .accessibilityElement(children: .combine)

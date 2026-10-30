@@ -395,6 +395,7 @@ struct FleetRelatedRow: View {
         HStack(alignment: .firstTextBaseline, spacing: Spacing.m) {
             if !typeSize.isAccessibilitySize {
                 Image(systemName: style?.symbol ?? symbol)
+                    .symbolRenderingMode(.hierarchical)
                     .foregroundStyle(style?.tone.glyph ?? Color.accentText)
                     .frame(width: 28)
                     .accessibilityHidden(true)

@@ -553,7 +553,7 @@ struct SSHGuardAgentGlance: View {
             Label {
                 Text(row.name).textRole(.rowTitle)
             } icon: {
-                Image(systemName: style.symbol).foregroundStyle(style.tone.glyph)
+                Image(systemName: style.symbol).symbolRenderingMode(.hierarchical).foregroundStyle(style.tone.glyph)
             }
             Text("\(style.word.prefix(1).uppercased() + style.word.dropFirst()), \(detail)").textRole(.rowDetail)
             if let error = row.policy?.lastError, !error.isEmpty {

@@ -69,7 +69,7 @@ struct StatusRow: View {
     @ViewBuilder
     private func titleLine(accessible: Bool) -> some View {
         if accessible {
-            Text("\(Text(Image(systemName: style.symbol)).foregroundStyle(style.tone.glyph)) \(title)")
+            Text("\(Text.glyph(style)) \(title)")
                 .textRole(.rowTitle)
                 .lineLimit(3)
         } else {
@@ -310,7 +310,7 @@ struct FreshnessFooter: View {
                 Text(state.text)
             } icon: {
                 if let symbol = state.symbol {
-                    Image(systemName: symbol).foregroundStyle(state.tone.glyph)
+                    Image(systemName: symbol).symbolRenderingMode(.hierarchical).foregroundStyle(state.tone.glyph)
                 }
             }
             .labelStyle(FootnoteLabelStyle())
