@@ -238,10 +238,17 @@ public struct VPNUsersSummary: Sendable, Hashable {
     }
 
     /// "12 identities. 1 expired, 2 expiring." Only the problems are named.
-    public var sentence: String {
+    public var sentence: String { sentence(stale: false) }
+
+    /// Stale or offline data stops claiming health (section 5.0): the
+    /// "None needs attention" clause gives way to when the data is from.
+    /// `asOf` is that time as shown; nil when it is not known.
+    public func sentence(stale: Bool, asOf: String? = nil) -> String {
         let head = total == 1 ? "1 identity." : "\(total) identities."
-        let problems = counts.filter { $0.state.isProblem }.map { "\($0.count) \($0.state.label)" }
-        return problems.isEmpty ? "\(head) None needs attention." : "\(head) \(problems.joined(separator: ", "))."
+        let problems = counts.filter { $0.state.isProblem }.map { "\($0.count) \($0.state == .unbound ? "bound to no line" : $0.state.label)" }
+        let when = asOf.map { "As of \($0)." } ?? "Not refreshed."
+        if problems.isEmpty { return stale ? "\(head) \(when)" : "\(head) None needs attention." }
+        return "\(head) \(problems.joined(separator: ", "))." + (stale ? " \(when)" : "")
     }
 }
 

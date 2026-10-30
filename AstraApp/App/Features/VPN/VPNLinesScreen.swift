@@ -97,6 +97,10 @@ struct VPNLinesScreen: View {
             if stable.held != nil, voiceOver {
                 Section { PendingUpdatesRow(count: stable.pendingCount) { stable.showHeld() } }
             }
+            let trimmed = query.trimmingCharacters(in: .whitespaces)
+            if !trimmed.isEmpty {
+                Section { FilterStateRow(text: "Showing lines matching \"\(trimmed)\".") { query = "" } }
+            }
             if let queryError {
                 Section {
                     Label(queryError, systemImage: "exclamationmark.magnifyingglass")
@@ -104,7 +108,7 @@ struct VPNLinesScreen: View {
                         .frame(minHeight: Spacing.minimumTarget)
                 }
             }
-            if !groups.isEmpty, query.trimmingCharacters(in: .whitespaces).isEmpty {
+            if !groups.isEmpty, trimmed.isEmpty {
                 Section {
                     Text(summary(groups))
                         .textRole(.rowTitle)

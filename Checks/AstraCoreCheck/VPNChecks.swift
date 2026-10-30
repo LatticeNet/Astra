@@ -213,7 +213,12 @@ private func checkVPNIdentityDerivations() throws {
     let summary = VPNUsersSummary.of([active, disabled, expiringUnbound, expiredOver], now: now)
     try expectEqual(summary.counts.map(\.state), [.expired, .overQuota, .expiring, .unbound, .active, .disabled], "counts in state order")
     try expectEqual(summary.enabled, 3, "enabled count")
-    try expectEqual(summary.sentence, "4 identities. 1 expired, 1 over quota, 1 expiring, 1 no line.", "summary sentence counts each condition")
+    try expectEqual(summary.sentence, "4 identities. 1 expired, 1 over quota, 1 expiring, 1 bound to no line.", "summary sentence counts each condition")
+    try expectEqual(summary.sentence(stale: true, asOf: "02:41"), "4 identities. 1 expired, 1 over quota, 1 expiring, 1 bound to no line. As of 02:41.", "stale summary says when")
+    let healthy = VPNUsersSummary.of([active], now: now)
+    try expectEqual(healthy.sentence, "1 identity. None needs attention.", "current data may claim health")
+    try expectEqual(healthy.sentence(stale: true, asOf: "02:41"), "1 identity. As of 02:41.", "stale data never claims health")
+    try expectEqual(healthy.sentence(stale: true), "1 identity. Not refreshed.", "stale with no time")
 
     // A legacy proxy user: no bindings, so never "no line"; its status word decides.
     let proxy = try JSONDecoder().decode(VPNProxyUser.self, from: json(#"{"id":"p","name":"p@example.org","enabled":true,"status":"expired"}"#))

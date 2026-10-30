@@ -14,6 +14,8 @@ struct VPNUsersScreen: View {
     @Environment(SessionStore.self) private var session
     @Environment(NetworkMonitor.self) private var network
     @Environment(\.accessibilityVoiceOverEnabled) private var voiceOver
+    @Environment(\.timeZoneMode) private var mode
+    @Environment(\.locale) private var locale
 
     @SceneStorage(Self.queryKey) private var query = ""
     @State private var stable = VPNStableList<VPNUser> { old, new in
@@ -58,6 +60,13 @@ struct VPNUsersScreen: View {
         }
     }
 
+    private func summarySentence(_ listing: VPNUserListing, now: Date) -> String {
+        let summary = VPNUsersSummary.of(listing.users, now: now)
+        let freshness = Freshness.of(store.users, now: now, interval: Polling.standard.interval(lowPower: false))
+        guard freshness.isStale || !network.isSatisfied else { return summary.sentence }
+        return summary.sentence(stale: true, asOf: store.users.loadedAt.map { TimeDisplay.dateTime($0, mode: mode, locale: locale) })
+    }
+
     private func offer(force: Bool) {
         stable.offer(filtered(store.users.value?.users ?? []).rows, voiceOver: voiceOver, force: force)
     }
@@ -75,6 +84,10 @@ struct VPNUsersScreen: View {
             if stable.held != nil, voiceOver {
                 Section { PendingUpdatesRow(count: stable.pendingCount) { stable.showHeld() } }
             }
+            let trimmed = query.trimmingCharacters(in: .whitespaces)
+            if !trimmed.isEmpty {
+                Section { FilterStateRow(text: "Showing identities matching \"\(trimmed)\".") { query = "" } }
+            }
             if let queryError {
                 Section {
                     Label(queryError, systemImage: "exclamationmark.magnifyingglass")
@@ -82,9 +95,9 @@ struct VPNUsersScreen: View {
                         .frame(minHeight: Spacing.minimumTarget)
                 }
             }
-            if !listing.users.isEmpty, query.trimmingCharacters(in: .whitespaces).isEmpty {
+            if !listing.users.isEmpty, trimmed.isEmpty {
                 Section {
-                    Text(VPNUsersSummary.of(listing.users, now: now).sentence)
+                    Text(summarySentence(listing, now: now))
                         .textRole(.rowTitle)
                         .frame(minHeight: Spacing.minimumTarget, alignment: .leading)
                         .accessibilityAddTraits(.isHeader)
