@@ -217,7 +217,13 @@ struct VPNDemoPusher: View {
 
     var body: some View {
         Color.clear.task {
-            router.dismissPresented { router.push(.vpn(route)) }
+            // A demo scenario rebuilds the session just after launch, which
+            // resets navigation; push once that has settled, on Browse.
+            try? await Task.sleep(for: .seconds(1.5))
+            router.dismissPresented {
+                router.select(tab: .browse)
+                router.push(.vpn(route))
+            }
         }
     }
 }
@@ -312,5 +318,18 @@ struct VPNDemoScroll: ViewModifier {
 extension View {
     func vpnDemoScroll(ready: Bool) -> some View {
         modifier(VPNDemoScroll(ready: ready))
+    }
+}
+
+enum VPNText {
+    /// An email or handle with break opportunities after "@", ".", "-" and
+    /// "_", so a large text size wraps it there instead of hyphenating a word.
+    static func breakable(_ value: String) -> String {
+        var out = ""
+        for character in value {
+            out.append(character)
+            if "@.-_".contains(character) { out.append("\u{200B}") }
+        }
+        return out
     }
 }

@@ -62,7 +62,7 @@ struct VPNUserDetailScreen: View {
         return List {
             VPNRefreshError(state: model.user, noun: "the identity", retry: refresh)
             Section {
-                StatusRow(style: style, title: user.displayName, detail: [user.name, user.group].filter { !$0.isEmpty && $0 != user.displayName }.joined(separator: " · "),
+                StatusRow(style: style, title: VPNText.breakable(user.displayName), detail: [user.name, user.group].filter { !$0.isEmpty && $0 != user.displayName }.joined(separator: " · "),
                           reason: VPNIdentity.reason(user, state: state, now: now), reasonLineLimit: nil,
                           accessibilityPhrase: "\(user.displayName), \(style.word)")
                 ForEach(Array(others), id: \.self) { condition in

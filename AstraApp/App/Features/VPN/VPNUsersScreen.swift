@@ -165,7 +165,7 @@ struct VPNUsersScreen: View {
         let style = VPNStyle.identity(user, now: now)
         let detail = detail(user, now: now)
         return NavigationLink(value: AppRoute.vpn(.user(id: user.id))) {
-            StatusRow(style: style, title: user.displayName, detail: detail,
+            StatusRow(style: style, title: VPNText.breakable(user.displayName), detail: detail,
                       reason: VPNIdentity.reason(user, state: state, now: now),
                       trailing: usage(user),
                       accessibilityPhrase: "\(user.displayName), \(style.word), \(detail)\(usage(user).map { ", \($0) this period" } ?? "")")
