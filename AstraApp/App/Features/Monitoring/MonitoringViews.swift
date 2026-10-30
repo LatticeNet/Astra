@@ -206,47 +206,6 @@ struct MonitoringQueryErrorRow: View {
     }
 }
 
-// MARK: Snooze
-
-/// The one snooze dialog per list or screen (section 4.5): the shared
-/// choices, and End snooze while snoozed. Its title names the incident.
-struct MonitoringSnoozeDialog: ViewModifier {
-    @Binding var target: Incident?
-
-    @Environment(ActionRunner.self) private var runner
-    @Environment(\.timeZoneMode) private var mode
-    @Environment(\.locale) private var locale
-
-    func body(content: Content) -> some View {
-        content.confirmationDialog(
-            target.map { "Snooze \($0.displayTitle)" } ?? "Snooze",
-            isPresented: Binding(get: { target != nil }, set: { if !$0 { target = nil } }),
-            titleVisibility: .visible,
-            presenting: target
-        ) { incident in
-            ForEach(IncidentSnoozeChoice.choices(now: Date(), mode: mode, locale: locale)) { option in
-                Button(option.label) {
-                    Task { await runner.run(IncidentRow.snoozeIntent(incident, minutes: option.minutes, until: option.until)) }
-                }
-            }
-            if IncidentFilter.isSnoozed(incident, now: Date()) {
-                Button("End snooze") {
-                    Task { await runner.run(IncidentRow.snoozeIntent(incident, minutes: 0, until: "")) }
-                }
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: { _ in
-            Text("No repeat alerts until the time you choose. Acknowledging stops them for good.")
-        }
-    }
-}
-
-extension View {
-    func monitoringSnoozeDialog(_ target: Binding<Incident?>) -> some View {
-        modifier(MonitoringSnoozeDialog(target: target))
-    }
-}
-
 // MARK: Context menus
 
 /// Open, Copy link, Copy ID and Open on web, shared by every M3 object row.

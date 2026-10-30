@@ -38,16 +38,7 @@ struct NodeOverviewSection: View {
                 await model.refreshCore()
                 await model.refreshOverview()
             }
-            .confirmationDialog(
-                snoozing.map { "Snooze \($0.displayTitle)" } ?? "",
-                isPresented: Binding(get: { snoozing != nil }, set: { if !$0 { snoozing = nil } }),
-                titleVisibility: .visible,
-                presenting: snoozing
-            ) { incident in
-                snoozeButtons(incident)
-            } message: { _ in
-                Text("No repeat alerts until the time you choose.")
-            }
+            .incidentSnoozeDialog($snoozing)
         }
     }
 
@@ -110,19 +101,6 @@ struct NodeOverviewSection: View {
                 Section("Open incidents") { LoadingRows(label: "Loading incidents", count: 1) }
             }
         }
-    }
-
-    @ViewBuilder
-    private func snoozeButtons(_ incident: Incident) -> some View {
-        ForEach(IncidentSnoozeChoice.choices(now: Date(), mode: mode, locale: locale)) { choice in
-            Button(choice.label) {
-                Task { await runner.run(IncidentRow.snoozeIntent(incident, minutes: choice.minutes, until: choice.until)) }
-            }
-        }
-        if incident.snoozed {
-            Button("End snooze") { Task { await runner.run(IncidentRow.snoozeIntent(incident, minutes: 0, until: "")) } }
-        }
-        Button("Cancel", role: .cancel) {}
     }
 
     // MARK: Now

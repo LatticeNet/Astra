@@ -69,7 +69,7 @@ struct IncidentsScreen: View {
                 .accessibilityValue(scope.title)
             }
         }
-        .monitoringSnoozeDialog($snoozeTarget)
+        .incidentSnoozeDialog($snoozeTarget)
         .onChange(of: snoozeTarget == nil) { _, closed in stable.setBusy(!closed) }
         .onAppear {
             consumeQuery()

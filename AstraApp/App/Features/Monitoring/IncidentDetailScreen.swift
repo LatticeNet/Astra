@@ -66,7 +66,7 @@ struct IncidentDetailScreen: View {
             .safeAreaBar(edge: .bottom) {
                 if showsBottomBar, let incident = store.incident(id: id) { actionBar(incident) }
             }
-            .monitoringSnoozeDialog($snoozeTarget)
+            .incidentSnoozeDialog($snoozeTarget)
             .announcing(failure)
             .polling(.standard, version: changes.version([.incidents, .maintenance])) {
                 await nodes.refreshIfOlder(than: 60)

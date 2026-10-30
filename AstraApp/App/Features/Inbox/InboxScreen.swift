@@ -102,15 +102,10 @@ struct InboxScreen: View {
                 .accessibilityValue(filter.title)
             }
         }
-        .confirmationDialog(
-            snoozing.map { "Snooze \($0.displayTitle)?" } ?? "",
-            isPresented: snoozeBinding,
-            titleVisibility: .visible,
-            presenting: snoozing
-        ) { incident in
-            snoozeButtons(incident)
-        } message: { _ in
-            Text("No repeat alerts until the time you choose. Uses monitor:admin.")
+        .incidentSnoozeDialog($snoozing) { shown in
+            // The dialog holds Inbox updates as scrolling does.
+            store.interactionInProgress = shown
+            if !shown { store.lastInteraction = .now }
         }
         .polling(.inbox, version: changes.version([.approvals, .incidents, .nodes, .tasks, .sshguard, .ddns, .upcoming, .machines, .audit])) {
             await store.refresh()
@@ -268,35 +263,6 @@ struct InboxScreen: View {
             InboxIncidentPreview(incident: incident)
                 .environment(\.timeZoneMode, mode)
         }
-    }
-
-    private var snoozeBinding: Binding<Bool> {
-        Binding(
-            get: { snoozing != nil },
-            set: { shown in
-                store.interactionInProgress = shown
-                if !shown {
-                    snoozing = nil
-                    store.lastInteraction = .now
-                }
-            }
-        )
-    }
-
-    @ViewBuilder
-    private func snoozeButtons(_ incident: Incident) -> some View {
-        let now = Date()
-        ForEach(IncidentSnoozeChoice.choices(now: now, mode: mode, locale: locale)) { choice in
-            Button(choice.label) {
-                Task { await runner.run(IncidentRow.snoozeIntent(incident, minutes: choice.minutes, until: choice.until)) }
-            }
-        }
-        if IncidentFilter.isSnoozed(incident, now: now) {
-            Button("End snooze") {
-                Task { await runner.run(IncidentRow.snoozeIntent(incident, minutes: 0, until: "")) }
-            }
-        }
-        Button("Cancel", role: .cancel) {}
     }
 
     @Environment(ActionRunner.self) private var runner

@@ -163,6 +163,56 @@ struct IncidentSnoozeChoice: Identifiable {
     }
 }
 
+/// The one snooze dialog for every list and screen that offers Snooze
+/// (section 4.5): the shared choices, End snooze while a snooze is still in
+/// force, and one title and message naming the consequence and the scope.
+/// `presented` reports when it opens and closes, for a list that holds
+/// updates while a dialog is up.
+struct IncidentSnoozeDialog: ViewModifier {
+    @Binding var target: Incident?
+    var presented: ((Bool) -> Void)?
+
+    @Environment(ActionRunner.self) private var runner
+    @Environment(\.timeZoneMode) private var mode
+    @Environment(\.locale) private var locale
+
+    func body(content: Content) -> some View {
+        content.confirmationDialog(
+            target.map { "Snooze \($0.displayTitle)" } ?? "Snooze",
+            isPresented: Binding(
+                get: { target != nil },
+                set: { shown in
+                    if !shown { target = nil }
+                    presented?(shown)
+                }
+            ),
+            titleVisibility: .visible,
+            presenting: target
+        ) { incident in
+            let now = Date()
+            ForEach(IncidentSnoozeChoice.choices(now: now, mode: mode, locale: locale)) { choice in
+                Button(choice.label) {
+                    Task { await runner.run(IncidentRow.snoozeIntent(incident, minutes: choice.minutes, until: choice.until)) }
+                }
+            }
+            if IncidentFilter.isSnoozed(incident, now: now) {
+                Button("End snooze") {
+                    Task { await runner.run(IncidentRow.snoozeIntent(incident, minutes: 0, until: "")) }
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: { _ in
+            Text("No repeat alerts until the time you choose. Acknowledging stops them for good. Uses monitor:admin.")
+        }
+    }
+}
+
+extension View {
+    func incidentSnoozeDialog(_ target: Binding<Incident?>, presented: ((Bool) -> Void)? = nil) -> some View {
+        modifier(IncidentSnoozeDialog(target: target, presented: presented))
+    }
+}
+
 /// An approval row with its plan seal (section 4.7). Never offers a swipe to approve.
 struct ApprovalRow: View {
     let approval: Approval
