@@ -89,8 +89,29 @@ final class ConfirmFlowModel {
         return intent.toggles.filter(\.revealedByConflict)
     }
 
+    /// Whether the intent can file past the findings. Beacon plans cannot: the
+    /// server refuses them while findings block, and has no acceptance flag.
+    var findingsAcceptable: Bool {
+        intent.toggles.contains(where: \.revealedByConflict)
+    }
+
+    /// Findings the operator cannot accept here, so only the web can move on.
+    var isStuckOnFindings: Bool {
+        guard case .findings = step else { return false }
+        return !findingsAcceptable
+    }
+
+    /// Where the console edits the object a stuck plan was for.
+    var webPath: LatticeConsolePath? {
+        switch intent.object.kind {
+        case "node": .node(id: intent.object.id, view: .settings)
+        default: nil
+        }
+    }
+
     /// Why the primary action is off, or nil when it may run.
     func blockReason(online: Bool) -> String? {
+        if isStuckOnFindings { return "The server refuses this plan until these are fixed" }
         if !online { return "No connection" }
         switch dryRun {
         case .loading: return "Checking what would change"
@@ -222,6 +243,7 @@ struct ConfirmFlowView: View {
 private struct ConfirmStepView: View {
     @Bindable var model: ConfirmFlowModel
     @Environment(ActionRunner.self) private var runner
+    @Environment(Router.self) private var router
     @Environment(NetworkMonitor.self) private var network
     @FocusState private var phraseFocused: Bool
 
@@ -269,7 +291,11 @@ private struct ConfirmStepView: View {
                     } header: {
                         Text("The server found problems")
                     } footer: {
-                        Text("Nothing was filed. Accept the findings below to file the plan anyway.")
+                        if model.findingsAcceptable {
+                            Text("Nothing was filed. Accept the findings below to file the plan anyway.")
+                        } else {
+                            Text("Nothing was filed. The server refuses this plan until these are fixed. Change it on web.")
+                        }
                     }
                     .id(Self.findingsID)
                     // The acceptance sits right under what it accepts, so the
@@ -395,24 +421,42 @@ private struct ConfirmStepView: View {
             } else if let reason {
                 Text(reason).textRole(.footnote).multilineTextAlignment(.center)
             }
-            Button(role: destructive ? .destructive : nil) {
-                Task { await model.submit(runner: runner) }
-            } label: {
-                HStack(spacing: Spacing.s) {
-                    if model.isSending { ProgressView().tint(.white) }
-                    Text(model.primaryTitle).fontWeight(.semibold)
+            if model.isStuckOnFindings, let path = model.webPath {
+                // Re-sending the same plan would only earn the same refusal.
+                Button {
+                    router.openOnWeb(path)
+                } label: {
+                    Label("Open on web", systemImage: "safari")
+                        .fontWeight(.semibold)
+                        .frame(maxWidth: .infinity, minHeight: Spacing.minimumTarget - 8)
                 }
-                .frame(maxWidth: .infinity, minHeight: Spacing.minimumTarget - 8)
+                .buttonStyle(.borderedProminent)
+                .tint(Color.accentFill)
+                .accessibilityHint("Opens the console in your browser")
+            } else {
+                filePrimary(reason: reason, destructive: destructive)
             }
-            .buttonStyle(.borderedProminent)
-            .tint(destructive ? Color.destructiveFill : Color.accentFill)
-            .disabled(reason != nil || model.isSending)
         }
         .padding(.horizontal, Spacing.l)
         .padding(.vertical, Spacing.s)
         // The pinned action must leave room for the content above it at AX5.
         .dynamicTypeSize(...DynamicTypeSize.accessibility1)
         .background(Color(uiColor: .systemGroupedBackground))
+    }
+
+    private func filePrimary(reason: String?, destructive: Bool) -> some View {
+        Button(role: destructive ? .destructive : nil) {
+            Task { await model.submit(runner: runner) }
+        } label: {
+            HStack(spacing: Spacing.s) {
+                if model.isSending { ProgressView().tint(.white) }
+                Text(model.primaryTitle).fontWeight(.semibold)
+            }
+            .frame(maxWidth: .infinity, minHeight: Spacing.minimumTarget - 8)
+        }
+        .buttonStyle(.borderedProminent)
+        .tint(destructive ? Color.destructiveFill : Color.accentFill)
+        .disabled(reason != nil || model.isSending)
     }
 
     private func binding(for id: String) -> Binding<Bool> {
