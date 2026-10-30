@@ -42,7 +42,7 @@ enum BackgroundRefresh {
     /// Schedules the next run, only while Badge refresh is on and badge
     /// authorization is granted.
     static func schedule() async {
-        guard isEnabled else {
+        guard isEnabled, await !isDemo() else {
             BGTaskScheduler.shared.cancel(taskRequestWithIdentifier: identifier)
             return
         }
@@ -72,6 +72,12 @@ enum BackgroundRefresh {
     /// the PAT, computes the badge with the same `BadgeCount` Inbox uses, and
     /// sets it. Without `monitor:read` the badge counts approvals only.
     static func refreshBadge() async -> Bool {
+        // A demo session keeps the stored server and PAT; a wake while it is
+        // suspended must not read the Keychain or call the real server.
+        if await isDemo() {
+            record("Paused while showing demo data")
+            return false
+        }
         guard let raw = UserDefaults.standard.string(forKey: Key.serverURL), let url = URL(string: raw),
               AstraURLNormalizer.isAllowedServerURL(url),
               let token = KeychainStore.loadPAT() else {
@@ -102,6 +108,10 @@ enum BackgroundRefresh {
             record(LatticeAPIError(error).localizedDescription)
             return false
         }
+    }
+
+    private static func isDemo() async -> Bool {
+        await MainActor.run { AppServices.shared.session.isDemo }
     }
 
     /// Foreground Inbox refreshes stamp the badge source too.

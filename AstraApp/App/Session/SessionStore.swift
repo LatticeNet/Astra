@@ -244,6 +244,7 @@ final class SessionStore {
 
     func enterDemo(scenario: DemoScenario, clock: DemoClock = DemoClock()) {
         isDemo = true
+        BGTaskScheduler.shared.cancel(taskRequestWithIdentifier: BackgroundRefresh.identifier)
         demoKeepSession = false
         demoEndSessionAfterReveal = true
         demoScenario = scenario
