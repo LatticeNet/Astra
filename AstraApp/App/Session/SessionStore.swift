@@ -204,7 +204,7 @@ final class SessionStore {
         guard let url = server ?? serverURL else { throw LatticeAPIError.invalidURL("") }
         let sessionClient = makeClient(url, session.credential, kind: .session)
         let identity = try await sessionClient.fetchIdentity()
-        if client == nil {
+        if client == nil, !isDemo {
             UserDefaults.standard.set(url.absoluteString, forKey: Key.serverURL)
             UserDefaults.standard.set(CredentialKind.session.rawValue, forKey: Key.credentialKind)
             serverURL = url
@@ -367,8 +367,13 @@ final class SessionStore {
         makeClient(url, LatticeCredential(), kind: .session)
     }
 
+    /// Every client built while demo is on talks to DemoTransport, so a
+    /// typed username, password or code never leaves the sandbox.
     private func makeClient(_ url: URL, _ credential: LatticeCredential, kind: ClientKind) -> LatticeClient {
-        LatticeClient(baseURL: url, credential: credential, transport: DiagnosticsTransport(
+        if isDemo {
+            return demoClient(kind == .primary ? .pat : .session, kind: kind, credential: credential)
+        }
+        return LatticeClient(baseURL: url, credential: credential, transport: DiagnosticsTransport(
             base: URLSession.shared, log: diagnostics, kind: kind, isDemo: false, onStatus: statusHandler()
         ))
     }
