@@ -160,7 +160,8 @@ struct WebhookDetailScreen: View {
                     .frame(minHeight: Spacing.minimumTarget)
             case .noRule:
                 notice("Reaches nobody", "Channels exist, but no enabled rule routes \(hook.eventType), so this webhook delivers nothing. Add a rule for it on the web.", tone: .warn)
-                WebLinkRow(title: "Add a rule on web", path: .notifyNotifications(view: "routing"))
+                // The console's own fix-it link: it opens the rule form with this event filled in.
+                WebLinkRow(title: "Add a rule on web", path: LatticeConsolePath(path: "/platform/notifications", query: [URLQueryItem(name: "newRule", value: hook.eventType)]))
             case .ok:
                 let receivers = receivingRules(hook)
                 notice("Routed", receivers.isEmpty ? "No rule is enabled, so every enabled channel receives it." : "Rules that send it: \(receivers.joined(separator: ", ")).", tone: .ok)
