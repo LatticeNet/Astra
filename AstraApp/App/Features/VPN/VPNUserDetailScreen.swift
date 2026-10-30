@@ -218,9 +218,11 @@ struct VPNUserDetailScreen: View {
             }
         }
         Section {
-            VPNActionRow(title: "Rotate subscription link", systemImage: "arrow.triangle.2.circlepath", note: "The old link stops working at once",
+            let caveat = VPNLinkWords.rotateCaveat(status.link, now: now)
+            VPNActionRow(title: "Rotate subscription link", systemImage: "arrow.triangle.2.circlepath",
+                         note: caveat.map { "The old link stops working at once. \($0)" } ?? "The old link stops working at once",
                          unavailable: offline ?? noLink ?? store.linkMissing) {
-                Task { await runner.run(VPNIntents.rotateLink(userID: user.id, email: user.displayName, rotatedBefore: status.link?.rotatedAt)) }
+                Task { await runner.run(VPNIntents.rotateLink(userID: user.id, email: user.displayName, rotatedBefore: status.link?.rotatedAt, caveat: caveat)) }
             }
             .id("leak")
             VPNActionRow(title: "Revoke subscription link", systemImage: "trash", note: "The link stops answering and cannot be restored",
@@ -431,7 +433,9 @@ struct VPNUserDetailScreen: View {
                     }
                     if user.source == .vpnCore {
                         VPNGatedButton(title: "Rotate link", systemImage: "arrow.triangle.2.circlepath", unavailable: offline ?? noLink ?? store.linkMissing) {
-                            Task { await runner.run(VPNIntents.rotateLink(userID: user.id, email: user.displayName, rotatedBefore: model.link.value?.link?.rotatedAt)) }
+                            let link = model.link.value?.link ?? user.link
+                            Task { await runner.run(VPNIntents.rotateLink(userID: user.id, email: user.displayName, rotatedBefore: link?.rotatedAt,
+                                                                          caveat: VPNLinkWords.rotateCaveat(link, now: Date()))) }
                         }
                     }
                 }

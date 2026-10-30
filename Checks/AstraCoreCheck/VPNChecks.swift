@@ -249,6 +249,12 @@ private func checkVPNLinkDerivations() throws {
     let expired = try vpnStatus(#"{"identity_id":"a","issued":true,"link":{"slug":"u-a","enabled":true,"expires_at":"2026-10-01T00:00:00Z"},"answer":"decoy","answer_reason":"link_expired"}"#)
     let expiredHead = VPNLinkHeadline.of(expired, expiryText: day)
     try expect(expiredHead.tone == .error && expiredHead.detail.contains("expired on Nov 2"), "link expired names the day: \(expiredHead.detail)")
+    // The server keeps the pause and the expiry across a rotation, so the
+    // copy never promises that rotating alone makes the link serve.
+    try expect(!expiredHead.detail.contains("new URL that serves"), "rotating an expired link does not make it serve")
+    try expect(VPNLinkWords.rotateCaveat(expired.link, now: vpnInstant("2026-10-29T00:00:00Z"))?.contains("stays expired") == true, "rotating an expired link warns it stays expired")
+    try expect(VPNLinkWords.rotateCaveat(paused.link, now: vpnInstant("2026-10-29T00:00:00Z"))?.contains("stays paused") == true, "rotating a paused link warns it stays paused")
+    try expectEqual(VPNLinkWords.rotateCaveat(nil, now: vpnInstant("2026-10-29T00:00:00Z")), nil, "no link, no caveat")
     let quota = try vpnStatus(#"{"identity_id":"a","issued":true,\#(link),"answer":"placeholder","answer_reason":"quota","placeholder":"Quota used up"}"#)
     let quotaHead = VPNLinkHeadline.of(quota, expiryText: day)
     try expectEqual(quotaHead.detail, "The identity is over its quota, so a client gets one entry named \"Quota used up\" and no servers, with its quota shown as used up. Raising the quota serves its lines again, as does the next quota reset.", "placeholder sentence")
@@ -498,6 +504,9 @@ private func checkVPNIntents() async throws {
     try expectEqual(rotate.scopes, ["vpncore:admin"], "rotate scope")
     try expect(rotate.consequence.hasPrefix("The old link stops working at once"), "rotate states the consequence")
     try expect(!rotate.idempotent, "rotate is never retried")
+    try expect(rotate.consequence.hasSuffix("send it again."), "a serving link is sent again after rotating")
+    let stuck = VPNIntents.rotateLink(userID: "vu_a", email: "a@example.org", rotatedBefore: nil, caveat: "The new link stays expired. Remove the expiry on the web before it serves.")
+    try expect(stuck.consequence.hasSuffix("before it serves.") && !stuck.consequence.contains("send it again"), "an expired link is not sent again: \(stuck.consequence)")
     let revoke = VPNIntents.revokeLink(userID: "vu_a", email: "a@example.org")
     try expectEqual(revoke.tier, .t4, "revoke is T4")
     try expectEqual(revoke.title, "Revoke the link of a@example.org", "revoke title names the identity")

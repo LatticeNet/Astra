@@ -300,7 +300,7 @@ public struct VPNLinkHeadline: Sendable, Hashable {
         if status.answerReason == "link_expired" {
             let when = status.link?.expiresAt.map { " on \(expiryText($0))" } ?? ""
             return VPNLinkHeadline(key: .expired, tone: .error, title: "Link expired",
-                                   detail: "The link expired\(when) and answers like an unknown URL. Rotating gives a new URL that serves; removing the expiry on the web makes this URL serve again.")
+                                   detail: "The link expired\(when) and answers like an unknown URL. Rotating keeps the expiry, so the new URL would be expired too; remove the expiry on the web (Rotate and remove expiry) to serve again.")
         }
         let placeholder = status.placeholder.isEmpty ? "one placeholder entry" : "one entry named \"\(status.placeholder)\""
         if status.answer == "placeholder" {
@@ -343,6 +343,16 @@ public struct VPNLinkHeadline: Sendable, Hashable {
 }
 
 public enum VPNLinkWords {
+    /// Why a rotation alone will not make the link serve: the server keeps
+    /// the pause and the expiry across a rotation (`rotateIdentityLink`
+    /// replaces only the token). Nil when the rotated link will serve.
+    public static func rotateCaveat(_ link: VPNLinkSummary?, now: Date) -> String? {
+        guard let link else { return nil }
+        if !link.enabled { return "The new link stays paused. Resume it on the web before it serves." }
+        if let expires = link.expiresAt, expires <= now { return "The new link stays expired. Remove the expiry on the web before it serves." }
+        return nil
+    }
+
     /// `linkAnswers`: issued, on, and not expired.
     public static func answers(_ status: VPNLinkStatus) -> Bool {
         status.issued && (status.link?.enabled ?? false)

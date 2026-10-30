@@ -182,7 +182,8 @@ struct VPNUsersScreen: View {
                 }
                 VPNGatedButton(title: "Rotate link", systemImage: "arrow.triangle.2.circlepath",
                                unavailable: network.isSatisfied ? store.linkMissing : "No connection") {
-                    Task { await runner.run(VPNIntents.rotateLink(userID: user.id, email: user.displayName, rotatedBefore: user.link?.rotatedAt)) }
+                    Task { await runner.run(VPNIntents.rotateLink(userID: user.id, email: user.displayName, rotatedBefore: user.link?.rotatedAt,
+                                                                   caveat: VPNLinkWords.rotateCaveat(user.link, now: Date()))) }
                 }
             }
         } preview: {

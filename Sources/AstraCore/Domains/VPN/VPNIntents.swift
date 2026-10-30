@@ -19,14 +19,17 @@ public enum VPNIntents {
     /// A new token for the link. The old URL answers the decoy at once, for
     /// every client that holds it. `rotatedBefore` is the rotation stamp as
     /// last read, so the verify compares server stamps, never the phone clock.
-    public static func rotateLink(userID: String, email: String, rotatedBefore: Date?) -> WriteIntent {
+    /// `caveat` (`VPNLinkWords.rotateCaveat`) replaces the advice to send
+    /// the new link when a paused or expired link would not serve it.
+    public static func rotateLink(userID: String, email: String, rotatedBefore: Date?, caveat: String? = nil) -> WriteIntent {
         let ref = userRef(id: userID, email: email)
         return WriteIntent(
             tier: .t3,
             verb: "Rotate the link of",
             object: ref,
             scopes: [linkScope],
-            consequence: "The old link stops working at once: every client that holds it gets nothing until it is given the new link. Reveal the new link afterwards and send it again.",
+            consequence: "The old link stops working at once: every client that holds it gets nothing until it is given the new link. "
+                + (caveat ?? "Reveal the new link afterwards and send it again."),
             affected: [ref],
             verify: { client in
                 let status = try await client.vpnLinkStatus(userID: userID)
