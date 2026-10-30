@@ -23,7 +23,7 @@ struct ChainDetailScreen: View {
                         Button("Graph on web", systemImage: "safari") { router.openOnWeb(.monitoring(view: "topology")) }
                         Button("Copy entry line", systemImage: "number") { UIPasteboard.general.string = id }
                     } label: {
-                        Label("More", systemImage: "ellipsis.circle")
+                        Label("More", systemImage: "ellipsis")
                     }
                 }
             }

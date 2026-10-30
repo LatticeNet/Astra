@@ -27,7 +27,7 @@ struct CorrelationTraceScreen: View {
                 Menu {
                     ActivityObjectMenu(link: .trace(correlationID: correlationID), web: .trace(correlationID: correlationID), objectID: correlationID)
                 } label: {
-                    Label("More", systemImage: "ellipsis.circle")
+                    Label("More", systemImage: "ellipsis")
                 }
             }
         }

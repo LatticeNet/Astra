@@ -64,7 +64,7 @@ struct PathMatrixScreen: View {
                     Toggle("Show as list", systemImage: "list.bullet", isOn: $asList)
                         .disabled(forcedList)
                 } label: {
-                    Label("Matrix options", systemImage: "ellipsis.circle")
+                    Label("Matrix options", systemImage: "ellipsis")
                 }
             }
         }

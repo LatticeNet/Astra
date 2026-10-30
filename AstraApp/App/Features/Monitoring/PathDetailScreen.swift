@@ -411,7 +411,7 @@ struct PathDetailScreen: View {
             Button("Copy link", systemImage: "link") { UIPasteboard.general.url = LatticeDeepLink.path(key: key).customURL }
             Button("Copy path key", systemImage: "number") { UIPasteboard.general.string = key }
         } label: {
-            Label("More", systemImage: "ellipsis.circle")
+            Label("More", systemImage: "ellipsis")
         }
     }
 

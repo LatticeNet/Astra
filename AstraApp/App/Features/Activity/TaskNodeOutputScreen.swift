@@ -106,7 +106,7 @@ struct TaskNodeOutputScreen: View {
             Button("Copy link", systemImage: "link") { UIPasteboard.general.url = LatticeDeepLink.taskNode(taskID: taskID, nodeID: nodeID).customURL }
             Button("Open on web", systemImage: "safari") { router.openOnWeb(.taskNode(taskID: taskID, nodeID: nodeID)) }
         } label: {
-            Label("More", systemImage: "ellipsis.circle")
+            Label("More", systemImage: "ellipsis")
         }
     }
 

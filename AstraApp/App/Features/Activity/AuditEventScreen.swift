@@ -25,7 +25,7 @@ struct AuditEventScreen: View {
                     Menu {
                         ActivityObjectMenu(link: .auditEvent(id: id), web: .auditEvent(id: id), objectID: id)
                     } label: {
-                        Label("More", systemImage: "ellipsis.circle")
+                        Label("More", systemImage: "ellipsis")
                     }
                 }
             }

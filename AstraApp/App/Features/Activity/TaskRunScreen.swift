@@ -265,7 +265,7 @@ struct TaskRunScreen: View {
             if let task { writes(task) }
             ActivityObjectMenu(link: .task(id: id), web: .task(id: id), objectID: id)
         } label: {
-            Label("More", systemImage: "ellipsis.circle")
+            Label("More", systemImage: "ellipsis")
         }
     }
 

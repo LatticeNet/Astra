@@ -258,7 +258,7 @@ struct AuditScreen: View {
                 Button("Open on web", systemImage: "safari") { router.openOnWeb(.audit(view: layer.rawValue)) }
             }
         } label: {
-            Label("Export and verify", systemImage: "ellipsis.circle")
+            Label("Export and verify", systemImage: "ellipsis")
         }
     }
 

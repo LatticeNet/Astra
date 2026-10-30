@@ -27,7 +27,7 @@ struct MaintenanceWindowScreen: View {
                         Button("Copy link", systemImage: "link") { UIPasteboard.general.url = LatticeDeepLink.maintenanceWindow(id: id).customURL }
                         Button("Copy ID", systemImage: "number") { UIPasteboard.general.string = id }
                     } label: {
-                        Label("More", systemImage: "ellipsis.circle")
+                        Label("More", systemImage: "ellipsis")
                     }
                 }
             }

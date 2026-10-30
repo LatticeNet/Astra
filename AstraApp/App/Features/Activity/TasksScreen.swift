@@ -119,7 +119,7 @@ struct TasksScreen: View {
             }
             Button("New task on web", systemImage: "safari") { router.openOnWeb(.tasks) }
         } label: {
-            Label("More", systemImage: "ellipsis.circle")
+            Label("More", systemImage: "ellipsis")
         }
     }
 
