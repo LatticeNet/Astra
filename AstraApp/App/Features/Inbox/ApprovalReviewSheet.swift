@@ -732,8 +732,7 @@ struct InboxReviewHeader: View {
     let openNode: (String) -> Void
     /// A decision is in flight: the sheet stays put (section 6.1, step 13).
     var disabled = false
-    @Environment(\.timeZoneMode) private var mode
-    @Environment(\.locale) private var locale
+    @Environment(\.dynamicTypeSize) private var typeSize
 
     var body: some View {
         let style = StatusStyle.approval(approval.displayState)
@@ -771,14 +770,7 @@ struct InboxReviewHeader: View {
                         Button {
                             openNode(target)
                         } label: {
-                            HStack {
-                                Text(targets.count == 1 ? "Target" : "Target node")
-                                Spacer(minLength: Spacing.s)
-                                Text(target == approval.nodeID && !nodeName.isEmpty ? nodeName : target)
-                                    .foregroundStyle(Color.accentText)
-                                Image(systemName: AppTab.fleet.symbol).font(.footnote).foregroundStyle(.secondary)
-                            }
-                            .frame(minHeight: Spacing.minimumTarget)
+                            targetLabel(target)
                         }
                         .tint(.primary)
                         .disabled(disabled)
@@ -799,6 +791,28 @@ struct InboxReviewHeader: View {
                 }
             }
         }
+    }
+
+    /// Stacks like a DetailRow at accessibility sizes, keeping the accent
+    /// value and the Fleet symbol.
+    private func targetLabel(_ target: String) -> some View {
+        let accessible = typeSize.isAccessibilitySize
+        let layout = accessible
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: Spacing.xxs))
+            : AnyLayout(HStackLayout(alignment: .firstTextBaseline, spacing: Spacing.s))
+        return layout {
+            Text(targets.count == 1 ? "Target" : "Target node")
+                .foregroundStyle(accessible ? .secondary : .primary)
+            if !accessible { Spacer(minLength: Spacing.s) }
+            HStack(alignment: .firstTextBaseline, spacing: Spacing.xs) {
+                Text(IdentifierText.breakable(target == approval.nodeID && !nodeName.isEmpty ? nodeName : target))
+                    .foregroundStyle(Color.accentText)
+                    .multilineTextAlignment(accessible ? .leading : .trailing)
+                Image(systemName: AppTab.fleet.symbol).font(.footnote).foregroundStyle(.secondary)
+            }
+        }
+        .frame(maxWidth: .infinity, minHeight: Spacing.minimumTarget, alignment: .leading)
+        .contentShape(Rectangle())
     }
 
     private var targets: [String] {
