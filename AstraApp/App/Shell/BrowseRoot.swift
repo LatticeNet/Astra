@@ -158,6 +158,14 @@ struct DirectoryRow: View {
                 label(trailing: (tab.symbol, "Opens in \(tab.title)"))
             }
             .tint(.primary)
+        case .open(let route, let tab, let scope):
+            Button {
+                onOpen()
+                router.open(route, in: tab, scope: scope)
+            } label: {
+                label(trailing: (tab.symbol, "Opens in \(tab.title)"))
+            }
+            .tint(.primary)
         case .settings(let path):
             Button {
                 onOpen()

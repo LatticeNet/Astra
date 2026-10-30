@@ -44,6 +44,14 @@ final class Router {
         show(route)
     }
 
+    /// Opens `route` in another tab as the only screen on that tab's stack,
+    /// the way a deep link does, so a second jump never piles a copy on top
+    /// of the first or of whatever that tab held.
+    func open(_ route: AppRoute, in tab: AppTab, scope: String? = nil) {
+        select(tab: tab, scope: scope)
+        appState.paths[tab] = [route]
+    }
+
     /// Selects a tab and, for a scoped tab, its segment. A query is handed to
     /// the scope root's search field once, and so is an audit layer.
     func select(tab: AppTab, scope: String? = nil, query: String? = nil, auditLayer: AuditLayer? = nil) {

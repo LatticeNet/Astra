@@ -5,6 +5,8 @@ import SwiftUI
 enum DirectoryTarget: Hashable, Sendable {
     case push(AppRoute)
     case tab(AppTab, scope: String?, query: String? = nil)
+    /// A page that lives in another tab's stack, opened there (2.4).
+    case open(AppRoute, in: AppTab, scope: String?)
     case settings([SettingsRoute])
     case web(LatticeConsolePath)
     /// A palette action that presents Review; it never decides anything itself.
@@ -38,7 +40,7 @@ enum BrowseDirectory {
             DirectoryEntry(id: "groups", title: "Groups", symbol: "square.stack.3d.up", target: .tab(.fleet, scope: "groups"), requirement: ScopeRequirement("group:read")),
             DirectoryEntry(id: "map", title: "Map", symbol: "map", target: .tab(.fleet, scope: "map"), requirement: ScopeRequirement("node:read")),
             DirectoryEntry(id: "machines", title: "Machines", symbol: "shippingbox", target: .tab(.fleet, scope: "machines"), requirement: ScopeRequirement("inventory:read")),
-            DirectoryEntry(id: "upcoming", title: "Upcoming", symbol: "calendar", target: .push(.inventory(.upcoming)), requirement: .anyOf("inventory:read", "proxy:read", "dns:admin")),
+            DirectoryEntry(id: "upcoming", title: "Upcoming", symbol: "calendar", target: .open(.inventory(.upcoming), in: .fleet, scope: "machines"), requirement: .anyOf("inventory:read", "proxy:read", "dns:admin")),
             DirectoryEntry(id: "monitoring", title: "Monitoring", symbol: "waveform.path.ecg", target: .tab(.monitor, scope: "overview"), requirement: ScopeRequirement("monitor:read")),
         ]),
         DirectorySection(title: "VPN", entries: [

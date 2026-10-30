@@ -200,8 +200,7 @@ struct InboxScreen: View {
         case .failedTasks:
             router.select(tab: .activity, scope: ActivityScope.tasks.rawValue, query: segment.query)
         case .upcoming:
-            router.select(tab: .fleet, scope: FleetScope.machines.rawValue)
-            router.push(.inventory(.upcoming))
+            router.open(.inventory(.upcoming), in: .fleet, scope: FleetScope.machines.rawValue)
         }
     }
 
@@ -364,8 +363,7 @@ struct InboxScreen: View {
                         InboxDueRow(item: item)
                     }
                     Button {
-                        router.select(tab: .fleet, scope: FleetScope.machines.rawValue)
-                        router.push(.inventory(.upcoming))
+                        router.open(.inventory(.upcoming), in: .fleet, scope: FleetScope.machines.rawValue)
                     } label: {
                         HStack {
                             Text("All upcoming").foregroundStyle(Color.accentText)
@@ -579,8 +577,7 @@ struct InboxDueRow: View {
             NavigationLink(value: route) { row }
         default:
             Button {
-                router.select(tab: .fleet, scope: FleetScope.machines.rawValue)
-                router.push(.inventory(.upcoming))
+                router.open(.inventory(.upcoming), in: .fleet, scope: FleetScope.machines.rawValue)
             } label: { row }
             .tint(.primary)
             .accessibilityHint("Opens in Fleet")
@@ -651,20 +648,17 @@ struct InboxIncidentMenu: View {
         Section {
             if !incident.nodeID.isEmpty {
                 Button("Open node", systemImage: AppTab.fleet.symbol) {
-                    router.select(tab: .fleet)
-                    router.push(.fleet(.node(id: incident.nodeID)))
+                    router.open(.fleet(.node(id: incident.nodeID)), in: .fleet)
                 }
             }
             if incident.kind.hasPrefix("path."), !incident.monitorID.isEmpty {
                 Button("Open path", systemImage: "point.3.connected.trianglepath.dotted") {
                     let key = encodePathKey(.check(source: incident.nodeID, monitorID: incident.monitorID))
-                    router.select(tab: .monitor)
-                    router.push(.monitoring(.path(key: key)))
+                    router.open(.monitoring(.path(key: key)), in: .monitor)
                 }
             } else if !incident.monitorID.isEmpty {
                 Button("Open check", systemImage: AppTab.monitor.symbol) {
-                    router.select(tab: .monitor)
-                    router.push(.monitoring(.check(id: incident.monitorID)))
+                    router.open(.monitoring(.check(id: incident.monitorID)), in: .monitor)
                 }
             }
         }

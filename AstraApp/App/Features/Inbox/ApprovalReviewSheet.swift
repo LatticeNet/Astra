@@ -483,8 +483,7 @@ struct ApprovalReviewSheet: View {
 
     private func openNode(_ id: String) {
         router.dismissPresented {
-            router.select(tab: .fleet)
-            router.push(.fleet(.node(id: id)))
+            router.open(.fleet(.node(id: id)), in: .fleet)
         }
     }
 

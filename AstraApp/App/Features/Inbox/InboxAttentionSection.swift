@@ -202,8 +202,7 @@ struct InboxAttentionRow: View {
                 .accessibilityHint("Opens the review")
         case .upcoming:
             Button {
-                router.select(tab: .fleet, scope: FleetScope.machines.rawValue)
-                router.push(.inventory(.upcoming))
+                router.open(.inventory(.upcoming), in: .fleet, scope: FleetScope.machines.rawValue)
             } label: {
                 HStack(spacing: Spacing.s) {
                     content
