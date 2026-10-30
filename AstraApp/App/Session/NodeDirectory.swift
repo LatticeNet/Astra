@@ -5,6 +5,9 @@ import Foundation
 final class NodeDirectory {
     private(set) var nodes: [String: LatticeNode] = [:]
     private(set) var loadedAt: Date?
+    /// Why the last refresh failed; nil after a success. The list keeps its
+    /// last good rows, so a caller that needs fresh data checks `loadedAt`.
+    private(set) var lastError: LatticeAPIError?
     private let session: SessionStore
     @ObservationIgnored private var inFlight: Task<Void, Never>?
 
@@ -23,9 +26,13 @@ final class NodeDirectory {
         if let inFlight { return await inFlight.value }
         guard let client = session.client else { return }
         let task = Task {
-            if let list = try? await client.fetchNodes() {
+            do {
+                let list = try await client.fetchNodes()
                 nodes = Dictionary(list.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
                 loadedAt = Date()
+                lastError = nil
+            } catch {
+                lastError = LatticeAPIError(error)
             }
         }
         inFlight = task
@@ -36,5 +43,6 @@ final class NodeDirectory {
     func reset() {
         nodes = [:]
         loadedAt = nil
+        lastError = nil
     }
 }

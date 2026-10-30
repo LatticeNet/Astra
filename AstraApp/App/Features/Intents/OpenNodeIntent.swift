@@ -124,19 +124,14 @@ struct IntentsNodeQuery: EntityStringQuery {
     /// words could claim a health that no longer holds.
     @MainActor
     private static func directory() async throws(IntentsQueryError) -> [String: LatticeNode] {
-        let client = try IntentsGate.client()
+        _ = try IntentsGate.client()
         let directory = AppServices.shared.nodes
         await directory.refreshIfOlder(than: window)
         if let loadedAt = directory.loadedAt, Date().timeIntervalSince(loadedAt) < window {
             return directory.nodes
         }
-        // The shared refresh drops its error; one direct read says why it failed.
-        do {
-            let list = try await client.fetchNodes()
-            return Dictionary(list.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
-        } catch {
-            throw IntentsQueryError(error, what: "nodes", scope: "node:read")
-        }
+        guard let error = directory.lastError else { throw IntentsQueryError.notConnected }
+        throw IntentsQueryError(error, what: "nodes", scope: "node:read")
     }
 
     /// Worst state first, then by name, the order Fleet's node list groups by.
