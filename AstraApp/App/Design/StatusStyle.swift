@@ -138,7 +138,8 @@ struct StatusStyle: Sendable, Hashable {
 
 /// The freshness and access vocabulary (section 4.2), used by footers and rows.
 enum AccessState: Sendable, Hashable {
-    case fresh(age: String)
+    /// nil right after a load, which reads "just now" rather than "0 seconds".
+    case fresh(age: String?)
     case updating
     /// nil when nothing has loaded yet.
     case stale(asOf: String?)
@@ -150,7 +151,7 @@ enum AccessState: Sendable, Hashable {
 
     var text: String {
         switch self {
-        case .fresh(let age): "Updated \(age) ago"
+        case .fresh(let age): age.map { "Updated \($0) ago" } ?? "Updated just now"
         case .updating: "Updating"
         case .stale(let time): time.map { "Stale. As of \($0)" } ?? "Not loaded yet"
         case .offline(let time): time.map { "Offline. Showing data from \($0)" } ?? "Offline. Nothing loaded yet"

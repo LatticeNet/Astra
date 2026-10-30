@@ -149,17 +149,23 @@ struct NodesScreen: View {
         return { names[$0] }
     }
 
+    /// Empty is a card in the list with the freshness footer under it, like
+    /// every other list (section 5.0), so pull to refresh and "Updated" stay.
     private var emptyFleet: some View {
-        WholeScreenState {
-            ContentUnavailableView {
-                Label("No nodes enrolled", systemImage: "server.rack")
-            } description: {
-                Text("Enrolling a node shows an install command that belongs on the host, so it happens on the web.")
-            } actions: {
-                Button("Enroll on web") { router.openOnWeb(.nodes) }
-                    .buttonStyle(.bordered)
+        List {
+            Section {
+                ContentUnavailableView {
+                    Label("No nodes enrolled", systemImage: "server.rack")
+                } description: {
+                    Text("Enrolling a node shows an install command that belongs on the host, so it happens on the web.")
+                } actions: {
+                    Button("Enroll on web") { router.openOnWeb(.nodes) }
+                }
+            } footer: {
+                FleetFooter(state: store.nodes)
             }
         }
+        .listStyle(.insetGrouped)
     }
 
     // MARK: Toolbar

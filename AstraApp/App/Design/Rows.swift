@@ -370,7 +370,8 @@ struct FreshnessFooter: View {
         // Nothing loaded: the first read is still running unless it failed.
         guard let loadedAt else { return lastAttemptFailed ? .stale(asOf: nil) : .updating }
         if lastAttemptFailed || now.timeIntervalSince(loadedAt) > 3 * interval { return .stale(asOf: time) }
-        return .fresh(age: TimeDisplay.duration(now.timeIntervalSince(loadedAt), locale: locale))
+        let age = now.timeIntervalSince(loadedAt)
+        return .fresh(age: age < 10 ? nil : TimeDisplay.duration(age, locale: locale))
     }
 }
 
