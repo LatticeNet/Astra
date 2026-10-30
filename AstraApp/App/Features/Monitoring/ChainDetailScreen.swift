@@ -20,7 +20,7 @@ struct ChainDetailScreen: View {
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu {
-                        Button("Graph on web", systemImage: "safari") { router.openOnWeb(.monitoring(view: "topology")) }
+                        Button("Graph on web", systemImage: "safari") { router.openOnWeb(.topologyGraph(chains: true)) }
                         Button("Copy entry line", systemImage: "number") { UIPasteboard.general.string = id }
                     } label: {
                         Label("More", systemImage: "ellipsis")

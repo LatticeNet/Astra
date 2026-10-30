@@ -174,7 +174,8 @@ struct MonitoringPathsList: View {
                 .pickerStyle(.inline)
             }
             Button("Matrix", systemImage: "square.grid.3x3") { router.push(.monitoring(.matrix)) }
-            Button("Graph on web", systemImage: "safari") { router.openOnWeb(.monitoring(view: "topology")) }
+            Button("Graph on web", systemImage: "safari") { router.openOnWeb(.topologyGraph()) }
+            Button("Latency plan on web", systemImage: "safari") { router.openOnWeb(.monitoring(view: "topology")) }
             Divider()
             Toggle("Show unmeasured", systemImage: "eye", isOn: $showUnmeasured)
         } label: {

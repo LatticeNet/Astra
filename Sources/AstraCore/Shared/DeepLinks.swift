@@ -363,10 +363,17 @@ public struct LatticeConsolePath: Hashable, Sendable {
     }
     public static let maintenance = LatticeConsolePath("/monitoring", ["view": "incidents", "state": "all"])
     public static func monitoring(view: String? = nil) -> Self { Self("/monitoring", ["view": view]) }
+    /// Without `as`, the console draws the graph only in a wide window with
+    /// a fine pointer, so a phone browser would get the list.
+    public static func topologyGraph(chains: Bool = false) -> Self {
+        Self("/monitoring", ["view": "topology", "as": "graph", "topo": chains ? "chains" : nil])
+    }
     public static func task(id: String) -> Self { Self("/tasks", ["open": id]) }
     /// Lossy: the node is dropped.
     public static func taskNode(taskID: String, nodeID: String) -> Self { task(id: taskID) }
     public static let tasks = LatticeConsolePath(path: "/tasks")
+    /// The task composer layer.
+    public static let newTask = LatticeConsolePath("/tasks", ["view": "new"])
     public static func auditEvent(id: String) -> Self { Self("/audit", ["open": id]) }
     public static func trace(correlationID: String) -> Self { Self("/audit", ["view": "all", "q": "trace:\(correlationID)"]) }
     public static func audit(view: String? = nil) -> Self { Self("/audit", ["view": view]) }

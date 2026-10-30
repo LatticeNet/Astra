@@ -117,7 +117,7 @@ struct TasksScreen: View {
                 }
                 .pickerStyle(.menu)
             }
-            Button("New task on web", systemImage: "safari") { router.openOnWeb(.tasks) }
+            Button("New task on web", systemImage: "safari") { router.openOnWeb(.newTask) }
         } label: {
             Label("More", systemImage: "ellipsis")
         }
@@ -155,7 +155,7 @@ struct TasksScreen: View {
                     } description: {
                         Text("No task has run on a node this token can see.")
                     } actions: {
-                        Button("New task on web") { router.openOnWeb(.tasks) }
+                        Button("New task on web") { router.openOnWeb(.newTask) }
                     }
                 } else {
                     ContentUnavailableView {

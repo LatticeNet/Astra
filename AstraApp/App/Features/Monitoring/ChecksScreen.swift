@@ -149,7 +149,12 @@ struct ChecksScreen: View {
                 }
             }
             definitionsSection
-            Section {} footer: { MonitoringFreshness(state: store.monitors, cadence: .monitoring) }
+            Section {
+                // How long results are kept is set on the web (parity matrix W).
+                WebLinkRow(title: "Retention on web", path: .monitoring(view: "checks"))
+            } footer: {
+                MonitoringFreshness(state: store.monitors, cadence: .monitoring)
+            }
         }
         .listStyle(.insetGrouped)
         .onScrollPhaseChange { _, phase in
