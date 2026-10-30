@@ -92,8 +92,10 @@ struct StatusRow: View {
         }
     }
 
+    /// Without a caller phrase the row speaks everything it shows, the
+    /// detail line included, so no row says less than it displays.
     private var spokenLabel: String {
-        let phrase = accessibilityPhrase ?? "\(title), \(style.word)"
+        let phrase = accessibilityPhrase ?? [title, style.word.isEmpty ? nil : style.word, detail?.isEmpty == false ? detail : nil].compactMap { $0 }.joined(separator: ", ")
         return [phrase, shownReason, trailing].compactMap { $0 }.joined(separator: ", ")
     }
 }

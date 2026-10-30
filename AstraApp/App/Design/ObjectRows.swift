@@ -26,7 +26,7 @@ struct IncidentRow: View {
                 style: style,
                 title: incident.displayTitle,
                 detail: detail(now: context.date),
-                accessibilityPhrase: "\(incident.displayTitle), \(style.word)"
+                accessibilityPhrase: phrase(state, now: context.date)
             )
         }
         .swipeActions(edge: .leading, allowsFullSwipe: true) {
@@ -52,10 +52,31 @@ struct IncidentRow: View {
 
     private func detail(now: Date) -> String? {
         guard let since = incident.since ?? incident.openedAt else { return nil }
-        // A clock time alone reads as today; older starts carry their date.
-        let age = now.timeIntervalSince(since)
-        let when = age < 20 * 3_600 ? TimeDisplay.clock(since, mode: mode, locale: locale) : TimeDisplay.dateTime(since, mode: mode, locale: locale)
-        return "since \(when), \(RelativeDateFormatter.shortDuration(age))"
+        return "since \(when(since, now: now)), \(RelativeDateFormatter.shortDuration(now.timeIntervalSince(since)))"
+    }
+
+    /// A clock time alone reads as today; older times carry their date.
+    private func when(_ date: Date, now: Date) -> String {
+        abs(now.timeIntervalSince(date)) < 20 * 3_600 ? TimeDisplay.clock(date, mode: mode, locale: locale) : TimeDisplay.dateTime(date, mode: mode, locale: locale)
+    }
+
+    /// The VoiceOver sentence of section 4.2: severity leads an open
+    /// incident, so a critical and a warning never sound alike.
+    private func phrase(_ state: IncidentDisplayState, now: Date) -> String {
+        let title = incident.displayTitle
+        let openSince = (incident.since ?? incident.openedAt).map { ", open since \(when($0, now: now))" } ?? ", open"
+        let base: String
+        switch state {
+        case .openCritical: base = "Critical, \(title)\(openSince)"
+        case .openWarning: base = "Warning, \(title)\(openSince)"
+        case .openInfo: base = "\(title)\(openSince)"
+        case .acknowledged: base = incident.ackedBy.isEmpty ? "\(title), acknowledged" : "\(title), acknowledged by \(incident.ackedBy)"
+        case .snoozed(let until): base = until.map { "\(title), snoozed until \(when($0, now: now))" } ?? "\(title), snoozed"
+        case .held(let window): base = "\(title), held by maintenance window \(window)"
+        case .pending(let opensAt): base = opensAt.map { "\(title), pending, opens at \(when($0, now: now)) if still failing" } ?? "\(title), pending"
+        case .resolved: base = incident.resolvedAt.map { "\(title), resolved at \(when($0, now: now))" } ?? "\(title), resolved"
+        }
+        return incident.flapping ? base + ", flapping" : base
     }
 
     nonisolated static func acknowledgeIntent(_ incident: Incident) -> WriteIntent {
@@ -225,8 +246,20 @@ struct TaskRow: View {
             title: task.id,
             detail: [progress, task.createdAt.map { RelativeDateFormatter.string(from: $0) }].compactMap { $0 }.joined(separator: ", "),
             titleIsIdentifier: true,
-            accessibilityPhrase: "Task \(task.id), \(style.word)"
+            accessibilityPhrase: phrase(state)
         )
+    }
+
+    /// Section 4.2's spoken state, then the progress and age the row shows.
+    private func phrase(_ state: TaskRunState) -> String {
+        let spoken: String = switch state {
+        case .pending: "pending, not yet sent to nodes"
+        case .leased: "running"
+        case .expired: "expired, the node never picked it up"
+        default: StatusStyle.task(state).word
+        }
+        let age = task.createdAt.map { "created \(RelativeDateFormatter.string(from: $0))" }
+        return ["Task \(task.id)", spoken, progress?.isEmpty == false ? progress : nil, age].compactMap { $0 }.joined(separator: ", ")
     }
 }
 
@@ -236,6 +269,9 @@ struct PathRow: View {
     var sourceName: String?
     var targetName: String?
     var judgesDegraded = true
+
+    @Environment(\.timeZoneMode) private var mode
+    @Environment(\.locale) private var locale
 
     var body: some View {
         let state = path.displayState(judgesDegraded: judgesDegraded)
@@ -248,8 +284,27 @@ struct PathRow: View {
             detail: path.method,
             reason: reason(state),
             trailing: path.loss.map { String(format: "%.1f%% loss", $0 * 100) },
-            accessibilityPhrase: "\(source) to \(target), \(style.word)"
+            accessibilityPhrase: phrase(state, source: source, target: target)
         )
+    }
+
+    /// Section 4.2's path sentence, with the method the row shows. The
+    /// reason sentence follows from StatusRow, which speaks `reason` itself.
+    private func phrase(_ state: PathDisplayState, source: String, target: String) -> String {
+        var parts = ["\(source) to \(target)"]
+        switch state {
+        case .up:
+            parts.append("up")
+            if let p50 = path.p50Ms { parts.append("\(Int(p50.rounded())) milliseconds") }
+        case .degraded:
+            parts.append("degraded")
+            if let since = path.degraded?.since { parts.append("since \(TimeDisplay.clock(since, mode: mode, locale: locale))") }
+        case .down: parts.append("down")
+        case .paused: parts.append("paused")
+        case .unknown: parts.append("unknown")
+        }
+        if !path.method.isEmpty { parts.append(path.method) }
+        return parts.joined(separator: ", ")
     }
 
     private func reason(_ state: PathDisplayState) -> String? {
