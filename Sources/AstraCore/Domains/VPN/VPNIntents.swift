@@ -76,12 +76,14 @@ public enum VPNIntents {
     }
 
     /// The link once, after step-up on the session. It is meant to be sent
-    /// to the person, so the value step offers Share.
+    /// to the person, so the value step offers Share. The secret's title
+    /// stays short: the value step shows it as an inline title, which cut
+    /// an email off mid-domain; the code step names the identity in full.
     public static func revealLink(userID: String, email: String, origin: URL?) -> RevealIntent {
         RevealIntent(purpose: .vpnLink, object: userRef(id: userID, email: email), scopes: [linkScope], shareable: true) { client, grant in
             do {
                 let reveal = try await client.vpnRevealLink(userID: userID, grant: grant)
-                return RevealedSecret(title: "Subscription link for \(email)", value: reveal.fullURL(origin: origin), kind: .shareableLink)
+                return RevealedSecret(title: "Subscription link", value: reveal.fullURL(origin: origin), kind: .shareableLink)
             } catch LatticeAPIError.notFound {
                 throw LatticeAPIError.server(status: 404, code: "link_not_issued", message: "\(email) has no subscription link. Issue one on the web.")
             }
@@ -96,7 +98,7 @@ public enum VPNIntents {
             guard !text.isEmpty else {
                 throw LatticeAPIError.server(status: 200, code: "no_credentials", message: "\(email) holds no credential with a secret.")
             }
-            return RevealedSecret(title: "Credentials for \(email)", value: text)
+            return RevealedSecret(title: "Credentials", value: text)
         }
     }
 }
