@@ -397,7 +397,23 @@ struct InboxScreen: View {
                         .textRole(.stamp)
                 }
                 if let delivery = store.newestDelivery, let line = deliveryLine(delivery) {
-                    line
+                    // Did the alert go out: the line opens the Sent log (M9-02).
+                    Button {
+                        router.select(tab: .activity, scope: ActivityScope.sent.rawValue)
+                    } label: {
+                        HStack(alignment: .firstTextBaseline, spacing: Spacing.xs) {
+                            line.multilineTextAlignment(.leading)
+                            Spacer(minLength: Spacing.s)
+                            Image(systemName: AppTab.activity.symbol)
+                                .font(TextRole.stamp.font)
+                                .foregroundStyle(.secondary)
+                                .accessibilityHidden(true)
+                        }
+                        .frame(minHeight: Spacing.minimumTarget)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityHint("Opens in Activity")
                 }
             }
         }
@@ -411,7 +427,7 @@ struct InboxScreen: View {
             return Text("Notified via \(channel) at \(time)").font(TextRole.stamp.font).foregroundStyle(.secondary)
         }
         if delivery.outcome == "failed" || delivery.outcome == "dead" {
-            return Text("Notification failed via \(channel) at \(time)").font(TextRole.stamp.font).foregroundStyle(Color.statusFailText)
+            return Text("\(Text.glyph(StatusStyle.notifySent(.failed))) Notification failed via \(channel) at \(time)").font(TextRole.stamp.font).foregroundStyle(Color.statusFailText)
         }
         return nil
     }
