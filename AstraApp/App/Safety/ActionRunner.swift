@@ -177,8 +177,12 @@ final class ActionRunner {
         switch outcome {
         case .done:
             if let inverse = intent.inverse {
+                // Undo belongs to the credential that made the write; a banner
+                // left on screen across Leave demo or a credential change must
+                // not send the inverse to a different server.
+                let generation = session.generation
                 message.undo = { [weak self] in
-                    Task { await self?.runInverse(inverse()) }
+                    Task { await self?.runInverse(inverse(), generation: generation) }
                 }
             }
         case .filed(let ids, let refused, _):
@@ -192,7 +196,11 @@ final class ActionRunner {
 
     /// Undo inherits the inverse's tier: T1 and T2 run from the banner without
     /// another dialog; T3 and T4 authenticate first (section 6.6).
-    private func runInverse(_ intent: WriteIntent) async {
+    private func runInverse(_ intent: WriteIntent, generation: Int) async {
+        guard session.generation == generation else {
+            banner.show(BannerMessage(text: "The session changed. Nothing was undone.", tone: .warn))
+            return
+        }
         guard !isBusy, let client = session.client(for: intent.client) else { return }
         isBusy = true
         defer { becomeIdle() }

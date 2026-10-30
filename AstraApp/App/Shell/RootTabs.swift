@@ -9,6 +9,7 @@ struct RootTabs: View {
     @Environment(DeepLinkRouter.self) private var deepLinks
     @Environment(ChangeLog.self) private var changes
     @Environment(InboxStore.self) private var inbox
+    @Environment(BannerCenter.self) private var banner
     @Environment(\.scenePhase) private var scenePhase
 
     // State restoration (section 2.6). Keys are `<module>.<screen>.<field>`.
@@ -69,7 +70,11 @@ struct RootTabs: View {
             if !presented { deepLinks.releaseHeld() }
         }
         .environment(\.timeZoneMode, showUTC ? .utc : .local)
-        .onChange(of: session.generation) { changes.recordAll() }
+        .onChange(of: session.generation) {
+            changes.recordAll()
+            // A banner (and its Undo) speaks for the session that wrote it.
+            banner.dismiss()
+        }
         // The badge lives here, not in InboxScreen: TabView builds tab content
         // lazily, so a launch restored to another tab never builds Inbox.
         .onChange(of: inbox.badge) { syncBadge() }
