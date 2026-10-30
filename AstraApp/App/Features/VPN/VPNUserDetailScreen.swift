@@ -122,11 +122,15 @@ struct VPNUserDetailScreen: View {
                 Text("Subscription link").accessibilityAddTraits(.isHeader)
             }
         case .failed(let error, nil, _):
+            // The writes do not depend on this read, so a leaked link can be
+            // dealt with while what it serves is unknown.
             Section {
                 ErrorRow(message: "Could not load the subscription link: \(error.localizedDescription)", retry: refresh)
+                if user.link != nil { revealLinkRow(user, noLink: nil) }
             } header: {
                 Text("Subscription link").accessibilityAddTraits(.isHeader)
             }
+            if user.link != nil { leakSection(user, link: user.link, noLink: nil, now: Date()) }
         default:
             if let status = model.link.value {
                 linkStatus(status, user: user)
@@ -156,12 +160,8 @@ struct VPNUserDetailScreen: View {
                 let fetch = VPNLinkWords.fetch(status, now: now) { TimeDisplay.duration($0, locale: locale) }
                 let late = !(fetch.healthy || fetch.freshness == .never)
                 VPNGlyphLabel(title: fetch.text, titleColor: late ? Color.statusWarnText : Color.secondary,
-                              systemImage: switch fetch.freshness {
-                              case .never: "iphone.slash"
-                              case .stale: "clock.badge.exclamationmark"
-                              case .fresh: "iphone"
-                              }, glyphColor: late ? Color.statusWarnFill : Color.statusQuiet)
-                .frame(minHeight: Spacing.minimumTarget)
+                              systemImage: Self.fetchSymbol(fetch.freshness), glyphColor: late ? Color.statusWarnFill : Color.statusQuiet)
+                    .frame(minHeight: Spacing.minimumTarget)
                 let userinfo = VPNLinkWords.userinfo(status.subscriptionUserinfo, answer: status.answer) {
                     $0.formatted(Date.FormatStyle.dateTime.locale(locale).month(.abbreviated).day())
                 }
@@ -184,11 +184,7 @@ struct VPNUserDetailScreen: View {
                     }
                 }
             }
-            VPNActionRow(title: "Reveal subscription link", systemImage: "eye",
-                         note: store.hasRevealSession ? "Asks for your authenticator code, then offers Share" : "Needs a signed-in session and your code",
-                         unavailable: offline ?? noLink ?? store.revealLinkMissing) {
-                Task { await runner.reveal(VPNIntents.revealLink(userID: user.id, email: user.displayName, origin: session.consoleURL)) }
-            }
+            revealLinkRow(user, noLink: noLink)
         } header: {
             Text("Subscription link").accessibilityAddTraits(.isHeader)
         } footer: {
@@ -218,12 +214,32 @@ struct VPNUserDetailScreen: View {
                 Text("Plans that bring a line back are filed on the web and approved like any other.")
             }
         }
+        leakSection(user, link: status.link, noLink: noLink, now: now)
+    }
+
+    private static func fetchSymbol(_ freshness: VPNLinkWords.Fetch.Freshness) -> String {
+        switch freshness {
+        case .never: "iphone.slash"
+        case .stale: "clock.badge.exclamationmark"
+        case .fresh: "iphone"
+        }
+    }
+
+    private func revealLinkRow(_ user: VPNUser, noLink: String?) -> some View {
+        VPNActionRow(title: "Reveal subscription link", systemImage: "eye",
+                     note: store.hasRevealSession ? "Asks for your authenticator code, then offers Share" : "Needs a signed-in session and your code",
+                     unavailable: offline ?? noLink ?? store.revealLinkMissing) {
+            Task { await runner.reveal(VPNIntents.revealLink(userID: user.id, email: user.displayName, origin: session.consoleURL)) }
+        }
+    }
+
+    private func leakSection(_ user: VPNUser, link: VPNLinkSummary?, noLink: String?, now: Date) -> some View {
         Section {
-            let caveat = VPNLinkWords.rotateCaveat(status.link, now: now)
+            let caveat = VPNLinkWords.rotateCaveat(link, now: now)
             VPNActionRow(title: "Rotate subscription link", systemImage: "arrow.triangle.2.circlepath",
                          note: caveat.map { "The old link stops working at once. \($0)" } ?? "The old link stops working at once",
                          unavailable: offline ?? noLink ?? store.linkMissing) {
-                Task { await runner.run(VPNIntents.rotateLink(userID: user.id, email: user.displayName, rotatedBefore: status.link?.rotatedAt, caveat: caveat)) }
+                Task { await runner.run(VPNIntents.rotateLink(userID: user.id, email: user.displayName, rotatedBefore: link?.rotatedAt, caveat: caveat)) }
             }
             .id("leak")
             VPNActionRow(title: "Revoke subscription link", systemImage: "trash", note: "The link stops answering and cannot be restored",
