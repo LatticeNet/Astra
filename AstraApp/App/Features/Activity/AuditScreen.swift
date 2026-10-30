@@ -47,9 +47,9 @@ struct AuditScreen: View {
         .navigationSubtitle(subtitle)
         .toolbar {
             if !typeSize.isAccessibilitySize {
-                ToolbarItem(placement: .topBarTrailing) { RangeMenu(selection: rangeBinding) }
+                ToolbarItem(placement: .topBarLeading) { RangeMenu(selection: rangeBinding) }
             }
-            ToolbarItem(placement: .topBarTrailing) { moreMenu }
+            ToolbarItem(placement: .topBarLeading) { moreMenu }
         }
         .sheet(isPresented: $verifying) { AuditVerifySheet() }
         .sheet(isPresented: $editingCustomRange) {

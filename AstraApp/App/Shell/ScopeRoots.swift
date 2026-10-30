@@ -76,7 +76,7 @@ struct ActivityRoot: View {
             case .tasks: TasksScreen()
             case .audit: AuditScreen()
             case .approvals: ApprovalsScreen()
-            case .sent: SentLogScreen()
+            case .sent: SentLogScreen(filterPlacement: .topBarLeading)
             }
         }
     }
@@ -87,7 +87,12 @@ struct ActivityRoot: View {
 /// slot in a compact vertical size class. The title is inline: over a List,
 /// iOS 26 draws a large title under the picker bar's scroll edge effect, so
 /// it read blurred on every size, and `.inlineLarge` pushed the screens'
-/// leading items into overflow. The tab and the picker already name the screen.
+/// leading items into overflow. The tab and the picker already name the screen,
+/// so on a narrow screen or at accessibility sizes the visible title steps
+/// aside: squeezed between the leading items and Settings it read as a bare
+/// ellipsis and pushed Settings into overflow. The navigation title stays for
+/// back buttons and VoiceOver. Screens put their own items at leading, so
+/// Settings is always the last trailing group (2.1).
 private struct ScopedRoot<Value: Hashable, Content: View>: View {
     let title: String
     let pickerTitle: String
@@ -96,7 +101,12 @@ private struct ScopedRoot<Value: Hashable, Content: View>: View {
     @ViewBuilder let content: () -> Content
 
     @Environment(\.verticalSizeClass) private var verticalSizeClass
+    @Environment(\.dynamicTypeSize) private var typeSize
     @State private var width: CGFloat?
+
+    private var hidesVisibleTitle: Bool {
+        typeSize.isAccessibilitySize || (width ?? .infinity) < 390
+    }
 
     var body: some View {
         let picker = AdaptiveSegmentedPicker(title: pickerTitle, options: options, selection: $selection, containerWidth: width)
@@ -117,6 +127,7 @@ private struct ScopedRoot<Value: Hashable, Content: View>: View {
                     ToolbarItem(placement: .principal) { picker.frame(maxWidth: 420) }
                 }
             }
+            .toolbar(removing: hidesVisibleTitle && verticalSizeClass != .compact ? .title : nil)
             .tabRootToolbar()
     }
 }
@@ -171,13 +182,12 @@ private struct TabRootToolbar: ViewModifier {
             ToolbarSpacer(.fixed, placement: .topBarTrailing)
             if session.isDemo {
                 ToolbarItem(placement: .topBarTrailing) {
+                    // A plain Label (2.1): the bar draws it as its glyph, which
+                    // keeps room for the title and Settings on a small phone.
                     Button {
                         router.openSettings()
                     } label: {
-                        HStack(spacing: Spacing.xs) {
-                            Image(systemName: "theatermasks")
-                            Text("Demo")
-                        }
+                        Label("Demo", systemImage: "theatermasks")
                     }
                     .accessibilityLabel("Demo mode, data is invented")
                     .accessibilityInputLabels(["Demo"])

@@ -30,7 +30,7 @@ struct RootTabs: View {
         @Bindable var appState = appState
         TabView(selection: tabSelection) {
             Tab(AppTab.inbox.title, systemImage: AppTab.inbox.symbol, value: AppTab.inbox) {
-                TabStack(tab: .inbox) { InboxScreen().tabRootToolbar() }
+                TabStack(tab: .inbox) { InboxScreen() }
             }
             .badge(appState.badgeCount ?? 0)
             Tab(AppTab.fleet.title, systemImage: AppTab.fleet.symbol, value: AppTab.fleet) {

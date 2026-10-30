@@ -27,13 +27,14 @@ struct TasksScreen: View {
         .searchable(text: $query, prompt: "status:, node:, origin:, approval:")
         .navigationSubtitle(subtitle)
         .toolbar {
-            // The same trailing pair as Audit, so the title holds still between segments.
+            // The same leading pair as Audit, so the bar holds still between
+            // segments; trailing belongs to Settings alone (2.1).
             if !typeSize.isAccessibilitySize {
-                ToolbarItem(placement: .topBarTrailing) {
+                ToolbarItem(placement: .topBarLeading) {
                     ActivityPresetRangeMenu(selection: rangeBinding)
                 }
             }
-            ToolbarItem(placement: .topBarTrailing) { moreMenu }
+            ToolbarItem(placement: .topBarLeading) { moreMenu }
         }
         .onAppear(perform: consumeQuery)
         .onChange(of: appState.pendingQuery) { consumeQuery() }

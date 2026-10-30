@@ -11,6 +11,10 @@ struct SentLogScreen: View {
     static let channelKey = "activity.sent.channel"
     static let eventKey = "activity.sent.event"
 
+    /// Leading on the Activity tab root, where trailing belongs to Settings
+    /// alone; trailing when pushed inside Notifications.
+    private let filterPlacement: ToolbarItemPlacement
+
     @Environment(NotifyStore.self) private var store
     @Environment(AppState.self) private var appState
     @Environment(ChangeLog.self) private var changes
@@ -27,7 +31,9 @@ struct SentLogScreen: View {
     /// The filters the shown rows answer; a different question applies at once.
     @State private var shownQuestion: NotifySentFilters?
 
-    init() {}
+    init() { filterPlacement = .topBarTrailing }
+
+    init(filterPlacement: ToolbarItemPlacement) { self.filterPlacement = filterPlacement }
 
     var body: some View {
         NotifyResourceScreen(state: store.sent, noun: "the Sent log", retry: refresh) { response in
@@ -38,7 +44,7 @@ struct SentLogScreen: View {
         }
         .navigationSubtitle(subtitle)
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) { filterMenu }
+            ToolbarItem(placement: filterPlacement) { filterMenu }
         }
         .onAppear {
             consumeQuery()

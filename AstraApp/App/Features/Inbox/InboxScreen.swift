@@ -86,9 +86,10 @@ struct InboxScreen: View {
         .navigationTitle("Inbox")
         .navigationBarTitleDisplayMode(typeSize.isAccessibilitySize ? .inline : .automatic)
         .navigationSubtitle(filter == .all ? "" : filter.title)
+        // Inner toolbar items render after outer ones, so the Settings group
+        // goes inside the filter to stay rightmost (5.2: filter, then Settings).
+        .tabRootToolbar()
         .toolbar {
-            // The filter sits in its own glass group, apart from Settings.
-            ToolbarSpacer(.fixed, placement: .topBarTrailing)
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
                     Picker("Show", selection: $filter) {
