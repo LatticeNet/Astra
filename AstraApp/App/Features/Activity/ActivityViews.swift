@@ -156,7 +156,7 @@ struct ActivityStateHeader: View {
         Group {
             if typeSize.isAccessibilitySize {
                 VStack(alignment: .leading, spacing: Spacing.xs) {
-                    Text("\(Text.glyph(style)) \(Text(style.word.activityCapitalized).foregroundStyle(wordColor))")
+                    Text("\(Text.glyph(style)) \(Text(style.word.sentenceCased).foregroundStyle(wordColor))")
                         .textRole(.detailHeader)
                     if let reason { Text(reason).textRole(.rowReason(style.tone.isProblem ? style.tone.word : .secondary)) }
                 }
@@ -164,7 +164,7 @@ struct ActivityStateHeader: View {
                 HStack(alignment: .firstTextBaseline, spacing: Spacing.m) {
                     StatusGlyph(style: style)
                     VStack(alignment: .leading, spacing: Spacing.xxs) {
-                        Text(style.word.activityCapitalized).textRole(.detailHeader).foregroundStyle(wordColor)
+                        Text(style.word.sentenceCased).textRole(.detailHeader).foregroundStyle(wordColor)
                         if let reason { Text(reason).textRole(.rowReason(style.tone.isProblem ? style.tone.word : .secondary)) }
                     }
                 }
@@ -325,12 +325,6 @@ extension String {
     /// its hyphens become non-breaking, so a line never ends in "edge-".
     var activityUnbroken: String {
         replacingOccurrences(of: "-", with: "\u{2011}")
-    }
-
-    /// "Intact" from "intact"; only the first letter changes.
-    var activityCapitalized: String {
-        guard let first else { return self }
-        return first.uppercased() + dropFirst()
     }
 }
 

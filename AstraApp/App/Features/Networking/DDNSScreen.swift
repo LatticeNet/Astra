@@ -85,7 +85,7 @@ struct DDNSScreen: View {
                     Section {
                         ForEach(rows) { row in rowView(row) }
                     } header: {
-                        Text("\(health.rawValue.networkingCapitalized) (\(rows.count))").accessibilityAddTraits(.isHeader)
+                        Text("\(health.rawValue.sentenceCased) (\(rows.count))").accessibilityAddTraits(.isHeader)
                     } footer: {
                         if health == .stale {
                             Text("The node reports an address the profile has not written, and it has not run for twice its interval.")

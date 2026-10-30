@@ -44,7 +44,7 @@ struct RuleDetailScreen: View {
         }
         .navigationTitle(store.rule(id: id)?.displayName ?? "Rule")
         .navigationBarTitleDisplayMode(.inline)
-        .navigationSubtitle(store.rule(id: id).map { StatusStyle.notifyRule($0, channels: store.channels.value).word.notifyCapitalized } ?? "")
+        .navigationSubtitle(store.rule(id: id).map { StatusStyle.notifyRule($0, channels: store.channels.value).word } ?? "")
         .toolbar { toolbar }
         .polling(.standard, version: changes.version([.notify])) {
             let ok = await store.refreshRouting()

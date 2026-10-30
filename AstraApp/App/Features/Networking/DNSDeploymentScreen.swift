@@ -26,7 +26,7 @@ struct DNSDeploymentScreen: View {
         }
         .navigationTitle(deployment?.displayName ?? "DNS deployment")
         .navigationBarTitleDisplayMode(.inline)
-        .navigationSubtitle(deployment.map { StatusStyle.networkingDNS($0.health(now: .now)).word.networkingCapitalized } ?? "")
+        .navigationSubtitle(deployment.map { StatusStyle.networkingDNS($0.health(now: .now)).word } ?? "")
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 NetworkingMoreMenu(link: NetworkingCopy.link(.dnsDeployment(id: id), fallback: "lattice://dns/\(id)"), web: .dnsDeployment(id: id)) {
@@ -223,7 +223,7 @@ struct DNSDeploymentScreen: View {
 
     private func apply(_ deployment: NetworkingDNSDeployment) -> some View {
         Section("Apply") {
-            DetailRow(label: "Status", value: deployment.status.networkingCapitalized, copyable: false)
+            DetailRow(label: "Status", value: deployment.status.sentenceCased, copyable: false)
             if !deployment.engineVersion.isEmpty {
                 DetailRow(label: "Engine", value: "CoreDNS \(deployment.engineVersion)", copyable: false)
             }

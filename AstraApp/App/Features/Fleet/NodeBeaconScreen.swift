@@ -47,7 +47,7 @@ struct NodeBeaconScreen: View {
             FleetRefreshError(state: state, noun: "the beacon") { Task { await load() } }
             Section {
                 StatusRow(style: Self.style(beacon), title: "Beacon", detail: beacon.isEnabled ? beacon.exposureWords : nil,
-                          reason: beacon.reason.isEmpty ? nil : PathReason.sentence(for: beacon.reason).capitalizedFirst)
+                          reason: beacon.reason.isEmpty ? nil : PathReason.sentence(for: beacon.reason).sentenceCased)
                 if !beacon.pendingApprovalID.isEmpty {
                     Button {
                         router.present(.review(.single(beacon.pendingApprovalID)))
@@ -199,9 +199,4 @@ fileprivate extension FleetBeaconView {
     var exposureWords: String {
         exposure == "netguard" ? "Admitted through NetGuard" : (exposure == "internet" ? "Open to the internet" : "")
     }
-}
-
-fileprivate extension String {
-    /// "Beacon not listening" from "beacon not listening".
-    var capitalizedFirst: String { prefix(1).uppercased() + dropFirst() }
 }

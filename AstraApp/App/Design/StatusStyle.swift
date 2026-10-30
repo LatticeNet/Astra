@@ -207,3 +207,12 @@ struct StatusGlyph: View {
             .accessibilityHidden(true)
     }
 }
+
+extension String {
+    /// A vocabulary word at the start of a sentence or a row value:
+    /// "Apply failed" from "apply failed". Subtitles keep the lowercase word.
+    var sentenceCased: String {
+        guard let first else { return self }
+        return first.uppercased() + dropFirst()
+    }
+}

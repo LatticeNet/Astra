@@ -51,7 +51,7 @@ struct PluginDetailScreen: View {
                 DetailRow(label: "Version", value: row.version.isEmpty ? "Not stated" : row.version, copyable: !row.version.isEmpty)
                 DetailRow(label: "Type", value: typeWord(row.type), copyable: false)
                 DetailRow(label: "Publisher", value: row.publisher.isEmpty ? "Not stated" : row.publisher, copyable: false)
-                DetailRow(label: "Lifecycle", value: row.status.isEmpty ? "Unknown" : row.status.platformCapitalized, copyable: false)
+                DetailRow(label: "Lifecycle", value: row.status.isEmpty ? "Unknown" : row.status.sentenceCased, copyable: false)
                 DetailRow(label: "Risk", value: row.risk.platformTitle, secondary: row.risk.platformSentence, copyable: false)
                 if !row.artifactSHA256.isEmpty {
                     DetailRow(label: "Artifact digest", value: row.artifactSHA256, monospaced: true)
@@ -66,7 +66,7 @@ struct PluginDetailScreen: View {
             if !row.transitions.isEmpty {
                 Section("Lifecycle history") {
                     ForEach(row.transitions, id: \.key) { transition in
-                        DetailRow(label: transition.key.platformCapitalized, value: TimeDisplay.dateTime(transition.at, mode: mode, locale: locale),
+                        DetailRow(label: transition.key.sentenceCased, value: TimeDisplay.dateTime(transition.at, mode: mode, locale: locale),
                                   secondary: TimeDisplay.relative(transition.at, now: Date(), locale: locale), copyable: false)
                     }
                 }
@@ -110,7 +110,7 @@ struct PluginDetailScreen: View {
     private func runtimeSection(_ row: PlatformPluginRow) -> some View {
         Section {
             if let runtime = row.runtime {
-                DetailRow(label: "Runtime", value: runtime.state.platformCapitalized, copyable: false)
+                DetailRow(label: "Runtime", value: runtime.state.sentenceCased, copyable: false)
                 if !runtime.runner.isEmpty {
                     DetailRow(label: "Runner", value: runtime.runner, copyable: false)
                 }
@@ -162,7 +162,7 @@ struct PluginDetailScreen: View {
                     let scopes = contract.scopes(for: method.name)
                     DetailRow(label: IdentifierText.breakable(method.name),
                               value: scopes.isEmpty ? "No scope" : scopes.joined(separator: ", "),
-                              secondary: method.effect.isEmpty ? nil : method.effect.platformCapitalized,
+                              secondary: method.effect.isEmpty ? nil : method.effect.sentenceCased,
                               copyable: false)
                 }
             } header: {
@@ -247,12 +247,5 @@ struct PluginDetailScreen: View {
                 Label("More", systemImage: "ellipsis")
             }
         }
-    }
-}
-
-extension String {
-    /// "Activated" from "activated".
-    var platformCapitalized: String {
-        prefix(1).uppercased() + dropFirst()
     }
 }

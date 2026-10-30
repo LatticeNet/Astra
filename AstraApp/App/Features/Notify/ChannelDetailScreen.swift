@@ -46,7 +46,7 @@ struct ChannelDetailScreen: View {
         }
         .navigationTitle(store.channel(id: id)?.displayName ?? "Channel")
         .navigationBarTitleDisplayMode(.inline)
-        .navigationSubtitle(store.channel(id: id).map { StatusStyle.notifyChannel($0).word.notifyCapitalized } ?? "")
+        .navigationSubtitle(store.channel(id: id).map { StatusStyle.notifyChannel($0).word } ?? "")
         .toolbar { toolbar }
         .polling(.standard, version: changes.version([.notify])) {
             let ok = await store.refreshRouting()
@@ -151,7 +151,7 @@ struct ChannelDetailScreen: View {
                 if let ok = health.lastOKAt { timeRow("Last delivered", ok) }
                 if let failure = health.lastFailureAt { timeRow("Last failure", failure) }
                 if let cause = line.cause {
-                    DetailRow(label: "Cause", value: cause.sentence.notifyCapitalized, copyable: false)
+                    DetailRow(label: "Cause", value: cause.sentence.sentenceCased, copyable: false)
                 }
                 if health.consecutiveFailures > 0 {
                     DetailRow(label: "Failures in a row", value: "\(health.consecutiveFailures)", copyable: false)
@@ -311,12 +311,5 @@ struct ChannelDetailScreen: View {
 
     private func refresh() {
         Task { await store.refreshRouting() }
-    }
-}
-
-extension String {
-    /// "Last send failed" from "last send failed".
-    var notifyCapitalized: String {
-        prefix(1).uppercased() + dropFirst()
     }
 }

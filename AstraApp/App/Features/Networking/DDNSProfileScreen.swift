@@ -26,7 +26,7 @@ struct DDNSProfileScreen: View {
         }
         .navigationTitle(profile.map { $0.name.isEmpty ? $0.id : $0.name } ?? "DDNS profile")
         .navigationBarTitleDisplayMode(.inline)
-        .navigationSubtitle(row.map { $0.health.rawValue.networkingCapitalized } ?? "")
+        .navigationSubtitle(row.map { $0.health.rawValue } ?? "")
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 NetworkingMoreMenu(link: NetworkingCopy.link(.ddnsProfile(id: id), fallback: "lattice://ddns/\(id)"), web: .ddnsProfile(id: id)) {
@@ -70,7 +70,7 @@ struct DDNSProfileScreen: View {
                     DetailRow(label: profile.isCNAME ? "CNAME" : "Record", value: domain, monospaced: true)
                 }
                 DetailRow(label: "Type", value: profile.isCNAME ? "CNAME to \(DDNSProfile.normalizeHost(profile.cnameTarget))" : addressFamilies(profile), copyable: false)
-                DetailRow(label: "Provider", value: profile.provider.networkingCapitalized, secondary: profile.hasCredential ? "Credential stored on the server" : "No credential stored", copyable: false)
+                DetailRow(label: "Provider", value: profile.provider.sentenceCased, secondary: profile.hasCredential ? "Credential stored on the server" : "No credential stored", copyable: false)
                 DetailRow(label: "TTL", value: "\(profile.ttl) s", copyable: false)
                 DetailRow(label: "Checked every", value: TimeDisplay.duration(Double(profile.effectiveIntervalSeconds), locale: locale), copyable: false)
                 NetworkingNodeLink(nodeID: profile.nodeID, label: "Node")

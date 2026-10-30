@@ -157,7 +157,7 @@ struct TerminalTranscriptScreen: View {
     /// the list follows the tail.
     private var subtitle: String {
         guard let record else { return "" }
-        let state = TerminalSessionState.of(record).word.capitalizedFirst
+        let state = TerminalSessionState.of(record).word
         let asOf = model.state.loadedAt.map { TimeDisplay.clock($0, mode: mode, locale: locale) }
         if case .failed(_, let last, _) = model.state, last != nil {
             return asOf.map { "\(state), stale since \($0)" } ?? "\(state), stale"
@@ -314,13 +314,13 @@ struct TerminalTranscriptScreen: View {
             DetailRow(label: "Shell", value: record.shellPath, monospaced: true)
             DetailRow(label: "Transport", value: transportSentence(transport, live: record.isLive), copyable: false)
             let opener = TerminalOpener.of(record, currentTokenID: store.currentTokenID)
-            DetailRow(label: "Opened", value: opener.phrase.capitalizedFirst, copyable: false)
+            DetailRow(label: "Opened", value: opener.phrase.sentenceCased, copyable: false)
             if case .otherToken(let tokenID) = opener {
                 DetailRow(label: "Token", value: tokenID, monospaced: true)
             }
             if let created = record.createdAt { timeRow(record.status == "pending" ? "Requested" : "Started", created) }
             if let seen = record.lastSeen, record.isLive, record.status != "pending", transport != .stream {
-                DetailRow(label: "Last activity", value: TimeDisplay.relative(seen, now: now, locale: locale).capitalizedFirst,
+                DetailRow(label: "Last activity", value: TimeDisplay.relative(seen, now: now, locale: locale).sentenceCased,
                           secondary: TimeDisplay.dateTime(seen, mode: mode, locale: locale), copyable: false)
             }
             if let closed = record.closedAt { timeRow("Ended", closed) }
@@ -582,12 +582,5 @@ struct TerminalTranscriptScreen: View {
 
     private func refresh() {
         Task { await model.load(id: sessionID, session: session) }
-    }
-}
-
-private extension String {
-    var capitalizedFirst: String {
-        guard let first else { return self }
-        return first.uppercased() + dropFirst()
     }
 }

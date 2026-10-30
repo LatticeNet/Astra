@@ -40,7 +40,7 @@ struct MachineDetailScreen: View {
 
     private var subtitle: String? {
         guard let machine = store.machine(id: id) else { return nil }
-        return InventoryRenewalState.of(machine, today: InventoryDay(date: Date())).word.inventoryCapitalized
+        return InventoryRenewalState.of(machine, today: InventoryDay(date: Date())).word
     }
 
     // MARK: Profile
@@ -170,10 +170,10 @@ struct MachineDetailScreen: View {
 
     @ViewBuilder
     private func renewalRows(_ machine: MachineProfile, state: InventoryRenewalState, today: InventoryDay) -> some View {
-        DetailRow(label: "Cycle", value: machine.renewalCycleRaw.isEmpty ? "None" : InventoryCost.cycleWord(machine).inventoryCapitalized, copyable: false)
+        DetailRow(label: "Cycle", value: machine.renewalCycleRaw.isEmpty ? "None" : InventoryCost.cycleWord(machine).sentenceCased, copyable: false)
         if let day = machine.renewalDay {
             let shown: InventoryDay = if case .autoRenews(_, let rolled) = state { rolled } else { day }
-            DetailRow(label: "Next renewal", value: shown.formatted(locale: locale), secondary: state.word.inventoryCapitalized, copyable: false)
+            DetailRow(label: "Next renewal", value: shown.formatted(locale: locale), secondary: state.word.sentenceCased, copyable: false)
         } else {
             DetailRow(label: "Next renewal", value: InventoryCost.renewalSetupIncomplete(machine) ? "Not set yet" : "Not tracked", copyable: false)
         }
@@ -311,12 +311,5 @@ struct MachineDetailScreen: View {
                 Label("More", systemImage: "ellipsis")
             }
         }
-    }
-}
-
-extension String {
-    /// "Renews in 6 days" from "renews in 6 days".
-    var inventoryCapitalized: String {
-        prefix(1).uppercased() + dropFirst()
     }
 }

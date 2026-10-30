@@ -103,8 +103,7 @@ struct DeliveryDetailScreen: View {
 
     private var subtitle: String {
         guard let delivery = current else { return "" }
-        let word = StatusStyle.notifySent(delivery, now: Date()).word
-        return word.prefix(1).uppercased() + word.dropFirst()
+        return StatusStyle.notifySent(delivery, now: Date()).word
     }
 
     // MARK: Detail

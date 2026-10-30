@@ -95,7 +95,7 @@ struct RenewSheet: View {
                     VStack(alignment: typeSize.isAccessibilitySize ? .leading : .trailing, spacing: Spacing.xxs) {
                         Text(machine.renewalDay?.formatted(locale: locale) ?? "No date")
                         if machine.renewalDay != nil {
-                            Text(state.word.inventoryCapitalized)
+                            Text(state.word.sentenceCased)
                                 .font(TextRole.footnote.font)
                                 .foregroundStyle(state.inventoryTone.isProblem ? state.inventoryTone.word : Color.secondary)
                         }

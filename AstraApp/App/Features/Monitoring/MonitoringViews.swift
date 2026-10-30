@@ -147,7 +147,7 @@ struct MonitoringCheckRow: View {
             let count = total > 1 ? "\(failing) of \(total) sources failing" : nil
             return [count, error.isEmpty ? nil : error].compactMap { $0 }.joined(separator: ": ")
         case .unmeasured(_, let reason, _):
-            return reason.isEmpty ? "Sources measure nothing" : PathReason.sentence(for: reason).capitalizedFirst
+            return reason.isEmpty ? "Sources measure nothing" : PathReason.sentence(for: reason).sentenceCased
         case .stale(let at):
             return "No result for \(TimeDisplay.duration(Date().timeIntervalSince(at), locale: locale))"
         default:
@@ -164,14 +164,6 @@ struct MonitoringCheckRow: View {
         default:
             return nil
         }
-    }
-}
-
-extension String {
-    /// "Source offline" from "source offline".
-    fileprivate var capitalizedFirst: String {
-        guard let first else { return self }
-        return first.uppercased() + dropFirst()
     }
 }
 

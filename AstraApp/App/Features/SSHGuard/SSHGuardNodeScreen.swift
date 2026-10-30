@@ -143,7 +143,7 @@ struct SSHGuardNodeScreen: View {
     private var subtitle: String {
         _ = clockTick
         guard let row = row(now: .now) else { return "" }
-        return row.isReverting ? "Confirm needed" : StatusStyle.posture(row.posture).word.capitalizedFirst
+        return row.isReverting ? "confirm needed" : StatusStyle.posture(row.posture).word
     }
 
     private func row(now: Date) -> SSHGuardBoardRow? {
@@ -211,7 +211,7 @@ struct SSHGuardNodeScreen: View {
         let posture = StatusStyle.posture(row.posture)
         let coverage = StatusStyle.coverage(row.coverage, deadline: row.deadline.map { TimeDisplay.clock($0, mode: mode, locale: locale) })
         return Section {
-            StatusRow(style: posture, title: "Posture", detail: nil, reason: row.status.posture.reason.isEmpty ? nil : row.status.posture.reason.capitalizedFirst,
+            StatusRow(style: posture, title: "Posture", detail: nil, reason: row.status.posture.reason.isEmpty ? nil : row.status.posture.reason.sentenceCased,
                       accessibilityPhrase: "Posture, \(posture.word)")
             let stage = SSHGuardNodeWords.stage(row)
             let word = SSHGuardRowWords.coverage(row, word: coverage.word)
@@ -563,12 +563,5 @@ enum SSHGuardNodeWords {
         if arm.confirmWindowSec > 0 { parts.append("window \(SSHGuardIntents.windowWords(arm.confirmWindowSec))") }
         if arm.knock { parts.append("with knocking") }
         return parts.joined(separator: ", ") + "."
-    }
-}
-
-extension String {
-    /// "Password login open" from "password login open".
-    fileprivate var capitalizedFirst: String {
-        prefix(1).uppercased() + dropFirst()
     }
 }

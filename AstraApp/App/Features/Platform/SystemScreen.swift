@@ -196,7 +196,7 @@ struct SystemScreen: View {
         if !files.isEmpty {
             Section("Data files") {
                 ForEach(files) { file in
-                    DetailRow(label: file.label.platformCapitalized, value: PlatformFormat.bytes(file.sizeBytes), secondary: file.path, copyable: false)
+                    DetailRow(label: file.label.sentenceCased, value: PlatformFormat.bytes(file.sizeBytes), secondary: file.path, copyable: false)
                 }
             }
         }

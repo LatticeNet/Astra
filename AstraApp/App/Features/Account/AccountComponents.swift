@@ -327,12 +327,6 @@ struct AccountQueryProblemRow: View {
 }
 
 extension String {
-    /// "skips the code" to "Skips the code", for a subtitle.
-    var accountCapitalized: String {
-        guard let first else { return self }
-        return first.uppercased() + dropFirst()
-    }
-
     /// "Full administrator" to "full administrator", for the middle of a line.
     var accountLowercased: String {
         guard let first else { return self }

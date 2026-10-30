@@ -25,7 +25,7 @@ struct PolicyDetailScreen: View {
         }
         .navigationTitle(policy?.displayName ?? "Outbound policy")
         .navigationBarTitleDisplayMode(.inline)
-        .navigationSubtitle(policy.map { $0.enabled ? "Enabled, priority \($0.priority)" : "Disabled" } ?? "")
+        .navigationSubtitle(policy.map { $0.enabled ? "enabled, priority \($0.priority)" : "disabled" } ?? "")
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 NetworkingMoreMenu(link: NetworkingCopy.link(.policy(id: id), fallback: "lattice://policies/\(id)"), web: .policy(id: id)) {

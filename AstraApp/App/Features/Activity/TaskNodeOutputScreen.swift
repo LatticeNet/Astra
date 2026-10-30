@@ -284,7 +284,7 @@ struct ActivityOutputText: UIViewRepresentable {
             add(" ", headline)
         }
         add("\(document.nodeName.activityUnbroken): ", headline)
-        add(style.word.activityCapitalized, headline, word)
+        add(style.word.sentenceCased, headline, word)
         add(", exit code \(document.row.result.exitCode)\n", headline, word)
         var timing: [String] = []
         if let start = document.row.result.startedAt { timing.append("Started \(TimeDisplay.dateTime(start, mode: mode, locale: locale))") }

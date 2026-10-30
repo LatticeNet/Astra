@@ -151,7 +151,7 @@ struct NetworkingDependencyRow<Value: Sendable>: View {
             case .companionBehind(let surface):
                 CompanionBehindRow(surface: surface)
             case .denied(let scope):
-                Label("\(noun.networkingCapitalized) need \(scope), so their state is unknown", systemImage: "lock")
+                Label("\(noun.sentenceCased) need \(scope), so their state is unknown", systemImage: "lock")
                     .foregroundStyle(.secondary)
                     .frame(minHeight: Spacing.minimumTarget)
             case .idle, .loading, .loaded:

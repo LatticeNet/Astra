@@ -34,8 +34,8 @@ struct TokenDetailScreen: View {
 
     private var subtitle: String {
         guard let token = store.token(id: id) else { return "" }
-        if token.isRevoked { return "Revoked" }
-        return store.isOwn(token) ? "Active, this iPhone" : "Active"
+        if token.isRevoked { return "revoked" }
+        return store.isOwn(token) ? "active, this iPhone" : "active"
     }
 
     private var missing: String? { store.tokensMissing.map { "Needs \($0)" } }

@@ -28,7 +28,7 @@ struct GeoRouteScreen: View {
         }
         .navigationTitle(routing?.displayName ?? "Geo routing")
         .navigationBarTitleDisplayMode(.inline)
-        .navigationSubtitle(routing.map { StatusStyle.networkingGeo($0).word.networkingCapitalized } ?? "")
+        .navigationSubtitle(routing.map { StatusStyle.networkingGeo($0).word } ?? "")
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 NetworkingMoreMenu(link: NetworkingCopy.link(.geoRoute(id: id), fallback: "lattice://geo-routes/\(id)"), web: .geoRoute(id: id)) {
@@ -62,7 +62,7 @@ struct GeoRouteScreen: View {
 
             Section("Routing") {
                 DetailRow(label: "Hostname", value: routing.hostname, monospaced: true)
-                DetailRow(label: "Answers with", value: routing.strategyWords.networkingCapitalized, copyable: false)
+                DetailRow(label: "Answers with", value: routing.strategyWords.sentenceCased, copyable: false)
                 if routing.ttl > 0 { DetailRow(label: "TTL", value: "\(routing.ttl) s", copyable: false) }
                 if !routing.geoIPDBPath.isEmpty { DetailRow(label: "GeoIP database", value: routing.geoIPDBPath, monospaced: true) }
             }

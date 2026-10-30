@@ -63,7 +63,7 @@ struct WebhookDetailScreen: View {
     private var subtitle: String {
         guard let hook = store.webhook(id: id) else { return "" }
         let nobody = NotifyWebhookRouting.reachesNobody(hook, channels: store.channels.value, rules: store.rules.value)
-        return StatusStyle.notifyWebhook(hook, reachesNobody: nobody).word.notifyCapitalized
+        return StatusStyle.notifyWebhook(hook, reachesNobody: nobody).word
     }
 
     private func detail(_ hook: NotifyWebhook) -> some View {
@@ -234,9 +234,9 @@ struct WebhookDetailScreen: View {
         let problem = attempt.outcome != "accepted"
         return StatusRow(
             style: style,
-            title: attempt.title.isEmpty ? NotifyWebhookAttempt.word(attempt.outcome).notifyCapitalized : attempt.title,
+            title: attempt.title.isEmpty ? NotifyWebhookAttempt.word(attempt.outcome).sentenceCased : attempt.title,
             detail: detail,
-            reason: problem && !attempt.reason.isEmpty ? attempt.reason.notifyCapitalized : nil,
+            reason: problem && !attempt.reason.isEmpty ? attempt.reason.sentenceCased : nil,
             trailing: attempt.createdAt.map { NotifyTime.when($0, mode: mode, locale: locale) },
             accessibilityPhrase: "\(attempt.test ? "Test attempt" : "Attempt"), \(style.word), \(NotifyWebhookAttempt.detail(attempt))"
         )

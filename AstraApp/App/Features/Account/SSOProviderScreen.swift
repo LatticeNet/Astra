@@ -19,7 +19,7 @@ struct SSOProviderScreen: View {
             }
         }
         .navigationTitle(store.provider(id: id)?.title ?? "Provider")
-        .navigationSubtitle(store.provider(id: id).map { StatusStyle.accountProvider($0).word.accountCapitalized } ?? "")
+        .navigationSubtitle(store.provider(id: id).map { StatusStyle.accountProvider($0).word } ?? "")
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {

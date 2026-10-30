@@ -4,7 +4,7 @@ import SwiftUI
 enum PlatformPublishingView: String, CaseIterable, Hashable {
     case overview, routes, tokens, buckets
 
-    var title: String { rawValue.platformCapitalized }
+    var title: String { rawValue.sentenceCased }
 }
 
 /// M8-04 Publishing: what this server publishes, where, and with which

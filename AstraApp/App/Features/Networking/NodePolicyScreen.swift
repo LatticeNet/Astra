@@ -59,9 +59,9 @@ struct NodePolicyScreen: View {
     private var subtitle: String {
         guard let doc else {
             if store.netPolicies.value == nil || store.groupPolicies.value == nil { return "" }
-            return covering.isEmpty ? "No policy" : "Not planned yet"
+            return covering.isEmpty ? "no policy" : "not planned yet"
         }
-        return NetworkingPolicyState.of(doc).word.networkingCapitalized
+        return NetworkingPolicyState.of(doc).word
     }
 
     private func name(_ id: String) -> String {
@@ -142,7 +142,7 @@ struct NodePolicyScreen: View {
 
     private func facts(_ doc: NetPolicy) -> some View {
         Section("Last plan") {
-            DetailRow(label: "State", value: NetworkingPolicyState.of(doc).word.networkingCapitalized, copyable: false)
+            DetailRow(label: "State", value: NetworkingPolicyState.of(doc).word.sentenceCased, copyable: false)
             if !doc.lastPlanSHA.isEmpty {
                 DetailRow(label: "Plan hash", value: doc.lastPlanSHA, monospaced: true)
             }
@@ -284,12 +284,5 @@ struct NodePolicyScreen: View {
                 break
             }
         }
-    }
-}
-
-extension String {
-    /// "Apply failed" from "apply failed".
-    var networkingCapitalized: String {
-        prefix(1).uppercased() + dropFirst()
     }
 }
