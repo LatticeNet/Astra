@@ -282,6 +282,8 @@ struct PlatformSystemChart: View {
     @Environment(\.dynamicTypeSize) private var typeSize
     @Environment(\.timeZoneMode) private var mode
     @Environment(\.locale) private var locale
+    @State private var selected: PlatformSystem.Point?
+    @State private var pulse: HapticPulse?
 
     var body: some View {
         let points = segments.flatMap { $0 }
@@ -303,6 +305,18 @@ struct PlatformSystemChart: View {
                                 .accessibilityHidden(points.count > ChartStyle.accessibleMarkLimit)
                         }
                     }
+                    if let selected {
+                        RuleMark(x: .value("Selected", selected.date))
+                            .foregroundStyle(Color.secondary.opacity(0.5))
+                            .annotation(position: .top, alignment: .center, overflowResolution: .init(x: .fit(to: .chart), y: .disabled)) {
+                                VStack(spacing: Spacing.xxs) {
+                                    Text(format(selected.value)).font(.footnote.monospacedDigit().weight(.semibold))
+                                    Text(calloutTime(selected.date)).textRole(.chartAxis).foregroundStyle(.secondary)
+                                }
+                                .padding(Spacing.xs)
+                                .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 6))
+                            }
+                    }
                 }
                 .chartYAxis {
                     AxisMarks(position: .leading, values: .automatic(desiredCount: typeSize.isAccessibilitySize ? 2 : 3)) { value in
@@ -323,6 +337,21 @@ struct PlatformSystemChart: View {
                         }
                     }
                 }
+                // The same long press then drag as node history and path charts (section 4.6).
+                .chartGesture { proxy in
+                    LongPressGesture(minimumDuration: 0.3)
+                        .sequenced(before: DragGesture(minimumDistance: 0))
+                        .onChanged { value in
+                            guard case .second(true, let drag?) = value, let date: Date = proxy.value(atX: drag.location.x) else { return }
+                            let nearest = points.min { abs($0.date.timeIntervalSince(date)) < abs($1.date.timeIntervalSince(date)) }
+                            if nearest != selected {
+                                selected = nearest
+                                pulse = HapticPulse(event: .selection)
+                            }
+                        }
+                        .onEnded { _ in selected = nil }
+                }
+                .haptics(pulse)
                 .environment(\.timeZone, mode.timeZone)
                 .frame(height: max(chartHeight, ChartStyle.minimumHeight))
                 .accessibilityChartDescriptor(PlatformChartDescriptor(title: title, unit: unit, points: points))
@@ -340,6 +369,15 @@ struct PlatformSystemChart: View {
 
     private func format(_ value: Double) -> String {
         Self.format(value, unit: unit)
+    }
+
+    /// Long ranges span days, so the callout names the day as well as the clock.
+    private func calloutTime(_ date: Date) -> String {
+        let clock = TimeDisplay.clock(date, mode: mode, locale: locale)
+        guard !clockAxis else { return clock }
+        var style = Date.FormatStyle.dateTime.month(.abbreviated).day()
+        style.timeZone = mode.timeZone
+        return "\(date.formatted(style)) \(clock)"
     }
 
     nonisolated static func format(_ value: Double, unit: String) -> String {

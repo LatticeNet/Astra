@@ -26,6 +26,7 @@ struct FleetRoot: View {
 
 struct MonitorRoot: View {
     @Environment(AppState.self) private var appState
+    @State private var windowPulse: HapticPulse?
 
     var body: some View {
         @Bindable var appState = appState
@@ -58,6 +59,9 @@ struct MonitorRoot: View {
                 }
             }
         }
+        // A window change is a picker change (section 4.9), like the segments above.
+        .onChange(of: appState.monitorWindow) { windowPulse = HapticPulse(event: .selection) }
+        .haptics(windowPulse)
     }
 }
 
